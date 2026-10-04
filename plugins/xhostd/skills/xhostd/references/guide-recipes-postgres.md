@@ -403,8 +403,8 @@ the push, then `deploy`. This guide shows only the call that matters here:
 deploy(app_name="recipe-docker-pg",
        channel="prod",
        ref="master")
-→ {"deploy_id": "abf7a32e-394d-4646-b774-0c12c1c3f046",
-   "channel_id": "50bdd958-d4e7-41db-8adb-9a49cd8966fd",
+→ {"deploy_id": "a6baf3fc-f573-40f7-82c6-e74912525228",
+   "channel_id": "16df8282-8498-4567-a595-fe769090b8b6",
    "status": "queued"}
 ```
 
@@ -430,20 +430,21 @@ On the `app` template the same line goes in `launch.sh`, never in
 Seven lines of that deploy log tell you what the data layer did.
 
 ```text
-[2026-07-31T18:38:45+00:00] channel snapshot saved: 0.00 MB
-[2026-07-31T18:38:46+00:00] health_check container=6f0c1f9382cb... port=3000 timeout=120.0s
-[2026-07-31T18:38:50+00:00] [container] INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-[2026-07-31T18:38:50+00:00] [container] INFO  [alembic.runtime.migration] Will assume transactional DDL.
-[2026-07-31T18:38:50+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade  -> 0001, create notes
-[2026-07-31T18:38:50+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, add done flag to notes
-[2026-07-31T18:38:54+00:00] health_check ok
+[2026-10-04T06:54:03+00:00] channel snapshot marker recorded
+[2026-10-04T06:54:04+00:00] health_check container=1d6bdbce248e... port=3000 timeout=120.0s
+[2026-10-04T06:54:08+00:00] [container] INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+[2026-10-04T06:54:08+00:00] [container] INFO  [alembic.runtime.migration] Will assume transactional DDL.
+[2026-10-04T06:54:08+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade  -> 0001, create notes
+[2026-10-04T06:54:08+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, add done flag to notes
+[2026-10-04T06:54:09+00:00] health_check ok
 ```
 
-**`channel snapshot saved`** is automatic. Every non-static deploy saves a
-snapshot of the channel's Postgres database *before* the new container starts.
-The snapshot is thus the state immediately before that deploy's changes. This
-snapshot rounds to 0.00 MB because the database is still empty on the app's
-first deploy. The snapshot list below gives the true size: 2159 bytes.
+**`channel snapshot marker recorded`** is automatic. Every non-static deploy
+records a snapshot of the channel's Postgres database *before* the new
+container starts. The snapshot is thus the state immediately before that
+deploy's changes. The marker copies no data. It records a moment in the
+database's continuous backup, and a restore returns the database to that
+moment. On the app's first deploy, that moment holds an empty database.
 
 **The two `Running upgrade` lines** show the migrations at work. They run in
 revision order against that empty database: `-> 0001` creates the table, then
@@ -452,8 +453,8 @@ revision order against that empty database: `-> 0001` creates the table, then
 tell you only that alembic started. The `Running upgrade` lines tell you that
 the schema changed.
 
-**`health_check ok` comes eight seconds after the probe starts.** In those
-eight seconds `alembic upgrade head` runs, and then uvicorn binds its port.
+**`health_check ok` comes five seconds after the probe starts.** In those
+five seconds `alembic upgrade head` runs, and then uvicorn binds its port.
 The 120-second health window gives a migration the time to finish. The deploy
 becomes healthy the moment the server answers `GET /`.
 
@@ -472,10 +473,10 @@ If you deploy the same commit again, you get a second snapshot. You also get
 a second alembic transcript to compare with the first:
 
 ```text
-[2026-07-31T18:39:18+00:00] channel snapshot saved: 0.01 MB
-[2026-07-31T18:39:24+00:00] [container] INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
-[2026-07-31T18:39:24+00:00] [container] INFO  [alembic.runtime.migration] Will assume transactional DDL.
-[2026-07-31T18:39:29+00:00] health_check ok
+[2026-10-04T06:54:17+00:00] channel snapshot marker recorded
+[2026-10-04T06:54:24+00:00] [container] INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+[2026-10-04T06:54:24+00:00] [container] INFO  [alembic.runtime.migration] Will assume transactional DDL.
+[2026-10-04T06:54:26+00:00] health_check ok
 ```
 
 The banner is there, but no `Running upgrade` line comes after it. The
@@ -484,33 +485,62 @@ printed no upgrade line. Read a deploy log by that difference. The banner
 with a `Running upgrade` line means that the schema changed. The banner alone
 means that the schema did not change.
 
-Both snapshots, newest first (`created_at` elided):
+`list_channel_snapshots` returns the snapshots newest first. This capture
+came some minutes after the second deploy, so it also holds a `nightly`
+snapshot that the platform took on its own schedule:
 
 ```text
 list_channel_snapshots(app_name="recipe-docker-pg", channel="prod")
-→ [
-    {"snapshot_id": "96879c2a-d99f-4a97-ab13-0de58442bd5f",
-     "deploy_id": "e39a2b93-d2b0-4c43-a74d-5eefce5a804d",
-     "created_at": "..."},
-    {"snapshot_id": "3a52f325-b7d3-4960-8105-4e44db6284da",
-     "deploy_id": "abf7a32e-394d-4646-b774-0c12c1c3f046",
-     "created_at": "..."}
-  ]
+→ {
+    "snapshot_id": "d13a318a-65cf-4144-87cb-02adbc16d451",
+    "deploy_id": null,
+    "kind": "nightly",
+    "git_sha": "9a045a4ced33d6fe7e0dd5db787cf6b69c50f989",
+    "created_at": "2026-10-04T06:58:29.191472Z",
+    "aligned_blob": true,
+    "recoverable": true
+  }
+  {
+    "snapshot_id": "5f6aac2f-1852-482d-9aa5-40332376d0f6",
+    "deploy_id": "dd0846fe-d4ce-49d4-80ac-c216d274381a",
+    "kind": "pre_deploy",
+    "git_sha": "9a045a4ced33d6fe7e0dd5db787cf6b69c50f989",
+    "created_at": "2026-10-04T06:54:17.826155Z",
+    "aligned_blob": true,
+    "recoverable": true
+  }
+  {
+    "snapshot_id": "fc1b4547-5ac4-44f2-a376-3de77a221fe6",
+    "deploy_id": "a6baf3fc-f573-40f7-82c6-e74912525228",
+    "kind": "pre_deploy",
+    "git_sha": null,
+    "created_at": "2026-10-04T06:54:03.150895Z",
+    "aligned_blob": true,
+    "recoverable": true
+  }
 ```
 
-Read the `deploy_id` on each snapshot. A snapshot is the state immediately
-**before** that deploy. The older snapshot holds the empty schema, from the
-point before the first deploy's migrations. The newer snapshot holds the
-table, which then existed and held the note.
+Read the `deploy_id` on each `pre_deploy` snapshot. A snapshot is the state
+immediately **before** that deploy. The oldest snapshot holds the empty schema,
+from the point before the first deploy's migrations. Its `git_sha` is null,
+because no code ran on the channel before that deploy. The snapshot of the
+second deploy holds the table, which then existed and held the note. The
+`nightly` snapshot names no deploy. It holds the database as it was when the
+platform took it.
+
+`recoverable: true` tells you that a restore can still reach the snapshot. A
+new snapshot reads `false` until the database's archived backup reaches the
+moment that the snapshot records. Expect that for some minutes after a deploy.
 
 ### Restore the database
 
 **Database restore is temporarily unavailable.** xhostd refuses every
 `restore_channel_db` call with `restore_unavailable` while it changes how a
 restore runs to make it safer. For help with a restore, contact support.
-This section shows the restore as it works when it returns.
+This section shows the call, the refusal that it gets today, and the result
+that a restore gives when it returns.
 
-Add a second note, *after* the platform takes that newer snapshot:
+Add a second note, *after* the second deploy's snapshot:
 
 ```bash
 $ curl -sS -X POST https://recipe-docker-pg-docs.xhostd.app/notes \
@@ -532,8 +562,21 @@ deploy. That snapshot holds note 1 and not note 2.
 ```text
 restore_channel_db(app_name="recipe-docker-pg",
                    channel="prod",
-                   snapshot_id="96879c2a-d99f-4a97-ab13-0de58442bd5f")
+                   snapshot_id="5f6aac2f-1852-482d-9aa5-40332376d0f6")
+→ restore_unavailable: database restore is temporarily unavailable — contact support for help with a restore
 ```
+
+The refusal changes nothing, so the database still holds both notes:
+
+```bash
+$ curl -sS https://recipe-docker-pg-docs.xhostd.app/
+{"ok":true,"notes":2,"done":0}
+
+$ curl -sS https://recipe-docker-pg-docs.xhostd.app/notes
+{"notes":[{"id":1,"body":"first note from the recipe","done":false,"created_at":"2026-10-04T06:54:14.952930+00:00"},{"id":2,"body":"second note, added after the snapshot","done":false,"created_at":"2026-10-04T06:54:37.827818+00:00"}]}
+```
+
+When restore returns, it works as follows.
 
 The restore runs in one transaction on the server. xhostd first empties the
 database's `public` schema, then it writes the snapshot's contents into that
@@ -541,19 +584,12 @@ schema. The server rolls the whole transaction back if any step fails, so a
 failed restore loses nothing. The call returns the channel's Postgres status,
 which is `ready` when the restore succeeds. The same `DATABASE_URL` continues
 to work with no new deploy. Only the data changes: it is back at the state of
-the snapshot.
-
-```bash
-$ curl -sS https://recipe-docker-pg-docs.xhostd.app/
-{"ok":true,"notes":1,"done":0}
-
-$ curl -sS https://recipe-docker-pg-docs.xhostd.app/notes
-{"notes":[{"id":1,"body":"first note from the recipe","done":false,"created_at":"2026-07-31T18:39:10.159203+00:00"}]}
-```
-
-Note 2 is gone. Note 1 is back with its original `created_at`, not a new one.
+the snapshot. After a restore to that snapshot, `GET /notes` returns note 1
+alone. Note 2 is gone. Note 1 keeps its original `created_at`, not a new one.
 A restore writes the snapshot's rows again, but it does not run your writes
-again. The `"done":false` value on the note comes from `0002`'s
+again.
+
+The `"done":false` value on each note comes from `0002`'s
 `server_default`. The app's `INSERT` names `body` only, so Postgres supplies
 the column's default. The same default fills the column for the rows already
 in the table when the migration runs. A migration without that default fails

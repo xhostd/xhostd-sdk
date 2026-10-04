@@ -300,8 +300,7 @@ working. New code reads the `XHOSTD_` name.
 
 `PORT` is a deprecated alias of `XHOSTD_HTTP_PORT`, with the same value. The
 platform injects `PORT`, but it will remove the alias. New code must never read
-`PORT`. The recipes' deploy-log excerpts were captured before 2026-10-03, so
-their `starting launch.sh` line shows `XHOST_HTTP_PORT`.
+`PORT`.
 
 **Do not write to the container file system and expect the data later.** Every
 deploy starts a new container from a new image. Your app can write data at the
@@ -494,7 +493,8 @@ Read this section before you need it.
 
 **The platform takes a database snapshot before every deploy that is not
 `static`.** It takes the snapshot whether you use the database or not. The
-deploy log shows `channel snapshot saved`. You prepare nothing in advance.
+deploy log shows `channel snapshot marker recorded`. You prepare nothing in
+advance.
 
 **To roll the data back:** call `list_channel_snapshots(app_name, channel)` to
 see the snapshots. Then call

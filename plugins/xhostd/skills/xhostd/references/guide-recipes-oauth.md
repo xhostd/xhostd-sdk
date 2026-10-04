@@ -405,7 +405,7 @@ output of every `git remote -v`.
 deploy(app_name="recipe-oauth",
        channel="prod",
        ref="master")
-→ {"deploy_id": "c141a3e1-00e0-466f-b45d-aad8968edc3f",
+→ {"deploy_id": "aee52aa8-54f8-4a29-a423-9bd4d8093c1d",
    "channel_id": "2997a56a-b7a4-4f9a-992c-2a83ff40578e",
    "status": "queued"}
 ```
@@ -421,26 +421,26 @@ status is `queued` or `running`.
 
 ### The deploy log
 
-This is the deploy above, `c141a3e1-00e0-466f-b45d-aad8968edc3f`. The reply
+This is the deploy above, `aee52aa8-54f8-4a29-a423-9bd4d8093c1d`. The reply
 starts with a status header, then the log. The log below has no buildkit
 lines and no uvicorn start-up lines, because they teach nothing.
 
 ```text
-deploy c141a3e1 — success (sha 499ed23e12f5)
-started: 2026-07-31T18:25:54Z   finished: 2026-07-31T18:26:05Z
+deploy aee52aa8 — success (sha 22cda920f30a)
+started: 2026-10-04T06:11:17.830356Z   finished: 2026-10-04T06:11:27.406054Z
 
 ...
-[2026-07-31T18:25:57+00:00] [build] #7 0.814  + cryptography==49.0.0
-[2026-07-31T18:25:57+00:00] [build] #7 0.815  + pyjwt==2.13.0
+[2026-10-04T06:11:20+00:00] [build] #7 0.757  + cryptography==49.0.0
+[2026-10-04T06:11:20+00:00] [build] #7 0.758  + pyjwt==2.13.0
 ...
-[2026-07-31T18:25:59+00:00] [build] image 982.32 MB total, 33.67 MB charged — base xhost-runtime:node22-py313 exempt
-[2026-07-31T18:26:02+00:00] health_check container=696e75f2fe6c85c63f4fa7879f5a4247aabc45cec5414d5618fc90cc29f4b11a port=3000 timeout=120.0s
-[2026-07-31T18:26:02+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-07-31T18:26:04+00:00] health_check ok
-[2026-07-31T18:26:04+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
-[2026-07-31T18:26:04+00:00] [container] INFO:     10.77.1.5:54854 - "GET / HTTP/1.1" 200 OK
-[2026-07-31T18:26:05+00:00] caddy ensure_route hostname=recipe-oauth-docs.xhostd.app upstream=10.77.1.5:32046
-[2026-07-31T18:26:05+00:00] deploy success
+[2026-10-04T06:11:22+00:00] [build] image 1005.02 MB total, 33.66 MB charged — base xhost-runtime:node22-py313 exempt
+[2026-10-04T06:11:23+00:00] health_check container=3f7e1561b9cf61fb112e430c26c1716ad0a26bcb20cea700601193298d980368 port=3000 timeout=120.0s
+[2026-10-04T06:11:24+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:11:25+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+[2026-10-04T06:11:25+00:00] health_check ok
+[2026-10-04T06:11:25+00:00] [container] INFO:     10.77.1.7:36858 - "GET / HTTP/1.1" 200 OK
+[2026-10-04T06:11:25+00:00] caddy ensure_route hostname=recipe-oauth-docs.xhostd.app upstream=10.77.1.7:32095
+[2026-10-04T06:11:27+00:00] deploy success
 ```
 
 Read two lines in that log.

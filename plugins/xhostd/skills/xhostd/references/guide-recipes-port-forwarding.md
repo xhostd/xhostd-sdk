@@ -287,7 +287,7 @@ files and push them:
 $ cd recipe-tcp
 $ git add -A
 $ git commit -m "tcp line service on the forward port"
-[master (root-commit) 75087f0] tcp line service on the forward port
+[master (root-commit) 57daa36] tcp line service on the forward port
  2 files changed, 87 insertions(+)
  create mode 100755 launch.sh
  create mode 100644 server.py
@@ -306,7 +306,7 @@ in your shell history, and in the output of every `git remote -v`.
 deploy(app_name="recipe-tcp",
        channel="prod",
        ref="master")
-→ {"deploy_id": "06ce028b-2157-477d-9d08-385abbc92939",
+→ {"deploy_id": "16463431-57c4-40a2-9ae2-8e6ac7869b7a",
    "channel_id": "a9832287-7684-4f78-94dc-9795761c60d8",
    "status": "queued"}
 ```
@@ -339,10 +339,10 @@ expose_port(app_name="recipe-tcp", channel="prod")
 → {"channel_id": "a9832287-7684-4f78-94dc-9795761c60d8",
    "channel": "prod",
    "host": "fwd-1.xhostd.app",
-   "port": 20582,
+   "port": 30223,
    "allow_cidrs": [],
    "active": true,
-   "created_at": "2026-08-01T09:05:05.190500Z"}
+   "created_at": "2026-10-04T06:12:41.333594Z"}
 ```
 
 `allow_cidrs: []` is the open case: the whole internet can connect. `active:
@@ -373,22 +373,22 @@ Read these three properties of the address before you give it to your users:
 
 These lines are the proof of the recipe. The reply's status header comes
 first; the log lines are the end of deploy
-`06ce028b-2157-477d-9d08-385abbc92939`. The `[...]` marks show where the
-transcript omits other deploy lines: the build and backup lines above, and the
-route and channel lines below. The transcript also shortens the container id:
+`16463431-57c4-40a2-9ae2-8e6ac7869b7a`. The `[...]` marks show where the
+transcript omits the other deploy lines that teach nothing here, such as the
+build and backup lines above, and the route and cleanup lines below. The transcript also shortens the container id:
 
 ```text
-deploy 06ce028b — success (sha 75087f0e4cc1)
-started: 2026-08-01T08:40:03Z   finished: 2026-08-01T08:40:09Z
+deploy 16463431 — success (sha 57daa36c2dee)
+started: 2026-10-04T06:12:26.169556Z   finished: 2026-10-04T06:12:37.320501Z
 
 [...]
-[2026-08-01T08:40:08+00:00] start_container template=app
-[2026-08-01T08:40:08+00:00] health_check container=423fc265... port=3000 timeout=120.0s
-[2026-08-01T08:40:08+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-08-01T08:40:09+00:00] health_check ok
-[2026-08-01T08:40:09+00:00] [container] 2026-08-01 08:40:08,591 INFO listening on 0.0.0.0:7000
+[2026-10-04T06:12:29+00:00] start_container template=app
+[2026-10-04T06:12:30+00:00] health_check container=95563c81... port=3000 timeout=120.0s
+[2026-10-04T06:12:30+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:12:30+00:00] health_check ok
+[2026-10-04T06:12:30+00:00] [container] 2026-10-04 06:12:30,308 INFO listening on 0.0.0.0:7000
 [...]
-[2026-08-01T08:40:09+00:00] deploy success
+[2026-10-04T06:12:37+00:00] deploy success
 ```
 
 Compare that log with the log of another recipe. Three points are different.
@@ -401,17 +401,17 @@ there. No process in this container binds port 3000. The line
 health check. That line cannot appear here, and the 120-second timeout can only
 expire.
 
-**`health_check ok` comes one second later.** That is the ready-file arm, and it
+**`health_check ok` comes in the same second.** That is the ready-file arm, and it
 is the only arm that this app can satisfy. `server.py` created
 `$XHOSTD_READY_FILE` immediately after it bound the socket. The probe accepted
 the file and stopped, because the HTTP answer never comes. A deploy that reports
-`port=3000`, and then succeeds one second later with no process on port 3000, is
+`port=3000`, and then succeeds in the same second with no process on port 3000, is
 not a contradiction. The ready file gave the signal.
 
 **`listening on 0.0.0.0:7000`.** This is your own log line. It shows the value
 that the platform set in `XHOSTD_FORWARD_PORT`.
 
-One more detail: the build reported `image 948.68 MB total, 0.02 MB charged —
+One more detail: the build reported `image 971.38 MB total, 0.02 MB charged —
 base xhost-runtime:node22-py313 exempt`. The build installed nothing on the warm
 base image. A service that uses only the standard library therefore has an
 almost zero build cost.
@@ -436,10 +436,10 @@ list_exposed_ports(app_name="recipe-tcp")
 → {"forwards": [{"channel_id": "a9832287-7684-4f78-94dc-9795761c60d8",
                  "channel": "prod",
                  "host": "fwd-1.xhostd.app",
-                 "port": 20582,
+                 "port": 30223,
                  "allow_cidrs": [],
                  "active": true,
-                 "created_at": "2026-08-01T09:05:05.190500Z"}]}
+                 "created_at": "2026-10-04T06:12:41.333594Z"}]}
 ```
 
 ### The round trip
@@ -468,7 +468,7 @@ while chunk := s.recv(4096):
 ```text
 PONG
 hello there
-2026-08-01T09:07:31.736818+00:00
+2026-10-04T06:12:45.530200+00:00
 ERR unknown command 'BOGUS'
 BYE
 ```
@@ -485,9 +485,9 @@ reports what you can read, and it reads nothing:
 
 ```text
 get_runtime_log(app_name="recipe-tcp", channel="prod")
-→ container #1 (xhost-cb2ecd27-a9832287-00000001) — running
-  started: 2026-08-01T08:40:08.340361104Z
-  readable containers: #1 (pass container_index to read an older one)
+→ container #2 (xhost-cb2ecd27-a9832287-00000002) — running
+  started: 2026-10-04T06:12:30.055278693Z
+  readable containers: #1, #2 (pass container_index to read an older one)
   no command given — pass one (e.g. "tail -n 200 app.log") to read the log itself
 ```
 
@@ -495,15 +495,16 @@ Give it a command, and it returns the log:
 
 ```text
 get_runtime_log(..., command="tail -n 20 app.log")
-→ log file: /log/app.log (257 bytes)
-  2026-08-01T08:40:08.546775293Z [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-  2026-08-01T08:40:08.592035842Z 2026-08-01 08:40:08,591 INFO listening on 0.0.0.0:7000
-  2026-08-01T09:07:31.736927506Z 2026-08-01 09:07:31,736 INFO connection from 10.77.0.1
+→ log file: /log/app.log (258 bytes)
+  2026-10-04T06:12:30.267725334Z [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+  2026-10-04T06:12:30.308825779Z 2026-10-04 06:12:30,308 INFO listening on 0.0.0.0:7000
+  2026-10-04T06:12:45.530162921Z 2026-10-04 06:12:45,529 INFO connection from 10.77.0.1
 ```
 
-Three lines for the full life of the app: the boot, the bound socket, and one
-connection. That connection comes from [The round trip](#the-round-trip), and
-its `TIME` reply has the same second, `09:07:31`.
+Three lines for the full life of the container: the boot, the bound socket,
+and one connection. That connection comes from
+[The round trip](#the-round-trip), and its `TIME` reply has the same second,
+`06:12:45`.
 
 **`10.77.0.1` is not the client.** It is the forward node, on the platform's own
 network. The client that opened the socket was on the public internet. This log
@@ -522,10 +523,10 @@ also the client of the round trip above:
 expose_port(app_name="recipe-tcp", channel="prod",
             allow_cidrs=["203.0.113.0/24"])
 → {"host": "fwd-1.xhostd.app",
-   "port": 20582,
+   "port": 30223,
    "allow_cidrs": ["203.0.113.0/24"],
    "active": true,
-   "created_at": "2026-08-01T09:05:05.190500Z"}
+   "created_at": "2026-10-04T06:12:41.333594Z"}
 ```
 
 The host, the port and the `created_at` are the same as in the first exposure.
@@ -535,8 +536,8 @@ Only the allowlist changed.
 address outside the list, and asks for a `PING`:
 
 ```text
-connect ok after 0.086s
-recv after 0.197s: b''
+connect ok after 0.115s
+recv after 0.210s: b''
 ```
 
 The TCP handshake **succeeds**. Then the peer closes the socket with zero bytes.
@@ -547,7 +548,7 @@ The app saw nothing of this:
 
 ```text
 get_runtime_log(..., command="grep -c 'connection from' app.log")
-→ log file: /log/app.log (257 bytes)
+→ log file: /log/app.log (258 bytes)
   1
 ```
 
@@ -568,7 +569,7 @@ expose_port(app_name="recipe-tcp", channel="prod")
 
 The purpose of that call was to change nothing. The call opened the endpoint to
 the whole internet again. The blocked client then completed a full round trip at
-`09:13:36`. The platform gave no warning, and the response looks like every
+`06:13:01`. The platform gave no warning, and the response looks like every
 other success.
 
 Therefore, **give `allow_cidrs` in every `expose_port` call for a channel that
@@ -657,7 +658,7 @@ The two symptoms have different causes:
 
 - **The socket opens, then closes at once with no bytes.** This is the common
   case, and it is easy to read incorrectly. The output is `connect ok after
-  0.086s` and then `recv ... b''`. The measurements show this result for [a
+  0.115s` and then `recv ... b''`. The measurements show this result for [a
   blocked source](#the-allowlist) and for a released endpoint. A component
   *above* your app refused the connection. The cause is one of these:
 
@@ -709,15 +710,15 @@ unexpose_port(app_name="recipe-tcp", channel="prod")
 
 The platform refuses new connections from that moment. A connection immediately
 after the call gave the same result as a blocked source: `connect ok after
-0.140s` and then `recv ... b''`. **The platform keeps the sessions that
+0.088s` and then `recv ... b''`. **The platform keeps the sessions that
 exist.** It examines the authorization once, when it accepts the connection, and
 it does not examine it again. After that, the relay moves the bytes and resolves
 nothing.
 
 This is a measurement, not a deduction. One client held one connection open for
 the full sequence, and it sent an `ECHO` tick every five seconds. Every tick
-after the release came back correctly. The ticks 20 to 26 all come after the
-release: 31 more seconds of traffic on a released endpoint. The client opened
+after the release came back correctly. The ticks 20 to 27 all come after the
+release: 36 more seconds of traffic on a released endpoint. The client opened
 that session before the call.
 
 To also stop the open sessions, do two steps in this order. **The order is
@@ -729,30 +730,30 @@ important**:
    the upstream connection of every relay. The data path stops at once.
 
 The deploy stopped the held session, and the logs agree to the second. From
-deploy `2dd5f25e-bf6d-4d99-a1ea-9708e317b727`:
+deploy `9001e8cb-10c4-4509-92fe-de289fa11036`:
 
 ```text
-[2026-08-01T09:16:01+00:00] start_container ok: container=627ae2a5c5dd...
-[2026-08-01T09:16:01+00:00] [container] listening on 0.0.0.0:7000
-[2026-08-01T09:16:02+00:00] stop_and_remove old container=423fc265...
-[2026-08-01T09:16:07+00:00] stop_and_remove ok
+[2026-10-04T06:15:11+00:00] start_container ok: container=c264bae349b4...
+[2026-10-04T06:15:12+00:00] [container] 2026-10-04 06:15:11,580 INFO listening on 0.0.0.0:7000
+[2026-10-04T06:15:12+00:00] stop_and_remove old container=95563c81b53e...
+[2026-10-04T06:15:18+00:00] stop_and_remove ok
 ```
 
-The log of that client, in UTC+3:
+The log of that client, in UTC:
 
 ```text
-12:16:02 tick 26: tick-26
-12:16:07 tick 27: EOF — session dropped
+06:15:13 tick 27: tick-27
+06:15:18 tick 28: EOF — session dropped
 ```
 
-`12:16:07` local is `09:16:07` UTC. That is the same second when
-`stop_and_remove` completed, five seconds after its start. The session continued
-through the start of the new container, and it stopped with the old container.
+The session dropped at `06:15:18`, the same second when `stop_and_remove`
+completed, six seconds after its start. The session continued through the
+start of the new container, and it stopped with the old container.
 That is the rule: a session belongs to the container that accepted it.
 
-Those five seconds are the stop timeout, so a process that ignores SIGTERM keeps
-its connections for that time. A deploy that fails before the cutover stops no
-session. Confirm that the deploy reports `success`, and not only that the
+Five of those six seconds are the stop timeout, so a process that ignores
+SIGTERM keeps its connections for that time. A deploy that fails before the
+cutover stops no session. Confirm that the deploy reports `success`, and not only that the
 platform queued it.
 
 A deploy before `unexpose_port` gives no result. That deploy keeps the endpoint
@@ -761,9 +762,9 @@ again to the replacement. With `unexpose_port` first, the peer has no address
 for a new connection.
 
 A new exposure after that gives a **new** address, not the old one. The same
-channel came back on port `28198`, and its first port was `20582`. Its
-`created_at` is `2026-08-01T09:19:55.119029Z`, against the first
-`2026-08-01T09:05:05.190500Z`. The new timestamp shows that the platform made a
+channel came back on port `31421`, and its first port was `30223`. Its
+`created_at` is `2026-10-04T06:15:25.223575Z`, against the first
+`2026-10-04T06:12:41.333594Z`. The new timestamp shows that the platform made a
 new endpoint, and did not activate the old one again. Tell every client that has
 the old address.
 

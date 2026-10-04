@@ -257,11 +257,11 @@ git repo and its Postgres database.
 
 ```text
 create_app(name="recipe-docker-pg", template="docker")
-→ {"id": "d2ae0f30-36f0-443f-95d1-d937a7bbb676",
+→ {"id": "2ea4b560-2b5c-43b4-8509-86ded52248cf",
    "name": "recipe-docker-pg",
    "template": "docker",
    "repo_url": "https://git.xhostd.com/docs/recipe-docker-pg.git",
-   "channels": [{"id": "50bdd958-d4e7-41db-8adb-9a49cd8966fd",
+   "channels": [{"id": "16df8282-8498-4567-a595-fe769090b8b6",
                  "name": "prod",
                  "hostname": "recipe-docker-pg-docs.xhostd.app",
                  "current_sha": null}], ...}
@@ -323,8 +323,8 @@ into the output of every `git remote -v`.
 deploy(app_name="recipe-docker-pg",
        channel="prod",
        ref="master")
-→ {"deploy_id": "abf7a32e-394d-4646-b774-0c12c1c3f046",
-   "channel_id": "50bdd958-d4e7-41db-8adb-9a49cd8966fd",
+→ {"deploy_id": "a6baf3fc-f573-40f7-82c6-e74912525228",
+   "channel_id": "16df8282-8498-4567-a595-fe769090b8b6",
    "status": "queued"}
 ```
 
@@ -340,65 +340,67 @@ on `failed` the reason is in the log tail.
 
 ## Verify it
 
-This is the deploy above, `abf7a32e-394d-4646-b774-0c12c1c3f046`. The reply
+This is the deploy above, `a6baf3fc-f573-40f7-82c6-e74912525228`. The reply
 starts with a status header, then the log. The transcript shows short ids,
 and it omits the buildkit lines that teach nothing.
 
 ```text
-deploy abf7a32e — success (sha aacda69971a1)
-started: 2026-07-31T18:38:41Z   finished: 2026-07-31T18:38:55Z
+deploy a6baf3fc — success (sha 9a045a4ced33)
+started: 2026-10-04T06:53:59.684877Z   finished: 2026-10-04T06:54:10.384603Z
 
-[2026-07-31T18:38:41+00:00] deploy begin id=abf7a32e-... channel=50bdd958-... sha=aacda699...
-[2026-07-31T18:38:41+00:00] git_sync ok: synced app=d2ae0f30-... channel=50bdd958-... sha=aacda699...
-[2026-07-31T18:38:41+00:00] [build] start sha=aacda69971a19f0b7e37e613d21b0b361c98c1fa
-[2026-07-31T18:38:41+00:00] [build] queued 0s, starting
-[2026-07-31T18:38:42+00:00] [build] #7 [stage-0 1/6] FROM docker.io/library/python:3.13-slim@sha256:6771159cd4fa...
-[2026-07-31T18:38:42+00:00] [build] #8 [stage-0 3/6] COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
-[2026-07-31T18:38:42+00:00] [build] #8 CACHED
-[2026-07-31T18:38:42+00:00] [build] #11 [stage-0 5/6] RUN uv pip install --system --no-cache -r requirements.txt
-[2026-07-31T18:38:42+00:00] [build] #11 CACHED
-[2026-07-31T18:38:42+00:00] [build] #12 [stage-0 6/6] COPY . .
-[2026-07-31T18:38:42+00:00] [build] #12 DONE 0.0s
-[2026-07-31T18:38:43+00:00] [build] finished in 2s
-[2026-07-31T18:38:43+00:00] [build] queue wait 0s, build 2s
-[2026-07-31T18:38:43+00:00] [build] image 262.09 MB total, 94.63 MB charged — base python:3.13-slim exempt
-[2026-07-31T18:38:45+00:00] channel snapshot saved: 0.00 MB
-[2026-07-31T18:38:46+00:00] start_container template=docker
-[2026-07-31T18:38:46+00:00] health_check container=6f0c1f9382cb... port=3000 timeout=120.0s
-[2026-07-31T18:38:50+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade  -> 0001, create notes
-[2026-07-31T18:38:50+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, add done flag to notes
-[2026-07-31T18:38:54+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
-[2026-07-31T18:38:54+00:00] health_check ok
-[2026-07-31T18:38:54+00:00] [container] INFO:     10.77.1.5:45294 - "GET / HTTP/1.1" 200 OK
-[2026-07-31T18:38:54+00:00] caddy ensure_route hostname=recipe-docker-pg-docs.xhostd.app upstream=10.77.1.5:32044
-[2026-07-31T18:38:55+00:00] deploy success
+[2026-10-04T06:53:59+00:00] deploy begin id=a6baf3fc-... channel=16df8282-... sha=9a045a4c...
+[2026-10-04T06:54:00+00:00] git_sync ok: synced app=2ea4b560-... channel=16df8282-... sha=9a045a4c...
+[2026-10-04T06:54:00+00:00] [build] start sha=9a045a4ced33d6fe7e0dd5db787cf6b69c50f989
+[2026-10-04T06:54:00+00:00] [build] queued 0s, starting
+[2026-10-04T06:54:02+00:00] [build] #5 [stage-0 1/6] FROM docker.io/library/python:3.13-slim@sha256:bb2988715db2...
+[2026-10-04T06:54:02+00:00] [build] #8 [stage-0 5/6] RUN uv pip install --system --no-cache -r requirements.txt
+[2026-10-04T06:54:02+00:00] [build] #8 CACHED
+[2026-10-04T06:54:02+00:00] [build] #11 [stage-0 3/6] COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
+[2026-10-04T06:54:02+00:00] [build] #11 CACHED
+[2026-10-04T06:54:02+00:00] [build] #12 [stage-0 6/6] COPY . .
+[2026-10-04T06:54:02+00:00] [build] #12 CACHED
+[2026-10-04T06:54:03+00:00] [build] finished in 2s
+[2026-10-04T06:54:03+00:00] [build] queue wait 0s, build 3s
+[2026-10-04T06:54:03+00:00] [build] image 273.28 MB total, 94.64 MB charged — base python:3.13-slim exempt
+[2026-10-04T06:54:03+00:00] channel snapshot marker recorded
+[2026-10-04T06:54:04+00:00] start_container template=docker
+[2026-10-04T06:54:04+00:00] health_check container=1d6bdbce248e... port=3000 timeout=120.0s
+[2026-10-04T06:54:08+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade  -> 0001, create notes
+[2026-10-04T06:54:08+00:00] [container] INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, add done flag to notes
+[2026-10-04T06:54:09+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+[2026-10-04T06:54:09+00:00] health_check ok
+[2026-10-04T06:54:09+00:00] [container] INFO:     10.77.1.7:38162 - "GET / HTTP/1.1" 200 OK
+[2026-10-04T06:54:09+00:00] caddy ensure_route hostname=recipe-docker-pg-docs.xhostd.app upstream=10.77.1.7:32085
+[2026-10-04T06:54:10+00:00] deploy success
 ```
 
 Read these six lines on every deploy.
 
-**`#11 CACHED`, and `build 2s`.** Docker used the cached dependency layer
-again, and it did not repeat the step. Only `#12 COPY . .`, your source, ran.
-That is the result of the `COPY` order. Docker copies `requirements.txt` on
-its own, so it builds the dependency layer again only when your dependencies
-change. A deploy that changes the source alone costs about two seconds.
+**`#8 CACHED`, and `build 3s`.** Docker used the cached dependency layer
+again, and it did not repeat the step. That is the result of the `COPY` order.
+Docker copies `requirements.txt` on its own, so it builds the dependency layer
+again only when your dependencies change. `#12 COPY . .`, your source, is
+cached here too, because an earlier build on the same cell used the same files.
+A deploy that changes the source runs that one step, and it still costs a few
+seconds.
 
-**`image 262.09 MB total, 94.63 MB charged — base python:3.13-slim exempt`.**
+**`image 273.28 MB total, 94.64 MB charged — base python:3.13-slim exempt`.**
 This is the most useful line for a `docker` user. *Total* is the size of the
 image on disk. *Charged* is the size that counts against your plan's image
 size cap. The platform subtracts the layers of the largest warm base under
-your image. Here that base is the ~167 MB difference, and the platform
-charges you for the 94.63 MB that you added. It subtracts one base only, and
+your image. Here that base is the ~179 MB difference, and the platform
+charges you for the 94.64 MB that you added. It subtracts one base only, and
 only if your image is truly built on that base.
 
 Call `get_account_overview` for the current account's charged image-size cap.
 Do not infer it from a subscription catalog.
 
-**`channel snapshot saved: 0.00 MB`.** Every non-static deploy saves a
+**`channel snapshot marker recorded`.** Every non-static deploy records a
 snapshot of the channel's Postgres schema before the new container starts.
-You do not ask for the snapshot, and you cannot forget it. This snapshot
-rounds to 0.00 MB because the database is still empty on the app's first
-deploy. A snapshot holds the state *before* its own deploy, and this database
-holds nothing at that point. See
+You do not ask for the snapshot, and you cannot forget it. The marker copies
+no data. It records the moment that a restore returns the database to. A
+snapshot holds the state *before* its own deploy, and on the app's first
+deploy the database holds nothing at that moment. See
 [the Postgres recipe](https://docs.xhostd.com/guides/recipes-postgres) for
 the calls that list and restore a snapshot.
 
@@ -409,8 +411,8 @@ third migration prints one more line, and nothing else changes. If you see
 the alembic banner with no `Running upgrade` line, the database is already at
 head and alembic had no work.
 
-**`health_check ... port=3000 timeout=120.0s`, then `health_check ok` eight
-seconds later.** In those eight seconds the migrations run, and then uvicorn
+**`health_check ... port=3000 timeout=120.0s`, then `health_check ok` five
+seconds later.** In those five seconds the migrations run, and then uvicorn
 binds its port. The probe gets its first 2xx after that. The 120-second
 window gives a migration the time to finish.
 
@@ -426,7 +428,7 @@ $ curl -sS https://recipe-docker-pg-docs.xhostd.app/
 {"ok":true,"notes":1,"done":0}
 
 $ curl -sS https://recipe-docker-pg-docs.xhostd.app/notes
-{"notes":[{"id":1,"body":"first note from the recipe","done":false,"created_at":"2026-07-31T18:39:10.159203+00:00"}]}
+{"notes":[{"id":1,"body":"first note from the recipe","done":false,"created_at":"2026-10-04T06:54:14.952930+00:00"}]}
 ```
 
 `POST /notes` wrote that note after the deploy. The
