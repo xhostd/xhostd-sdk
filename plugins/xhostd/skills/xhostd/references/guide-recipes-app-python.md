@@ -163,7 +163,7 @@ output of every `git remote -v`.
 deploy(app_name="recipe-python",
        channel="prod",
        ref="master")
-→ {"deploy_id": "6c58aa48-faa9-422a-b4f2-3f668d247bf1",
+→ {"deploy_id": "d8ceb2cf-3614-41a6-a916-9205a23212a6",
    "channel_id": "44788022-ee4d-458d-802f-277cfda9116c",
    "status": "queued"}
 ```
@@ -180,74 +180,74 @@ status is `queued` or `running`.
 ```text
 get_deploy_log(app_name="recipe-python",
                channel="prod",
-               deploy_id="6c58aa48-faa9-422a-b4f2-3f668d247bf1")
+               deploy_id="d8ceb2cf-3614-41a6-a916-9205a23212a6")
 ```
 
 This is that deploy. The reply starts with a status header, then the log. The
-log below shows the ids in a short form. It also omits the buildkit lines and
-the ten dependency lines, because they teach nothing:
+log below shows the ids in a short form. It omits the lines that teach nothing
+here, such as the buildkit lines and ten dependency lines.
 
 ```text
-deploy 6c58aa48 — success (sha 65441d56092e)
-started: 2026-07-31T17:33:49Z   finished: 2026-07-31T17:33:59Z
+deploy d8ceb2cf — success (sha 2fed79b20b40)
+started: 2026-10-04T06:11:01.958443Z   finished: 2026-10-04T06:11:12.631756Z
 
-[2026-07-31T17:33:49+00:00] deploy begin id=6c58aa48-... channel=44788022-... sha=65441d56...
-[2026-07-31T17:33:49+00:00] git_sync ok: synced app=9e8f7bd3-... channel=44788022-... sha=65441d56...
-[2026-07-31T17:33:49+00:00] [build] start sha=65441d56092e71c2e3e278b86b5901c39e2c8b7c
-[2026-07-31T17:33:50+00:00] [build] #5 [1/3] FROM xhost-registry:5000/xhost-runtime:node22-py313@sha256:f63020a522e9...
-[2026-07-31T17:33:50+00:00] [build] #5 CACHED
-[2026-07-31T17:33:50+00:00] [build] #6 [2/3] COPY --chown=app:app . /app
-[2026-07-31T17:33:50+00:00] [build] #7 [3/3] RUN if [ -f /app/install.sh ]; then chmod +x /app/install.sh && cd /app && ./install.sh && rm -f /app/install.sh; fi && chown -R app:app /app
-[2026-07-31T17:33:50+00:00] [build] #7 0.156 Using Python 3.13.14 environment at: /usr/local
-[2026-07-31T17:33:50+00:00] [build] #7 0.706 Resolved 12 packages in 548ms
-[2026-07-31T17:33:50+00:00] [build] #7 0.741 Downloading pydantic-core (2.0MiB)
-[2026-07-31T17:33:52+00:00] [build] #7 0.820 Prepared 12 packages in 113ms
-[2026-07-31T17:33:52+00:00] [build] #7 0.844 Installed 12 packages in 24ms
-[2026-07-31T17:33:52+00:00] [build] #7 0.844  + fastapi==0.115.6
-[2026-07-31T17:33:52+00:00] [build] #7 0.844  + uvicorn==0.34.0
-[2026-07-31T17:33:52+00:00] [build] #7 DONE 0.9s
-[2026-07-31T17:33:53+00:00] [build] finished in 3s
-[2026-07-31T17:33:53+00:00] [build] queue wait 0s, build 3s
-[2026-07-31T17:33:53+00:00] [build] image 962.13 MB total, 13.48 MB charged — base xhost-runtime:node22-py313 exempt
-[2026-07-31T17:33:54+00:00] channel snapshot saved: 0.00 MB
-[2026-07-31T17:33:55+00:00] start_container template=app
-[2026-07-31T17:33:56+00:00] health_check container=720d612faa30... port=3000 timeout=120.0s
-[2026-07-31T17:33:56+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-07-31T17:33:58+00:00] [container] INFO:     Application startup complete.
-[2026-07-31T17:33:58+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
-[2026-07-31T17:33:58+00:00] health_check ok
-[2026-07-31T17:33:58+00:00] [container] INFO:     10.77.1.5:35710 - "GET / HTTP/1.1" 200 OK
-[2026-07-31T17:33:58+00:00] caddy ensure_route hostname=recipe-python-docs.xhostd.app upstream=10.77.1.5:32042
-[2026-07-31T17:33:59+00:00] deploy success
+[2026-10-04T06:11:02+00:00] deploy begin id=d8ceb2cf-... channel=44788022-... sha=2fed79b2...
+[2026-10-04T06:11:02+00:00] git_sync ok: synced app=9e8f7bd3-... channel=44788022-... sha=2fed79b2...
+[2026-10-04T06:11:02+00:00] [build] start sha=2fed79b20b4021859e2b9881792aa66bcf802a87
+[2026-10-04T06:11:03+00:00] [build] #5 [1/3] FROM xhost-registry:5000/xhost-runtime:node22-py313@sha256:7b7967779b81...
+[2026-10-04T06:11:03+00:00] [build] #5 CACHED
+[2026-10-04T06:11:03+00:00] [build] #6 [2/3] COPY --chown=app:app . /app
+[2026-10-04T06:11:03+00:00] [build] #7 [3/3] RUN if [ -f /app/install.sh ]; then chmod +x /app/install.sh && cd /app && ./install.sh && rm -f /app/install.sh; fi && chown -R app:app /app
+[2026-10-04T06:11:03+00:00] [build] #7 0.236 Using Python 3.13.14 environment at: /usr/local
+[2026-10-04T06:11:03+00:00] [build] #7 0.791 Resolved 12 packages in 544ms
+[2026-10-04T06:11:04+00:00] [build] #7 0.811 Downloading pydantic-core (2.0MiB)
+[2026-10-04T06:11:04+00:00] [build] #7 0.889 Prepared 12 packages in 89ms
+[2026-10-04T06:11:04+00:00] [build] #7 0.904 Installed 12 packages in 22ms
+[2026-10-04T06:11:04+00:00] [build] #7 0.909  + fastapi==0.115.6
+[2026-10-04T06:11:04+00:00] [build] #7 0.909  + uvicorn==0.34.0
+[2026-10-04T06:11:04+00:00] [build] #7 DONE 1.0s
+[2026-10-04T06:11:06+00:00] [build] finished in 3s
+[2026-10-04T06:11:06+00:00] [build] queue wait 0s, build 4s
+[2026-10-04T06:11:06+00:00] [build] image 984.82 MB total, 13.46 MB charged — base xhost-runtime:node22-py313 exempt
+[2026-10-04T06:11:06+00:00] channel snapshot marker recorded
+[2026-10-04T06:11:08+00:00] start_container template=app
+[2026-10-04T06:11:09+00:00] health_check container=e38016b3037d... port=3000 timeout=120.0s
+[2026-10-04T06:11:09+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:11:10+00:00] [container] INFO:     Application startup complete.
+[2026-10-04T06:11:10+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+[2026-10-04T06:11:10+00:00] health_check ok
+[2026-10-04T06:11:10+00:00] [container] INFO:     10.77.1.7:53382 - "GET / HTTP/1.1" 200 OK
+[2026-10-04T06:11:10+00:00] caddy ensure_route hostname=recipe-python-docs.xhostd.app upstream=10.77.1.7:32093
+[2026-10-04T06:11:12+00:00] deploy success
 ```
 
 Read five facts in that log.
 
-**`Installed 12 packages in 24ms`.** That speed is `uv`, and it is the reason
-why `uv` is the standard here. This was the first build of the app. Thus `uv`
-resolved and downloaded the two pins in `requirements.txt`: `Resolved 12
-packages in 548ms`, with a 2 MiB `pydantic-core` wheel. The whole build, with
-the image export, took three seconds.
+**`Installed 12 packages in 22ms`.** That speed is `uv`, and it is the reason
+why `uv` is the standard here. The install step runs after the `COPY` of your
+source, so a change to any file resolves and downloads the two pins in
+`requirements.txt` again: `Resolved 12 packages in 544ms`, with a 2 MiB
+`pydantic-core` wheel. The whole build, with the image export, took four
+seconds.
 
 **`Using Python 3.13.14 environment at: /usr/local`.** `--system` installed
 into the image's own interpreter, not into a virtualenv. Thus `launch.sh` calls
 `uvicorn` directly, and it activates no virtualenv first.
 
-**`image 962.13 MB total, 13.48 MB charged`.** The platform counts only the
+**`image 984.82 MB total, 13.46 MB charged`.** The platform counts only the
 bytes that your build adds to the platform base. The base layers are exempt
-from the image-size cap of your plan. Your twelve packages are the 13.48 MB.
+from the image-size cap of your plan. Your twelve packages are the 13.46 MB.
 
-**`channel snapshot saved: 0.00 MB`.** This is the automatic database snapshot
-before the deploy. Every deploy that is not `static` makes one snapshot, also
-when you use no database. Thus the size is zero here.
+**`channel snapshot marker recorded`.** This is the automatic database snapshot
+before the deploy. Every deploy that is not `static` records one, also when you
+use no database. The marker copies no data. It records the moment that a
+restore returns the database to, so it costs nothing here.
 
 **`Uvicorn running on http://0.0.0.0:3000`, then `"GET / HTTP/1.1" 200 OK`.**
 That 200 *is* the health check. The platform prints the `[xhost] starting
-launch.sh (XHOST_HTTP_PORT=3000)` line above it, not your code. That line names
+launch.sh (XHOSTD_HTTP_PORT=3000)` line above it, not your code. That line names
 the port that the probe uses. `health_check ok` comes next. Only then does
 `caddy ensure_route` point the hostname at the new container.
-The excerpt predates the `XHOSTD_` names, so a deploy today prints
-`XHOSTD_HTTP_PORT` on that line ([Upgrade-safe code](https://docs.xhostd.com/guides/bkm#upgrade-safe-code)).
 
 Then two commands prove the result against the live app:
 

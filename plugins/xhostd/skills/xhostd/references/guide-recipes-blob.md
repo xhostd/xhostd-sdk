@@ -420,7 +420,7 @@ app refuses every write until you deploy again.
 deploy(app_name="recipe-blob",
        channel="prod",
        ref="master")
-→ {"deploy_id": "f81e4372-9891-429d-bf43-ebc8d9259a10",
+→ {"deploy_id": "1908d546-e226-4442-ab01-def038eb843d",
    "channel_id": "21eb795a-7071-407b-8cf0-0e4f940af3c8",
    "status": "queued"}
 ```
@@ -437,35 +437,35 @@ its reply states the outcome, and you poll while the status is `queued` or
 ### The deploy log
 
 This reply comes from the deploy above,
-`f81e4372-9891-429d-bf43-ebc8d9259a10`. The status header comes first, then
+`1908d546-e226-4442-ab01-def038eb843d`. The status header comes first, then
 the log. The transcript does not include the buildkit lines that teach
 nothing. Every deploy of the channel writes the same set of lines.
 
 ```text
-deploy f81e4372 — success (sha 98ef841c21ef)
-started: 2026-07-31T22:00:17Z   finished: 2026-07-31T22:00:38Z
+deploy 1908d546 — success (sha ad52964eb3ef)
+started: 2026-10-04T06:11:31.517476Z   finished: 2026-10-04T06:11:44.413179Z
 
 ...
-[2026-07-31T22:00:19+00:00] [build] #7 0.482 Resolved 20 packages in 313ms
-[2026-07-31T22:00:21+00:00] [build] #7 1.738 Installed 20 packages in 73ms
-[2026-07-31T22:00:21+00:00] [build] #7 1.738  + boto3==1.43.59
-[2026-07-31T22:00:21+00:00] [build] #7 1.738  + botocore==1.43.59
-[2026-07-31T22:00:21+00:00] [build] #7 1.738  + python-multipart==0.0.20
+[2026-10-04T06:11:32+00:00] [build] #7 0.696 Resolved 20 packages in 546ms
+[2026-10-04T06:11:34+00:00] [build] #7 1.816 Installed 20 packages in 86ms
+[2026-10-04T06:11:34+00:00] [build] #7 1.816  + boto3==1.43.59
+[2026-10-04T06:11:34+00:00] [build] #7 1.816  + botocore==1.43.59
+[2026-10-04T06:11:34+00:00] [build] #7 1.816  + python-multipart==0.0.20
 ...
-[2026-07-31T22:00:30+00:00] [build] image 1007.98 MB total, 59.33 MB charged — base xhost-runtime:node22-py313 exempt
-[2026-07-31T22:00:32+00:00] channel snapshot saved: 0.00 MB
-[2026-07-31T22:00:33+00:00] blob snapshot saved: ts=2026-07-31T22:00:32.447000+00:00
-[2026-07-31T22:00:33+00:00] blob record pushed to cell gateway
-[2026-07-31T22:00:33+00:00] health_check container=ac9d93ec09c193f560674fdd7a0dec2eb4adadce473cdc4921ed824dbd67a8ef port=3000 timeout=120.0s
-[2026-07-31T22:00:33+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-07-31T22:00:36+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
-[2026-07-31T22:00:37+00:00] health_check ok
-[2026-07-31T22:00:37+00:00] [container] INFO:     10.77.1.5:56020 - "GET / HTTP/1.1" 200 OK
-[2026-07-31T22:00:37+00:00] caddy ensure_route hostname=recipe-blob-docs.xhostd.app upstream=10.77.1.5:32044
-[2026-07-31T22:00:38+00:00] deploy success
+[2026-10-04T06:11:37+00:00] [build] image 1030.69 MB total, 59.33 MB charged — base xhost-runtime:node22-py313 exempt
+[2026-10-04T06:11:38+00:00] channel snapshot marker recorded
+[2026-10-04T06:11:38+00:00] blob snapshot saved: ts=2026-10-04T06:11:38.396000+00:00
+[2026-10-04T06:11:39+00:00] blob record pushed to cell gateway
+[2026-10-04T06:11:39+00:00] health_check container=8b88c51040e64bb6265c64b04ba216a472ef9465966bcd6c0b22900251515561 port=3000 timeout=120.0s
+[2026-10-04T06:11:40+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:11:41+00:00] health_check ok
+[2026-10-04T06:11:41+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
+[2026-10-04T06:11:41+00:00] [container] INFO:     10.77.1.7:43668 - "GET / HTTP/1.1" 200 OK
+[2026-10-04T06:11:42+00:00] caddy ensure_route hostname=recipe-blob-docs.xhostd.app upstream=10.77.1.7:32089
+[2026-10-04T06:11:44+00:00] deploy success
 ```
 
-Two of those lines are specific to a channel with a blob store.
+Two of those lines concern the channel's object store.
 
 **`blob snapshot saved: ts=...`.** Before your new container replaces the old
 container, the platform marks a moment in the channel's object store. It does
@@ -480,7 +480,7 @@ the cell-local gateway. It does this before the container that uses them
 starts. If a deploy reaches `health_check` without this line, check the S3
 calls from the container first.
 
-The line above them is `image 1007.98 MB total, 59.33 MB charged`. It is the
+The line above them is `image 1030.69 MB total, 59.33 MB charged`. It is the
 standard image-size report: only the layers that you add on the warm
 `xhost-runtime` base count against your plan's cap.
 

@@ -159,13 +159,13 @@ Three steps.
 
 ```text
 create_app(name="recipe-worker", template="app")
-→ {"id": "26a55c60-c6d0-421d-8d0f-f80e7db90f56",
+→ {"id": "6aa59e3b-05b5-4e4c-9b12-1150a8a84c6c",
    "name": "recipe-worker",
    "repo_url": "https://git.xhostd.com/docs/recipe-worker.git",
    "template": "app",
    "port_forwarding_enabled": false,
    "port_forwarding_available": true,
-   "channels": [{"id": "59489f61-ad60-4275-88cd-a6a5a7688f9a",
+   "channels": [{"id": "98a26f59-607f-45f3-b8b2-741ca5054902",
                  "name": "prod",
                  "hostname": "recipe-worker-docs.xhostd.app",
                  "git_ref_binding": "branch:master",
@@ -218,7 +218,7 @@ files and push them:
 $ cd recipe-worker
 $ git add -A
 $ git commit -m "tick worker that signals readiness with a file"
-[master (root-commit) 706dbe6] tick worker that signals readiness with a file
+[master (root-commit) 90564c2] tick worker that signals readiness with a file
  2 files changed, 75 insertions(+)
  create mode 100755 launch.sh
  create mode 100644 worker.py
@@ -237,8 +237,8 @@ in your shell history, and in the output of every `git remote -v`.
 deploy(app_name="recipe-worker",
        channel="prod",
        ref="master")
-→ {"deploy_id": "1d923d57-9779-4ffa-a214-542a7d0217b1",
-   "channel_id": "59489f61-ad60-4275-88cd-a6a5a7688f9a",
+→ {"deploy_id": "521e2723-bfdb-44e0-843e-6170e48752a9",
+   "channel_id": "98a26f59-607f-45f3-b8b2-741ca5054902",
    "status": "queued"}
 ```
 
@@ -253,32 +253,37 @@ no deploy. `deploy` is always its own call.
 `get_deploy_log(app_name, channel, deploy_id)` returns the record: a status
 header first, then the log. The first line states the outcome — poll while
 the status is `queued` or `running`. Below is the end of deploy
-`1d923d57-9779-4ffa-a214-542a7d0217b1`. The platform no longer holds this
-deploy's row, so the header's `started` value comes from the log's own
-timestamps. The `...` mark stands for the `[build]` lines above it:
+`521e2723-bfdb-44e0-843e-6170e48752a9`. The `...` mark stands for the
+`[build]` lines above it:
 
 ```text
-deploy 1d923d57 — success (sha 706dbe67795f)
-started: 2026-08-02T15:24:39Z   finished: 2026-08-02T15:24:47Z
+deploy 521e2723 — success (sha 90564c22acaa)
+started: 2026-10-04T06:16:20.521063Z   finished: 2026-10-04T06:16:28.144639Z
 
 ...
-[2026-08-02T15:24:43+00:00] [build] image 948.68 MB total, 0.02 MB charged — base xhost-runtime:node22-py313 exempt
-[2026-08-02T15:24:45+00:00] channel snapshot saved: 0.01 MB
-[2026-08-02T15:24:45+00:00] start_container template=app
-[2026-08-02T15:24:46+00:00] start_container ok: container=5013ff44274ae4b2e1bca63419915c4d3b8b6923d81a3f86002f2f2fba8065af
-[2026-08-02T15:24:46+00:00] health_check container=5013ff44274ae4b2e1bca63419915c4d3b8b6923d81a3f86002f2f2fba8065af port=3000 timeout=120.0s
-[2026-08-02T15:24:46+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-08-02T15:24:46+00:00] health_check ok
-[2026-08-02T15:24:46+00:00] [container] {"ts": "2026-08-02T15:24:46.443804+00:00", "event": "ready", "interval_s": 5.0}
-[2026-08-02T15:24:46+00:00] [container] {"ts": "2026-08-02T15:24:46.443942+00:00", "event": "tick", "count": 1, "uptime_s": 0.0}
-[2026-08-02T15:24:47+00:00] caddy ensure_route hostname=recipe-worker-docs.xhostd.app upstream=10.77.1.5:32053
-[2026-08-02T15:24:47+00:00] pinned deployed sha 706dbe67795ff3488823ef80be7be2a0855dc28e
-[2026-08-02T15:24:47+00:00] deploy success
+[2026-10-04T06:16:24+00:00] [build] image 971.38 MB total, 0.02 MB charged — base xhost-runtime:node22-py313 exempt
+[2026-10-04T06:16:24+00:00] channel snapshot marker recorded
+[2026-10-04T06:16:25+00:00] blob snapshot saved: ts=2026-10-04T06:16:24.524000+00:00
+[2026-10-04T06:16:25+00:00] blob record pushed to cell gateway
+[2026-10-04T06:16:25+00:00] start_container template=app
+[2026-10-04T06:16:26+00:00] start_container ok: container=13c560e366492e8a506e1af6b7ab5564bc9cef59e03f621c6a640b02448c5683
+[2026-10-04T06:16:26+00:00] health_check container=13c560e366492e8a506e1af6b7ab5564bc9cef59e03f621c6a640b02448c5683 port=3000 timeout=120.0s
+[2026-10-04T06:16:26+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:16:26+00:00] health_check ok
+[2026-10-04T06:16:26+00:00] [container] {"ts": "2026-10-04T06:16:26.441959+00:00", "event": "ready", "interval_s": 5.0}
+[2026-10-04T06:16:26+00:00] [container] {"ts": "2026-10-04T06:16:26.442097+00:00", "event": "tick", "count": 1, "uptime_s": 0.0}
+[2026-10-04T06:16:27+00:00] caddy ensure_route hostname=recipe-worker-docs.xhostd.app upstream=10.77.1.7:32091
+[2026-10-04T06:16:27+00:00] caddy ensure_route ok
+[2026-10-04T06:16:27+00:00] caddy ensure_s3_route host=recipe-worker-docs.s3.xhostd.app upstream=10.77.1.7:6533
+[2026-10-04T06:16:27+00:00] caddy ensure_s3_route ok
+[2026-10-04T06:16:28+00:00] pinned deployed sha 90564c22acaa3800c0896ea71dc9c8b19662a99f
+[2026-10-04T06:16:28+00:00] channel row updated
+[2026-10-04T06:16:28+00:00] deploy success
 ```
 
 Read five facts in that log.
 
-**`image 948.68 MB total, 0.02 MB charged`.** The build added almost nothing to
+**`image 971.38 MB total, 0.02 MB charged`.** The build added almost nothing to
 the warm base image. A worker that uses only the standard library therefore has
 an image cost near zero.
 
@@ -292,7 +297,7 @@ same second.** The platform publishes the HTTP health port on every template,
 and it probes that port. No process in this container binds port 3000, so the
 HTTP arm can never answer. With the HTTP arm alone, the 120-second window
 expires. The ready file gave the signal instead. `health_check ok` and the
-worker's `ready` line share the second `15:24:46`.
+worker's `ready` line share the second `06:16:26`.
 
 **The `ready` line and the first `tick` line.** These two lines are the worker's
 own output, and the `[container]` prefix marks them. `interval_s: 5.0` is the
@@ -310,8 +315,8 @@ container to answer it:
 
 ```text
 get_runtime_log(app_name="recipe-worker", channel="prod")
-→ container #1 (xhost-26a55c60-59489f61-00000001) — running
-  started: 2026-08-02T15:24:46.182767751Z
+→ container #1 (xhost-6aa59e3b-98a26f59-00000001) — running
+  started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
   no command given — pass one (e.g. "tail -n 200 app.log") to read the log itself
 ```
@@ -328,16 +333,16 @@ Give the call a `command`, and it returns the log:
 
 ```text
 get_runtime_log(..., channel="prod", command="tail -n 5 app.log")
-→ container #1 (xhost-26a55c60-59489f61-00000001) — running
-  started: 2026-08-02T15:24:46.182767751Z
+→ container #1 (xhost-6aa59e3b-98a26f59-00000001) — running
+  started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
-  log file: /log/app.log (30616 bytes)
+  log file: /log/app.log (7792 bytes)
 
-  2026-08-02T15:44:51.538721598Z {"ts": "2026-08-02T15:44:51.538414+00:00", "event": "tick", "count": 242, "uptime_s": 1205.1}
-  2026-08-02T15:44:56.539203647Z {"ts": "2026-08-02T15:44:56.538822+00:00", "event": "tick", "count": 243, "uptime_s": 1210.1}
-  2026-08-02T15:45:01.539740081Z {"ts": "2026-08-02T15:45:01.539214+00:00", "event": "tick", "count": 244, "uptime_s": 1215.1}
-  2026-08-02T15:45:06.540191946Z {"ts": "2026-08-02T15:45:06.539805+00:00", "event": "tick", "count": 245, "uptime_s": 1220.1}
-  2026-08-02T15:45:11.540671786Z {"ts": "2026-08-02T15:45:11.540206+00:00", "event": "tick", "count": 246, "uptime_s": 1225.1}
+  2026-10-04T06:21:11.460289266Z {"ts": "2026-10-04T06:21:11.459949+00:00", "event": "tick", "count": 58, "uptime_s": 285.0}
+  2026-10-04T06:21:16.460564800Z {"ts": "2026-10-04T06:21:16.460261+00:00", "event": "tick", "count": 59, "uptime_s": 290.0}
+  2026-10-04T06:21:21.460844758Z {"ts": "2026-10-04T06:21:21.460552+00:00", "event": "tick", "count": 60, "uptime_s": 295.0}
+  2026-10-04T06:21:26.461072439Z {"ts": "2026-10-04T06:21:26.460873+00:00", "event": "tick", "count": 61, "uptime_s": 300.0}
+  2026-10-04T06:21:31.461411622Z {"ts": "2026-10-04T06:21:31.461129+00:00", "event": "tick", "count": 62, "uptime_s": 305.0}
 ```
 
 Every line carries two timestamps, and they come from two different writers.
@@ -355,7 +360,7 @@ work instead:
 ```text
 get_runtime_log(..., channel="prod", command="grep -c '\"event\": \"tick\"' app.log")
 → ...
-  247
+  62
 ```
 
 Call the same command again some minutes later, and the number is larger. Two
@@ -372,27 +377,25 @@ refuses a value that is not positive, so the worker stopped before the ready
 file existed:
 
 ```text
-[2026-08-02T22:01:14+00:00] health_check container=b8e0c4721410b968005cbffeedba5568ef0fe867220c66c91c9ae90e01ece098 port=3000 timeout=120.0s
-[2026-08-02T22:01:14+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-08-02T22:01:14+00:00] [container] Traceback (most recent call last):
-[2026-08-02T22:01:15+00:00] [container]   File "/app/worker.py", line 69, in <module>
-[2026-08-02T22:01:15+00:00] [container]     main()
-[2026-08-02T22:01:15+00:00] [container]     ~~~~^^
-[2026-08-02T22:01:15+00:00] [container]   File "/app/worker.py", line 45, in main
-[2026-08-02T22:01:15+00:00] [container]     interval, state = setup()
-[2026-08-02T22:01:15+00:00] [container]                       ~~~~~^^
-[2026-08-02T22:01:15+00:00] [container]   File "/app/worker.py", line 30, in setup
-[2026-08-02T22:01:15+00:00] [container]     raise ValueError(f"TICK_SECONDS must be positive, not {interval}")
-[2026-08-02T22:01:15+00:00] [container] ValueError: TICK_SECONDS must be positive, not 0.0
-[2026-08-02T22:01:16+00:00] boot failed — removing new container b8e0c4721410b968005cbffeedba5568ef0fe867220c66c91c9ae90e01ece098; previous container keeps serving its own image — this failed deploy did not change its content
-[2026-08-02T22:01:17+00:00] deploy failed (host agent): remote agent error (health_check_error): container xhost-26a55c60-59489f61-00000003 exited during boot (exit code 1)
-[2026-08-02T22:01:17+00:00] pre-deploy DB snapshot 69701ced-ea7f-4655-b070-0f56e82d4684 was taken before this failure; if the failed deploy changed the database, contact support for help with a restore (database restore is temporarily unavailable)
+[2026-10-04T06:21:39+00:00] health_check container=b75c0894f4c55fcdd1dac4250842063acbdecae42730b8809cc5fae1be18eacc port=3000 timeout=120.0s
+[2026-10-04T06:21:39+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:21:39+00:00] [container] Traceback (most recent call last):
+[2026-10-04T06:21:39+00:00] [container]   File "/app/worker.py", line 69, in <module>
+[2026-10-04T06:21:39+00:00] [container]     main()
+[2026-10-04T06:21:39+00:00] [container]     ~~~~^^
+[2026-10-04T06:21:39+00:00] [container]   File "/app/worker.py", line 45, in main
+[2026-10-04T06:21:39+00:00] [container]     interval, state = setup()
+[2026-10-04T06:21:39+00:00] [container]                       ~~~~~^^
+[2026-10-04T06:21:39+00:00] [container]   File "/app/worker.py", line 30, in setup
+[2026-10-04T06:21:39+00:00] [container]     raise ValueError(f"TICK_SECONDS must be positive, not {interval}")
+[2026-10-04T06:21:39+00:00] [container] ValueError: TICK_SECONDS must be positive, not 0.0
+[2026-10-04T06:21:42+00:00] boot failed — removing new container b75c0894f4c55fcdd1dac4250842063acbdecae42730b8809cc5fae1be18eacc; previous container keeps serving its own image — this failed deploy did not change its content
+[2026-10-04T06:21:43+00:00] deploy failed (host agent): remote agent error (health_check_error): container xhost-6aa59e3b-98a26f59-00000002 exited during boot (exit code 1)
+[2026-10-04T06:21:43+00:00] pre-deploy DB snapshot 394f07cf-23b6-4183-b3cf-ed702bfa1fdb was taken before this failure; if the failed deploy changed the database, contact support for help with a restore (database restore is temporarily unavailable)
 ```
 
-The real log carries that traceback three times, because the platform started
+The real log carries that traceback four times, because the platform started
 the container again after each exit. The transcript above shows it one time.
-The channel got other deploys between the earlier captures in this recipe and
-this one, so the container number is higher here.
 
 Read four facts in that log.
 
@@ -407,7 +410,7 @@ new container and kept the old one. The `app` template bakes your code into a
 new image at each deploy, so the container that survives still runs your
 previous code. A user of your app sees no change from a failed deploy.
 
-**`exited during boot (exit code 1)`.** The failure came in three seconds, and
+**`exited during boot (exit code 1)`.** The failure came in four seconds, and
 not after the 120-second health window. The platform tests that the container
 is alive before it tests the ready file, by design. A file that a dead process
 left behind must not certify that process.
@@ -426,44 +429,45 @@ describes the dead container:
 
 ```text
 get_runtime_log(app_name="recipe-worker", channel="prod")
-→ container #3 (xhost-26a55c60-59489f61-00000003) — exited
+→ container #2 (xhost-6aa59e3b-98a26f59-00000002) — exited
   exit code: 1
   restarts: 4
-  started: 2026-08-02T22:01:16.394792105Z
-  finished: 2026-08-02T22:01:16.659083603Z
+  started: 2026-10-04T06:21:42.516008956Z
+  finished: 2026-10-04T06:21:42.736892616Z
   source: archive (this container was replaced or removed; its log was saved)
-  readable containers: #1, #2, #3 (pass container_index to read an older one)
+  readable containers: #1, #2 (pass container_index to read an older one)
   no command given — pass one (e.g. "tail -n 200 app.log") to read the log itself
 ```
 
 `source: archive` tells you that the platform removed the container and kept
-its log. `readable containers: #1, #2, #3` names the three logs that you can
-read now. `container_index` selects one of them, and both reads below use it:
+its log. `readable containers: #1, #2` names the two logs that you can read
+now. `container_index` selects one of them, and both reads below use it:
 
 ```text
-get_runtime_log(..., command="grep -c ValueError app.log", container_index=3)
+get_runtime_log(..., command="grep -c ValueError app.log", container_index=2)
 → ...
-  8
+  10
 
-get_runtime_log(..., command="tail -n 3 app.log", container_index=2)
-→ container #2 (xhost-26a55c60-59489f61-00000002) — running
+get_runtime_log(..., command="tail -n 3 app.log", container_index=1)
+→ container #1 (xhost-6aa59e3b-98a26f59-00000001) — running
   ...
-  2026-08-02T22:02:27.584851679Z {"ts": "2026-08-02T22:02:27.584387+00:00", "event": "tick", "count": 3772, "uptime_s": 18856.5}
-  2026-08-02T22:02:32.585156823Z {"ts": "2026-08-02T22:02:32.584780+00:00", "event": "tick", "count": 3773, "uptime_s": 18861.5}
-  2026-08-02T22:02:37.585645310Z {"ts": "2026-08-02T22:02:37.585294+00:00", "event": "tick", "count": 3774, "uptime_s": 18866.5}
+  2026-10-04T06:21:36.461535434Z {"ts": "2026-10-04T06:21:36.461363+00:00", "event": "tick", "count": 63, "uptime_s": 310.0}
+  2026-10-04T06:21:41.461877482Z {"ts": "2026-10-04T06:21:41.461616+00:00", "event": "tick", "count": 64, "uptime_s": 315.0}
+  2026-10-04T06:21:46.462515596Z {"ts": "2026-10-04T06:21:46.461973+00:00", "event": "tick", "count": 65, "uptime_s": 320.0}
 ```
 
 That pair of reads shows the platform's failure behaviour.
 
-**The dead container holds eight lines with `ValueError`.** Each attempt writes
+**The dead container holds ten lines with `ValueError`.** Each attempt writes
 two such lines: the `raise` line of the traceback, and the final exception
-line. The archive therefore holds four attempts, and the deploy log shows
-three. The platform copies no more container lines into the deploy log after
+line. The archive therefore holds five attempts, and the deploy log shows
+four. The platform copies no more container lines into the deploy log after
 the failure, and the archive keeps every line.
 
-**Container #2 still writes its ticks.** Its three lines above carry the stamp
-22:02, and the deploy failed at 22:01. The failed deploy stopped nothing. A
-deploy that fails at the health check leaves the previous container in place,
+**Container #1 still writes its ticks.** Its newest line above carries the
+stamp `06:21:46`, and the deploy failed at `06:21:43`. The failed deploy
+stopped nothing. A deploy that fails at the health check leaves the previous
+container in place,
 and that container keeps its state and its log. Only the next successful deploy
 replaces it.
 

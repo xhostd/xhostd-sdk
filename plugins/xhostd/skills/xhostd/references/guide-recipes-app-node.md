@@ -170,7 +170,7 @@ in your shell history, and in the output of every `git remote -v`.
 deploy(app_name="recipe-node",
        channel="prod",
        ref="master")
-→ {"deploy_id": "6bd8ff7c-1d29-4799-9410-b1f8e2f2c5db",
+→ {"deploy_id": "57c7a687-81a7-46bc-a666-7202594a44aa",
    "channel_id": "937e4d14-965c-4959-9adb-effc1555b5b7",
    "status": "queued"}
 ```
@@ -187,38 +187,40 @@ its reply states the outcome, and you poll while the status is `queued` or
 ```text
 get_deploy_log(app_name="recipe-node",
                channel="prod",
-               deploy_id="6bd8ff7c-1d29-4799-9410-b1f8e2f2c5db")
+               deploy_id="57c7a687-81a7-46bc-a666-7202594a44aa")
 ```
 
 This is that deploy. The reply starts with a status header, then the log. The
-transcript shortens the ids, and it omits the buildkit and npm-notice lines,
-because they teach nothing:
+transcript shortens the ids, and it omits the lines that teach nothing here,
+such as the buildkit and npm-notice lines:
 
 ```text
-deploy 6bd8ff7c — success (sha 1ba194d3ea3b)
-started: 2026-07-31T17:30:45Z   finished: 2026-07-31T17:30:54Z
+deploy 57c7a687 — success (sha f6efff40baac)
+started: 2026-10-04T06:10:42.032256Z   finished: 2026-10-04T06:10:56.605659Z
 
-[2026-07-31T17:30:45+00:00] deploy begin id=6bd8ff7c-... channel=937e4d14-... sha=1ba194d3...
-[2026-07-31T17:30:45+00:00] git_sync ok: synced app=3ea579f7-... channel=937e4d14-... sha=1ba194d3...
-[2026-07-31T17:30:45+00:00] [build] start sha=1ba194d3ea3be29fc7ab1a0c1a3ce2bbfbefb915
-[2026-07-31T17:30:45+00:00] [build] queued 0s, starting
-[2026-07-31T17:30:46+00:00] [build] #5 [1/3] FROM xhost-registry:5000/xhost-runtime:node22-py313@sha256:f63020a522e9...
-[2026-07-31T17:30:46+00:00] [build] #5 CACHED
-[2026-07-31T17:30:46+00:00] [build] #6 [2/3] COPY --chown=app:app . /app
-[2026-07-31T17:30:46+00:00] [build] #7 [3/3] RUN if [ -f /app/install.sh ]; then chmod +x /app/install.sh && cd /app && ./install.sh && rm -f /app/install.sh; fi && chown -R app:app /app
-[2026-07-31T17:30:47+00:00] [build] #7 1.731 added 69 packages in 2s
-[2026-07-31T17:30:48+00:00] [build] #7 DONE 1.9s
-[2026-07-31T17:30:50+00:00] [build] finished in 4s
-[2026-07-31T17:30:50+00:00] [build] queue wait 0s, build 5s
-[2026-07-31T17:30:50+00:00] [build] image 966.07 MB total, 17.41 MB charged — base xhost-runtime:node22-py313 exempt
-[2026-07-31T17:30:51+00:00] channel snapshot saved: 0.00 MB
-[2026-07-31T17:30:52+00:00] start_container template=app
-[2026-07-31T17:30:53+00:00] health_check container=33ee729b559c... port=3000 timeout=120.0s
-[2026-07-31T17:30:53+00:00] [container] [xhost] starting launch.sh (XHOST_HTTP_PORT=3000) ...
-[2026-07-31T17:30:53+00:00] health_check ok
-[2026-07-31T17:30:53+00:00] [container] listening on 0.0.0.0:3000
-[2026-07-31T17:30:54+00:00] caddy ensure_route hostname=recipe-node-docs.xhostd.app upstream=10.77.1.5:32032
-[2026-07-31T17:30:54+00:00] deploy success
+[2026-10-04T06:10:42+00:00] deploy begin id=57c7a687-... channel=937e4d14-... sha=f6efff40...
+[2026-10-04T06:10:42+00:00] git_sync ok: synced app=3ea579f7-... channel=937e4d14-... sha=f6efff40...
+[2026-10-04T06:10:42+00:00] [build] start sha=f6efff40baac92e30d30dd207272130c8e502372
+[2026-10-04T06:10:42+00:00] [build] queued 0s, starting
+[2026-10-04T06:10:43+00:00] [build] #5 [1/3] FROM xhost-registry:5000/xhost-runtime:node22-py313@sha256:7b7967779b81...
+[2026-10-04T06:10:43+00:00] [build] #5 CACHED
+[2026-10-04T06:10:43+00:00] [build] #6 [2/3] COPY --chown=app:app . /app
+[2026-10-04T06:10:43+00:00] [build] #7 [3/3] RUN if [ -f /app/install.sh ]; then chmod +x /app/install.sh && cd /app && ./install.sh && rm -f /app/install.sh; fi && chown -R app:app /app
+[2026-10-04T06:10:44+00:00] [build] #7 1.660 added 69 packages in 2s
+[2026-10-04T06:10:44+00:00] [build] #7 DONE 1.8s
+[2026-10-04T06:10:47+00:00] [build] finished in 4s
+[2026-10-04T06:10:47+00:00] [build] queue wait 0s, build 5s
+[2026-10-04T06:10:47+00:00] [build] image 988.84 MB total, 17.48 MB charged — base xhost-runtime:node22-py313 exempt
+[2026-10-04T06:10:47+00:00] channel snapshot marker recorded
+[2026-10-04T06:10:48+00:00] start_container template=app
+[2026-10-04T06:10:49+00:00] health_check container=0da74984eac5... port=3000 timeout=120.0s
+[2026-10-04T06:10:49+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
+[2026-10-04T06:10:50+00:00] health_check ok
+[2026-10-04T06:10:50+00:00] [container] listening on 0.0.0.0:3000
+[2026-10-04T06:10:50+00:00] caddy ensure_route hostname=recipe-node-docs.xhostd.app upstream=10.77.1.7:32100
+[2026-10-04T06:10:50+00:00] stop_and_remove old container=6436d158f94c...
+[2026-10-04T06:10:56+00:00] stop_and_remove ok
+[2026-10-04T06:10:56+00:00] deploy success
 ```
 
 Read these five lines with attention.
@@ -231,25 +233,26 @@ image, and you do not write a Dockerfile.
 your repo to `/app`, with the owner `app:app`. Then `install.sh` runs as root,
 so `apt-get` and a global `npm` work. The build then **deletes** `install.sh`,
 so it can never run again at boot. The line `added 69 packages in 2s` is your
-`npm install` in that step. This was the first build of the app, so the build
-really installed the dependencies, and did not take them from a cache. The full
-build still took five seconds.
+`npm install` in that step. The step runs after the `COPY` of your source, so a
+change to any file runs `npm install` again, and that step takes nothing from
+a cache. The full build still took five seconds.
 
-**`image 966.07 MB total, 17.41 MB charged`.** Only the data that your build
+**`image 988.84 MB total, 17.48 MB charged`.** Only the data that your build
 adds to the platform base counts against your plan's image-size cap. The base
 layers are exempt. A redeploy of the `app` template is therefore cheap.
 
-**`channel snapshot saved: 0.00 MB`.** This is the automatic database snapshot
-before the deploy. Every non-`static` deploy makes one, also when you do not use
-the database. The size is therefore zero here.
+**`channel snapshot marker recorded`.** This is the automatic database snapshot
+before the deploy. Every non-`static` deploy records one, also when you do not
+use the database. The marker copies no data. It records the moment that a
+restore returns the database to, so it costs nothing here.
 
-**`[xhost] starting launch.sh (XHOST_HTTP_PORT=3000)`, then `health_check
+**`[xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000)`, then `health_check
 ok`.** The platform prints that line, not your code. It gives the port that your
 process must bind, immediately before `launch.sh` runs. Your own line
 `listening on 0.0.0.0:3000` comes after it. Only after the probe passes does
-`caddy ensure_route` point the hostname at the new container.
-The excerpt predates the `XHOSTD_` names, so a deploy today prints
-`XHOSTD_HTTP_PORT` on that line ([Upgrade-safe code](https://docs.xhostd.com/guides/bkm#upgrade-safe-code)).
+`caddy ensure_route` point the hostname at the new container. This deploy
+replaced a running container, so `stop_and_remove old container` comes after
+the route, and the old container served every request until then.
 
 To find out if the app is alive, and to read no log, call `get_runtime_log` with
 **no** `command`:
@@ -270,13 +273,13 @@ Then the proof, in two commands, against the live demo:
 
 ```bash
 $ curl -sS https://recipe-node-docs.xhostd.app/
-{"ok":true,"service":"recipe-node-express","uptime":18729.900174679}
+{"ok":true,"service":"recipe-node-express","uptime":725.789936934}
 
 $ curl -sS "https://recipe-node-docs.xhostd.app/api/echo?q=hello"
 {"echo":"hello"}
 ```
 
-The two responses have the type `application/json`, and the first is 68 bytes.
+The two responses have the type `application/json`, and the first is 66 bytes.
 The `uptime` value comes from `process.uptime()` in `server.js`. Your own
 request to the demo therefore gives a different number from the transcript. The
 container is the same one, and the difference is not a fault.
