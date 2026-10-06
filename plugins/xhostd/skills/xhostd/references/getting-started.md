@@ -31,7 +31,7 @@ The response looks like:
       "id": "c0a1…",
       "name": "prod",
       "hostname": "lisbon-coffee-alice.xhostd.app",
-      "git_ref_binding": "branch:master",
+      "git_ref_binding": null,
       "current_sha": null,
       "status": "provisioning",
       "pending_deploy": null
@@ -40,7 +40,7 @@ The response looks like:
 }
 ```
 
-Every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a channel by name (`channel="prod"`); the ids are only needed for the deprecated `app_id`/`channel_id` aliases.
+Every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a channel by name (`channel="prod"`); the ids are only needed for the deprecated `app_id`/`channel_id` aliases. `git_ref_binding` is `null`: `prod` has no branch until the first deploy with `ref` binds it (or pass `branch` to `create_app`).
 
 ## 3. Write the site
 
@@ -67,9 +67,9 @@ git remote add xhostd "https://alice:<token>@git.xhostd.com/alice/lisbon-coffee.
 git push xhostd HEAD:master
 ```
 
-`HEAD:master` on either transport, because prod is bound to `branch:master` while a fresh `git init` defaults to `main`. Never write the token into a file the user might commit. **Pushing stores the code; it does not deploy** — that is step 4.
+`HEAD:master` on either transport: push under the branch name you then deploy with `ref`, because a fresh `git init` can name the local branch `main`. `deploy(..., ref="master")` in step 4 binds `prod` to `master`. Never write the token into a file the user might commit. **Pushing stores the code; it does not deploy** — that is step 4.
 
-**Fallback, one case only:** when git is not available on the machine you are working on — a runtime with no shell, such as the claude.ai connector — use `mcp__xhostd__commit_files(app_name, message, files, ref="master")` instead. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
+**Fallback, one case only:** when git is not available on the machine you are working on — a runtime with no shell, such as the claude.ai connector — use `mcp__xhostd__commit_files(app_name, message, files)` instead; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
 
 For an `app`-template project the push is the same; the repo needs `install.sh` (optional) and `launch.sh` (required) at its root. The deploy only succeeds if the app signals readiness within 120s, and there are **two ways to do that** — whichever comes first. So the process must:
 
@@ -104,7 +104,7 @@ mcp__xhostd__deploy(
 )
 ```
 
-Returns `{"deploy_id": "d…", "channel_id": "c0a1…", "status": "queued"}`. Deploys run async. `ref` is a branch name and xhostd resolves it to that branch's current head, so after a push you never need to know the sha; pass `sha="abc123…"` instead to pin an exact commit — which is what you do with the sha `commit_files` returned.
+Returns `{"deploy_id": "d…", "channel_id": "c0a1…", "status": "queued"}`. Deploys run async. `ref` is a branch name and xhostd resolves it to that branch's current head, so after a push you never need to know the sha. The `ref` also binds `prod` to that branch. Pass `sha="abc123…"` instead to pin an exact commit — which is what you do with the sha `commit_files` returned; a `sha` deploy binds nothing.
 
 ## 5. Watch the build
 
@@ -154,4 +154,4 @@ The preview is live at `https://draft-lisbon-coffee-alice.xhostd.app`.
 
 **Deploy fails right after start / log says `health check failed for container …`** (app template) — neither readiness signal arrived within 120s: `/` didn't return a 2xx on `$XHOSTD_HTTP_PORT` *and* no file was created at `$XHOSTD_READY_FILE`. Usual causes: the server bound `localhost` or a hardcoded port instead of `0.0.0.0:$XHOSTD_HTTP_PORT`; there's no `/` route (an API under `/api` only); the boot was too slow; or `launch.sh` hit `Permission denied` — it runs as the non-root `app` user, so installing anything there, or writing outside `/app`/`$HOME`/`/tmp`, crashes it. Fix the bind/`$XHOSTD_HTTP_PORT`, add a `/` handler returning 200, or move the install into `install.sh`. If the project has no HTTP surface at all, create `$XHOSTD_READY_FILE` once its work loop is running instead of adding a listener.
 
-**`git push` succeeded but the deploy is empty / nothing changed** — prod is bound to `branch:master`, but a fresh `git init` defaults to `main`. Push `master` (`git push xhostd HEAD:master`) or deploy with `ref` set to your actual branch.
+**`git push` succeeded but the deploy is empty / nothing changed** — the deploy shipped a different branch from the one you pushed. Deploy with `ref` set to the branch you pushed; that also binds `prod` to it. **`channel_unbound`** — `prod` has no branch yet; deploy with `ref`, or bind it with `update_channel`.

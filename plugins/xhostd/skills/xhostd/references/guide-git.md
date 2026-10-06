@@ -104,10 +104,11 @@ git remote add xhostd-ssh "git@git.xhostd.com:<username>/<app>.git"
 GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519 -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master
 ```
 
-The `HEAD:master` refspec is deliberate. xhostd binds the prod channel to
-the `master` branch. A new local repo often uses `main` as its default
-branch. `HEAD:master` pushes the current branch to `master`, whatever
-its local name is. `GIT_SSH_COMMAND` names the private half. The key
+The `HEAD:master` refspec is deliberate. Push under the name you will
+deploy: `deploy(..., ref="master")` deploys that branch and binds the
+channel to it. A new local repo often uses `main` as its default branch.
+`HEAD:master` pushes the current branch to `master`, whatever its local
+name is. `GIT_SSH_COMMAND` names the private half. The key
 sits outside a default path, so every SSH push needs that variable.
 `-o IdentitiesOnly=yes` stops ssh from offering another key it finds
 first.
@@ -168,9 +169,9 @@ git push xhostd HEAD:master
 > on the [tokens page](https://console.xhostd.com/tokens) and mint a new
 > one. For CI, mint a dedicated token you can revoke on its own.
 
-The `HEAD:master` refspec is deliberate here too. xhostd binds the prod
-channel to the `master` branch, and a new local repo often uses `main`
-as its default branch.
+The `HEAD:master` refspec is deliberate here too. Push under the name you
+will deploy, because `deploy(..., ref="master")` binds the channel to that
+branch, and a new local repo often uses `main` as its default branch.
 
 Use `git remote set-url xhostd ...` if the remote already exists. `get_app`
 and `GET /apps/{app_id}` return the exact `repo_url` of each app.

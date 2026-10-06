@@ -66,11 +66,13 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
 ```json
 {
   "name": "my-app",
-  "template": "static"
+  "template": "static",
+  "branch": "main"
 }
 ```
 
 - `name` (string, required) — Must be a valid DNS label and must not use a reserved prefix (see Hostname Rules)
+- `branch` (string, optional) — The branch `prod` deploys. It follows the branch rule in "git_ref_binding Format". Omit it and `prod` has no branch (`git_ref_binding: null`) until the first deploy with `ref` binds it. An invalid name answers 400 and creates nothing.
 - `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"` (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`. The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build** time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template builds the `Dockerfile` at the repo root on every deploy and runs the image with its own `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` is still injected at the same value, so existing apps keep working, but it is deprecated and will be removed — use `$XHOSTD_HTTP_PORT` in new code) and answer `GET /` with a 2xx, **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy listener; create it once the app is actually running, not at the top of the start command. Such a channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are injected at run time only — never as build args, so secrets are unavailable during the build and must never be baked into the image. Charged image size (total minus warm-base layers) follows the current account entitlement; plugin workflows read the current cap from `get_account_overview`. Match every `FROM` to a warm base image — including a build-only stage in a multi-stage build, since every stage that names one starts with no pull: `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position, build duration, image size vs cap) into the deploy log.
 
 **Response (200):**
@@ -92,7 +94,7 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
       "id": "uuid",
       "name": "prod",
       "hostname": "my-app-alice.xhostd.app",
-      "git_ref_binding": "branch:master",
+      "git_ref_binding": null,
       "current_sha": null,
       "status": "provisioning",
       "pending_deploy": null
@@ -151,15 +153,17 @@ List all channels for an app.
   },
   {
     "id": "uuid",
-    "name": "wildcard",
-    "hostname": "wildcard-my-app-alice.xhostd.app",
-    "git_ref_binding": "branch:*",
+    "name": "staging",
+    "hostname": "staging-my-app-alice.xhostd.app",
+    "git_ref_binding": "branch:staging",
     "current_sha": null,
     "status": "provisioning",
     "pending_deploy": null
   }
 ]
 ```
+
+`git_ref_binding` is `null` for a channel with no branch yet, such as a new app's `prod` before its first deploy with `ref`.
 
 **Errors:**
 - `not_found` (404) — app not found or not owned by caller
@@ -205,9 +209,34 @@ Create a new channel on an app.
 
 Get details of a single channel.
 
-**Response (200):** Same shape as a single entry in the `GET /apps/{app_id}/channels` response.
+**Response (200):** Same shape as a single entry in the `GET /apps/{app_id}/channels` response. `git_ref_binding` is `null` for a channel with no branch yet.
 
 **Errors:**
+- `not_found` (404) — app or channel not found
+
+---
+
+## PATCH /apps/{app_id}/channels/{channel_id}
+
+Change the branch a channel is bound to, without deploying. The MCP tool is `update_channel`. The branch does not have to exist in the repo yet. The project's activity feed records a `channel.update` event; a PATCH to the current value records nothing.
+
+**Required scope:** `channel:*`
+
+**Request body:**
+```json
+{
+  "git_ref_binding": "branch:main"
+}
+```
+
+- `git_ref_binding` (string, required) — `branch:<name>`, following "git_ref_binding Format". `null` answers 400: a channel cannot be unbound.
+
+**Response (200):** The channel, in the `GET /apps/{app_id}/channels/{channel_id}` shape.
+
+**Errors:**
+- `bad_request` (400) — an empty body, `null`, or a binding outside the rule
+- `branch_wildcard_deprecated` (400) — `branch:*`
+- `scope_denied` (403) — the credential lacks `channel:*`
 - `not_found` (404) — app or channel not found
 
 ---
@@ -228,21 +257,21 @@ Delete a channel. Cannot delete the `prod` channel.
 
 ## POST /apps/{app_id}/channels/{channel_id}/deploy
 
-Manually enqueue a deploy of a specific SHA to a channel.
+Enqueue a deploy of a branch or a commit to a channel.
 
 **Required scope:** `deploy:*`
 
 **Request body:**
 ```json
 {
-  "sha": "abc1234567890abcdef1234567890abcdef12345"
+  "ref": "main"
 }
 ```
 
-- `sha` (string, optional) — A 40-character hex SHA or a branch name matching `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`
-- `ref` (string, optional) — A branch name to resolve and deploy; equivalent to passing a branch name as `sha`.
+- `ref` (string, optional) — A branch name (`main` or `refs/heads/main`). xhostd deploys its current HEAD and **binds the channel to that branch**, in the same transaction as the enqueue. A later build or boot failure keeps the new binding.
+- `sha` (string, optional) — A 40-character hex SHA, or a branch name matching `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. It deploys once and never changes the binding.
 
-At least one of `sha` or `ref` must be provided. If both are given, `sha` wins and `ref` is ignored.
+If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither, xhostd deploys the current HEAD of the channel's bound branch. On a GitHub-connected app the deploy fetches from GitHub first.
 
 **Response (200):**
 ```json
@@ -256,8 +285,11 @@ At least one of `sha` or `ref` must be provided. If both are given, `sha` wins a
 **Note:** This endpoint must be called explicitly after `git push` to trigger a deploy. Pushing code does not automatically deploy.
 
 **Errors:**
-- `bad_request` (400) — invalid SHA format, or neither `sha` nor `ref` given
-- `not_found` (404) — app or channel not found
+- `bad_request` (400) — invalid SHA format, or a `ref` outside the branch rule (`HEAD` and names under `xhost/` included)
+- `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message names both fixes and, for a GitHub-connected app, GitHub's default branch
+- `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the bound branch, the message names the fix and GitHub's default branch
+- `conflict` (409) — the GitHub sync failed (the message carries the error), the channel is under maintenance, or a user move is in progress
+- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the account is under scheduled maintenance; retry in a minute
 
 ---
 
@@ -411,7 +443,7 @@ Live built-image inventory for one channel (docker-template apps), newest first.
 }
 ```
 
-- `charged_size_bytes` — the size counted against the plan cap (total minus warm-base layers); `matched_base` names the exempt warm base, or `null` if none matched.
+- `charged_size_bytes` — the charged size the build recorded: the size counted against the plan cap (total minus warm-base layers); `null` when the platform holds no build record for the image. `matched_base` names the exempt warm base, or `null` if none matched.
 - `current` — whether the image corresponds to the channel's currently deployed SHA.
 - `image_cap_bytes` — the owner plan's charged-image-size cap.
 - `images` is `null` (never an error) when the channel's host agent is unreachable, so callers can always render the rest.
@@ -429,7 +461,7 @@ List all files in the repo at the given ref. Lets a stateless agent see the curr
 
 **Query parameters:**
 
-- `ref` (string, optional, default `master`) — Branch name or 40-char SHA.
+- `ref` (string, optional) — Branch name or 40-char SHA. Omit it to read the branch `prod` deploys; if `prod` has no branch yet, the repo's own default branch (`master` for a repo xhostd created, GitHub's default for a connected app).
 
 **Response (200):**
 ```json
@@ -444,6 +476,7 @@ List all files in the repo at the given ref. Lets a stateless agent see the curr
 ```
 
 **Errors:**
+- `ref_required` (400) — no `ref`, and a GitHub-connected app that never synced has no branch to default to
 - `not_found` (404) — app not found, or ref does not exist (e.g. empty repo with no commits yet)
 
 ---
@@ -456,7 +489,7 @@ Return the raw bytes of a single file at the given ref. Useful when an agent nee
 
 **Query parameters:**
 
-- `ref` (string, optional, default `master`) — Branch name or 40-char SHA.
+- `ref` (string, optional) — Branch name or 40-char SHA. Omitted, it resolves as on `GET /apps/{app_id}/tree`.
 - `path` (string, required) — Repository-relative file path.
 
 **Response (200):** Raw file bytes (`application/octet-stream`).
@@ -475,7 +508,6 @@ Apply a sparse changeset to the repo and create one real git commit on top of `r
 **Request body:**
 ```json
 {
-  "ref": "master",
   "message": "agent: update headline",
   "changes": {
     "index.html": "<!doctype html><h1>hello</h1>",
@@ -492,7 +524,7 @@ Apply a sparse changeset to the repo and create one real git commit on top of `r
 }
 ```
 
-- `ref` (string, optional, default `"master"`) — Target branch. Must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. Created if it does not yet exist.
+- `ref` (string, optional) — Target branch. Must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. Created if it does not yet exist. Omitted, it resolves as on `GET /apps/{app_id}/tree`.
 - `message` (string, required) — Commit message. Must be non-empty.
 - `changes` (object, optional) — Map of repo-relative path → string (upsert) or `null` (delete). Paths must be relative and must not contain `..` segments.
 - `edits` (object, optional) — Map of path → a list of `{old_string, new_string, replace_all}`. `old_string` must be non-empty and must occur exactly once in the file unless `replace_all` is `true`. Edits apply in list order, each against the result of the previous one. The path must already exist on `ref`.
@@ -512,6 +544,8 @@ Send at least one of `changes`, `edits`, or `patches`. A path belongs to exactly
 **Errors:**
 - `bad_request` (400) — invalid path, invalid branch name, empty message, malformed changeset, a path in more than one field, or an edit or hunk whose anchor is absent or ambiguous (the message names the path and the count)
 - `not_found` (404) — app not found
+- `conflict` (409) — the app is GitHub-connected; push to GitHub instead
+- `service_unavailable` (503) — the repo is busy, or the account is under scheduled maintenance; nothing was committed, so retry in a minute
 
 ---
 
@@ -928,7 +962,7 @@ Release the channel's public endpoint. New connections are refused immediately a
 
 ## POST /apps/{app_id}/github/sync
 
-For apps connected to a GitHub source: fetch the latest GitHub commits into the app's internal xhostd mirror without deploying. Deploys auto-sync anyway; use this to refresh the mirror or surface sync errors on their own. Requires the admin role (or higher) on the app. Not a protected action — it pulls the remote the owner already chose, so it never answers `protected_action`. Connecting and disconnecting a GitHub repo ARE protected actions, and neither has an MCP tool.
+For apps connected to a GitHub source: fetch the latest GitHub commits into the app's internal xhostd mirror without deploying. Each deploy fetches first anyway; use this to refresh the mirror or surface sync errors on their own. Requires the admin role (or higher) on the app, and a credential holding `repo:*`. Not a protected action — it pulls the remote the owner already chose, so it never answers `protected_action`. Connecting and disconnecting a GitHub repo ARE protected actions, and neither has an MCP tool.
 
 **Request body:** None
 
@@ -942,12 +976,17 @@ For apps connected to a GitHub source: fetch the latest GitHub commits into the 
   "last_synced_at": "2025-01-16T10:35:00Z",
   "last_sync_status": "ok",
   "last_sync_error": null,
-  "last_sync_refs": {"master": "abc1234..."}
+  "last_sync_refs": {"main": "abc1234..."},
+  "default_branch": "main"
 }
 ```
 
+- `default_branch` — GitHub's default branch, `null` until a sync reads it. A hint only: it binds no channel. Deploy it with `ref` to bind `prod` to it.
+
 **Errors:**
+- `scope_denied` (403) — the credential lacks `repo:*`
 - `not_found` (404) — app not found, or no GitHub mirror connected
+- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the account is under scheduled maintenance; nothing changed, so retry in a minute
 
 ---
 
@@ -1523,13 +1562,12 @@ All user-facing names (app names, usernames, channel names) must be valid **DNS 
 
 ## git_ref_binding Format
 
-Must match the pattern `branch:<name>` or `branch:*`.
+A channel's binding is `branch:<name>`, or `null` for a channel with no branch yet. It names the branch a deploy with no `sha` and no `ref` ships. A push deploys nothing on its own.
 
-- `branch:master` — Triggers on pushes to the `master` branch
-- `branch:staging` — Triggers on pushes to the `staging` branch
-- `branch:*` — Wildcard; deploying a branch that matches the wildcard creates a child channel named `preview-<slug>` bound to `branch:<actual-branch-name>`.
+- `branch:main` — a deploy with no ref ships the HEAD of `main`
+- `branch:staging` — a deploy with no ref ships the HEAD of `staging`
 
-The `<name>` portion (when not `*`) must match: `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`
+The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `branch:*` wildcard is refused (`branch_wildcard_deprecated`), and so are names under `xhost/` (the platform's pin namespace) and `HEAD`. A deploy with `ref`, `POST /apps`'s `branch`, and `PATCH /apps/{app_id}/channels/{channel_id}` set a binding; nothing unbinds one.
 
 ---
 
@@ -1546,12 +1584,14 @@ The `<name>` portion (when not `*`) must match: `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$
 | `admin_not_configured` | 403 | Server admin user not set up |
 | `not_found` | 404 | Resource does not exist or is not owned by caller |
 | `bad_request` | 400 | Validation failure (see message for details) |
+| `channel_unbound` | 400 | A deploy named neither `sha` nor `ref`, and the channel has no branch yet. Deploy with `ref`, or bind it with `PATCH /apps/{app_id}/channels/{channel_id}` |
+| `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: a GitHub-connected app that never synced. Pass `ref` |
 | `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy`, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
 | `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: an expired or absent email challenge. Request a new code |
 | `too_many_requests` | 429 | A budget or a window refused the call: the registration budget, a second verification request inside 60 seconds, or a locked challenge after five wrong codes |
 | *(no code)* | 422 | A body that fails validation — a missing field on any route, or an unknown field on `POST /ssh-keys`, `POST /registrations`, `POST /auth/ssh-key`, and the two email verification routes, which refuse one. This answer carries FastAPI's `{"detail": [...]}` shape, not the `{"error": {...}}` envelope, so an MCP client shows it as a pydantic report. Read the field name in `detail`, correct it, and call again. Do not retry the same body: it fails again |
 | `bad_gateway` | 502 | Upstream service error |
-| `service_unavailable` | 503 | Dependent service degraded (e.g. `postgres_unavailable`, `blob_unavailable`), or agent registration closed by the operator |
+| `service_unavailable` | 503 | Dependent service degraded (e.g. `postgres_unavailable`, `blob_unavailable`), agent registration closed by the operator, another write holding an app's repo, or the account under scheduled maintenance |
 | `internal_error` | 500 | Unexpected server error |
 
 ### Protected actions
@@ -1607,8 +1647,8 @@ Tokens from `POST /registrations` and `POST /auth/ssh-key` carry the same defaul
 
 | Scope | Grants |
 |-------|--------|
-| `repo:*` | Create apps (POST /apps), push to git repos |
-| `channel:*` | Create channels (POST /apps/{id}/channels) |
+| `repo:*` | Create apps (POST /apps), push to git repos, sync a GitHub-connected app (POST /apps/{id}/github/sync) |
+| `channel:*` | Create and rebind channels (POST and PATCH /apps/{id}/channels) |
 | `deploy:*` | Deploy (POST /apps/{id}/channels/{id}/deploy), manage env vars |
 | `db:*` | Connect to Postgres through the database gateway (external DB access) |
 | `blob:*` | Mint object-storage credentials for a channel |

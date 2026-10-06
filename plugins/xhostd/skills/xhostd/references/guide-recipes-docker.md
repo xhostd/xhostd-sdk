@@ -566,10 +566,8 @@ variable in your own code.
 
 ### 404 and 502 from the hostname mean different things
 
-A channel that exists but has no route returns **404** on its hostname. A
-channel with a route but no live server returns **502**. Both codes help you.
-A 404 tells you that the deploy did not reach `caddy ensure_route`. A 502
-tells you that the deploy reached it, but the container does not serve.
+A 404 means the channel has no route yet, and a 502 means the container does not answer.
+[The address returns 404 or 502](https://docs.xhostd.com/guides/troubleshooting#the-address-returns-404-or-502) explains each cause.
 
 ### Single-page apps: the fallback is yours
 
