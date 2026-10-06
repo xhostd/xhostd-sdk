@@ -33,6 +33,35 @@ Do not assume a missing measurement is zero usage or a failed latest attempt
 means the serving app is down. Shared-project members may legitimately lack
 the owner's aggregate resource data.
 
+## The address returns 404 or 502
+
+The two codes point at different stages, so read the right log for each.
+
+**404: the channel has no route yet.** Either nobody has deployed the channel
+yet, or every deploy so far stopped before the app went live. A deploy gives the
+channel its address only after the app passes its health check. Read the deploy
+log to find the step that stopped: call `get_deploy_log`, or select the
+deployment on the project's Activity page in the console. A failed deploy of a
+channel that is already live leaves the previous version serving, so it does
+not cause a 404. A 404 that your own app returns is different: the route works,
+and the app has no page at that path.
+
+**502: the route exists, but the container does not answer.** The usual causes
+are these:
+
+- The app crashed after it went live.
+- The app listens on the wrong port, or on `localhost` instead of `0.0.0.0`.
+  An app that signals readiness with the `$XHOSTD_READY_FILE` file goes live
+  without a test of its port. Listen on `0.0.0.0` and on the port in
+  `XHOSTD_HTTP_PORT`.
+- The app restarted and is still starting.
+
+Read the runtime log to see what the process printed: call `get_runtime_log`,
+or open the Runtime status card on the project's Activity page. A background
+worker that serves no HTTP returns 502 by design. The
+[worker recipe](https://docs.xhostd.com/guides/recipes-worker#the-https-hostname-returns-502)
+explains why.
+
 ## Data or files are missing
 
 Check the target channel and which store the application uses. Review available

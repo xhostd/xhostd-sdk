@@ -102,10 +102,10 @@ Create the app, get its code into the repo, deploy. Names below are shown as `mc
 
 Read the recipe for the shape of app you build before step 1. Each recipe gives one complete app: every file, the exact calls, and the failure modes of that shape. The shape recipes are `references/guide-recipes-static.md`, `references/guide-recipes-app-node.md` (Express), `references/guide-recipes-app-python.md` (FastAPI) and `references/guide-recipes-docker.md`. `references/guide-index.md` lists every recipe.
 
-1. **`mcp__xhostd__create_app`** — args: `name`, `template` (`"static"` for plain HTML/CSS/JS, `"app"` for projects with `install.sh`/`launch.sh`, `"docker"` for projects with their own `Dockerfile` at the repo root). Returns the app object with `id`, `repo_url`, and `channels[0]` (the auto-created `prod` channel) including its `id` and `hostname`. Every later tool addresses the app by `app_name` (the name you chose) and a channel by `channel` (its name, e.g. `prod`); the legacy `app_id`/`channel_id` UUID params remain as deprecated aliases.
+1. **`mcp__xhostd__create_app`** — args: `name`, `template` (`"static"` for plain HTML/CSS/JS, `"app"` for projects with `install.sh`/`launch.sh`, `"docker"` for projects with their own `Dockerfile` at the repo root), optional `branch` (binds `prod` to that branch now; omit it and the first deploy with `ref` binds `prod`). Returns the app object with `id`, `repo_url`, and `channels[0]` (the auto-created `prod` channel) including its `id` and `hostname`. Every later tool addresses the app by `app_name` (the name you chose) and a channel by `channel` (its name, e.g. `prod`); the legacy `app_id`/`channel_id` UUID params remain as deprecated aliases.
 2. **`git push` to the app's `repo_url`** — the standard path, whatever the size of the project. A push sends only the diff, so the second and every later edit is incremental, and it costs far fewer tokens than round-tripping whole file contents through a tool call. The transport choice and the mechanical steps are in **Pushing code with git** below. **Pushing stores your code; it does not deploy.**
-   - **Fallback, one case only:** when git is not available on the machine you are working on (a runtime with no shell), use **`mcp__xhostd__commit_files`** — args: `app_name`, `message`, `ref` (default `"master"`), and at least one of three write fields: `files` (a `{path: content-or-null}` map; string upserts, null deletes), `edits` (`{path: [{old_string, new_string, replace_all}]}`), `patches` (`{path: hunk-text}`). Returns `{sha}`. Send only files that are changing, and for a file that already exists prefer `edits` or `patches` — they send the changed region, not the file. `old_string` must occur exactly once unless `replace_all` is true; matching is byte-exact, so copy anchors from `read_file` output. A path belongs to exactly one field, and any failure fails the whole commit. On GitHub-connected apps this returns an error; push to GitHub instead.
-3. **`mcp__xhostd__deploy`** — args: `app_name`, `channel` (e.g. `"prod"`), and either `ref` (a branch name, e.g. `"master"`; xhostd resolves it to that branch's current head — this is the form to use after a push) or `sha` (an exact commit — what `commit_files` returned). Returns `{deploy_id, channel_id, status: "queued"}`. A denial of `deploy` that happens before the call reaches xhostd is the client's own permission decision, not an xhostd error — nothing was queued, so there is nothing to retry against the API. Only the user can clear it, in the client's own settings: point the user at `references/guide-client-blocked-deploy.md` (<https://docs.xhostd.com/guides/client-blocked-deploy>), which tells them how, and do not change those settings yourself.
+   - **Fallback, one case only:** when git is not available on the machine you are working on (a runtime with no shell), use **`mcp__xhostd__commit_files`** — args: `app_name`, `message`, optional `ref` (omit it to commit to the branch `prod` deploys; if `prod` has no branch yet, the repo's own default branch, `master`), and at least one of three write fields: `files` (a `{path: content-or-null}` map; string upserts, null deletes), `edits` (`{path: [{old_string, new_string, replace_all}]}`), `patches` (`{path: hunk-text}`). Returns `{sha}`. Send only files that are changing, and for a file that already exists prefer `edits` or `patches` — they send the changed region, not the file. `old_string` must occur exactly once unless `replace_all` is true; matching is byte-exact, so copy anchors from `read_file` output. A path belongs to exactly one field, and any failure fails the whole commit. On GitHub-connected apps this returns an error; push to GitHub instead.
+3. **`mcp__xhostd__deploy`** — args: `app_name`, `channel` (e.g. `"prod"`), and either `ref` (a branch name, e.g. `"master"`; xhostd resolves it to that branch's current head and binds the channel to it — this is the form to use after a push) or `sha` (an exact commit — what `commit_files` returned; it ships once and binds nothing). Once a channel is bound, a later deploy of its branch can omit both. A new app's `prod` has no branch until the first deploy with `ref`, so a deploy with neither answers `channel_unbound`. Returns `{deploy_id, channel_id, status: "queued"}`. A denial of `deploy` that happens before the call reaches xhostd is the client's own permission decision, not an xhostd error — nothing was queued, so there is nothing to retry against the API. Only the user can clear it, in the client's own settings: point the user at `references/guide-client-blocked-deploy.md` (<https://docs.xhostd.com/guides/client-blocked-deploy>), which tells them how, and do not change those settings yourself.
 
 Then poll **`mcp__xhostd__get_deploy_log`** with `app_name`, `channel`, `deploy_id`. The FIRST line of the reply states the outcome — `deploy <id> — <status> (sha <sha>)`, with status one of `queued`/`running`/`success`/`failed`. Read the status from that header, never by grepping the log text for `deploy success`. Poll while the status is `queued` or `running`; `success` means done, and on `failed` the reason is in the log tail. The reply carries the last 16 KiB of the log by default — pass `offset` and `max_bytes` (up to 262144) to page. `get_app`'s channel `pending_deploy` field (`{deploy_id, sha, status}` or `null`) also shows an in-flight deploy, so an old `current_sha` next to a non-null `pending_deploy` means in-flight, not failed. For `static` apps deploys are seconds; for `app` template the first deploy runs `install.sh` and can take 30–90s. For `docker` the deploy builds the image first — the log streams `[build] ...` lines (queue position, build duration, image size vs your plan's cap).
 
@@ -144,9 +144,9 @@ H3. Configure the remote with the token in the **password** field (any username 
    ```
    (or `git remote set-url xhostd ...` if it already exists). git.xhostd.com also accepts the token as an `Authorization: Bearer` header (`git config http.extraHeader "Authorization: Bearer <token>"`), but the password field is the normal HTTPS path.
 H4. `git push xhostd HEAD:master` (or `HEAD:<your-branch>`).
-H5. Trigger the build with **`mcp__xhostd__deploy`** — pushing stores code but does not deploy. Pass `ref: "master"` (or the branch name) so xhostd resolves to HEAD; or pass an explicit `sha`.
+H5. Trigger the build with **`mcp__xhostd__deploy`** — pushing stores code but does not deploy. Pass `ref: "master"` (or the branch name) so xhostd resolves to HEAD; the `ref` binds the channel to that branch. Or pass an explicit `sha`, which binds nothing.
 
-Both transports reach the same repo. `HEAD:master` on either one: xhostd binds prod to `master`, but a fresh `git init` defaults to `main`, so the explicit refspec pushes the current branch under the pinned name.
+Both transports reach the same repo. Push under the branch name you then deploy with `ref`: `HEAD:master` pushes the current branch as `master`, whatever a fresh `git init` named it locally, and `deploy(..., ref="master")` deploys it and binds the channel to `master`.
 
 The same token is your **Postgres password** when external database access is enabled in the console: `postgresql://<username>:<token>@db.xhostd.com:5432/<db>?sslmode=require` (`<db>` = app name for `prod`, else `<channel>-<app>`).
 
@@ -224,7 +224,7 @@ When a deploy **succeeds but the app misbehaves later**, `get_deploy_log` is the
 
 ## Channels (prod vs preview)
 
-Every app has one `prod` channel bound to `branch:master`, created automatically. For preview/staging environments call **`mcp__xhostd__create_channel`** with `app_name`, `name` (e.g. `staging`), `git_ref_binding` (`branch:<name>`, one explicit channel per branch — the legacy `branch:*` wildcard is rejected).
+Every app has one `prod` channel, created automatically with no branch; the first deploy with `ref`, or `create_app`'s `branch`, binds it. To change the branch a channel deploys without deploying, call **`mcp__xhostd__update_channel`** with `app_name`, `channel`, and `branch`. For preview/staging environments call **`mcp__xhostd__create_channel`** with `app_name`, `name` (e.g. `staging`), `git_ref_binding` (`branch:<name>`, one explicit channel per branch — the legacy `branch:*` wildcard is rejected).
 
 `deploy` targets a specific channel via `channel` — the channel's name. To list an app's channels: **`mcp__xhostd__list_channels`** with `app_name`.
 
@@ -263,24 +263,25 @@ After the user consents, describe the friction in your own words, write a `subje
 
 To read those answers, call **`mcp__xhostd__list_feedback`** (optional `limit`, optional `cursor`). One call answers one page of the account's reports — the ones you filed and the ones the user filed in the console — newest first, each with `status` (`Received`, `Resolved` or `Closed`) and the report's thread oldest first. Each message carries `author`: `team` on the xhostd team's answer, and `you` on a reply the account wrote in the console. The console is where a reply gets written, and no tool writes one. The answer also carries `next_cursor`. When `next_cursor` holds a value, older reports exist: call the tool again and pass that value as `cursor`. When `next_cursor` is null, you read the last report, so do not call the tool again. It is a poll, not a push: nothing tells you when the team answers, so call it when the user asks whether they replied.
 
-## All 54 tools
+## All 55 tools
 
 Apps:
 - `list_apps` — List Apps: all apps owned by the user, with channels.
-- `create_app` — Create App: provisions repo and `prod` channel.
+- `create_app` — Create App: provisions repo and `prod` channel; optional `branch` binds `prod`.
 - `get_app` — Get App Details: single app by id, including `repo_url`.
 - `delete_app` — Delete App: tears down app + all channels + routes.
 
 Channels:
 - `list_channels` — List Channels: channel ids/hostnames for an app.
 - `create_channel` — Create Channel: name + `branch:<name>` binding.
+- `update_channel` — Update Channel: change a channel's branch binding; deploys nothing.
 - `delete_channel` — Delete Channel: by `app_name`/`channel` name; refuses `prod`.
 
 Files + deploy:
-- `list_files` — List Repository Files: tree at a ref.
-- `read_file` — Read File: single file contents at a ref.
+- `list_files` — List Repository Files: tree at a ref; omit `ref` for the branch `prod` deploys.
+- `read_file` — Read File: single file contents at a ref; omit `ref` for the branch `prod` deploys.
 - `commit_files` — Commit Files: sparse changeset → `sha`, via whole content (`files`), anchored replacement (`edits`), or anchored hunks (`patches`). The fallback for when git is unavailable on the machine you are working on; `git push` → `deploy` is the standard path. On GitHub-connected apps this returns an error; push to GitHub instead.
-- `deploy` — Deploy: queue a build of `sha` or `ref` on a channel.
+- `deploy` — Deploy: queue a build of `sha` or `ref` on a channel; `ref` binds the channel, and neither deploys the bound branch.
 - `rewind` — Rewind: redeploy an earlier successful deploy of a channel.
 - `get_deploy_log` — Get Deploy Log: status header (queued/running/success/failed) plus the build/boot log tail of one deploy; optional `offset`/`max_bytes` page through the log.
 - `get_runtime_log` — Get Runtime Log: the running app's stdout/stderr AFTER deploy, by channel name. The log is made available as `/log/app.log` (one line per output line, RFC3339 timestamp prefix) inside a throwaway, network-less container, and your `command` — any shell pipeline, e.g. `tail -n 200 app.log` or `grep -i error app.log | tail -20` — runs there and its output comes back. Omit `command` for just the status header (state, exit code, whether it was OOM-killed, restart count). Survives a redeploy — the replaced container's log is archived; pick an older one with `container_index`.
@@ -318,7 +319,7 @@ Port forwarding:
 
 Git:
 - `get_credentials` — Get Access Credentials: unified credential (git + Postgres + object storage + downloads + platform API), up to 30 days by default, and less when your own token expires sooner. Takes optional `scopes` and `expires_in` for a least-privilege, short-lived credential. The token for the HTTPS `git push` path; an SSH push needs no token.
-- `sync_git` — Sync Git: fetch the connected GitHub repo into the app's xhostd mirror → status ({last_sync_status, last_sync_refs, ...}). Deploys auto-sync; use this to refresh without deploying.
+- `sync_git` — Sync Git: fetch the connected GitHub repo into the app's xhostd mirror → status ({last_sync_status, last_sync_refs, default_branch, ...}). Each deploy fetches first; use this to refresh without deploying. `default_branch` is a hint that binds nothing.
 
 SSH keys (git over SSH):
 - `register_ssh_key` — Register SSH Key: send the PUBLIC half of a keypair (`public_key`, optional `label`) and push over SSH with `git@git.xhostd.com:<owner>/<repo>.git`. Make the keypair in a subprocess (`ssh-keygen -t ed25519 -N "" -f ~/.ssh/xhost_ed25519`), so the private half never enters a tool call, and name the private half on the push (`GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519 -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master`), where `-o IdentitiesOnly=yes` stops ssh from offering another key it finds first. SSH is the first transport wherever a shell is available; register once per machine, because a key belongs to the account and not to one app. A key the platform holds already answers a conflict; the fingerprint is unique over the whole platform.

@@ -168,7 +168,7 @@ create_app(name="recipe-worker", template="app")
    "channels": [{"id": "98a26f59-607f-45f3-b8b2-741ca5054902",
                  "name": "prod",
                  "hostname": "recipe-worker-docs.xhostd.app",
-                 "git_ref_binding": "branch:master",
+                 "git_ref_binding": null,
                  "current_sha": null,
                  "status": "provisioning",
                  "pending_deploy": null}],

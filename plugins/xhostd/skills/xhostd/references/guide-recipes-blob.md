@@ -1,4 +1,4 @@
-# Blob recipe: uploads on the channel's object store
+# File uploads with S3-compatible storage {#blob-recipe-uploads-on-the-channel-s-object-store}
 
 ## What you get
 
@@ -470,8 +470,9 @@ Two of those lines concern the channel's object store.
 **`blob snapshot saved: ts=...`.** Before your new container replaces the old
 container, the platform marks a moment in the channel's object store. It does
 the same for the channel's Postgres schema. The platform writes one marker
-object, not a copy. The store keeps the full version history, so a timestamp
-is enough to return every object to its state at that moment. You do not
+object, not a copy. The store keeps each earlier version of an object for 120
+days, so a timestamp is enough to return every object to its state at that
+moment, for a snapshot up to 30 days old. You do not
 request the marker, and you cannot omit it.
 
 **`blob record pushed to cell gateway`.** This line explains why your key pair
@@ -577,12 +578,12 @@ surprise people.
 
 **A second write to a key does not replace the object.** A `PUT` to a key that
 exists adds a new current version. It makes the previous version noncurrent.
-The old bytes stay in the store.
+The old bytes stay in the store for 120 days.
 
 **A delete does not erase anything either.** The store writes a delete marker,
 and that marker becomes the new head of the key. The key is not in a list any
 more, and a GET answers as if the object is absent. But the versions below the
-marker stay in the store.
+marker stay in the store for 120 days.
 
 This history is deliberate, and it makes the `blob snapshot saved` line above
 useful. A snapshot is a timestamp. A restore finds the version of each key
@@ -594,7 +595,7 @@ The usage number in `get_blob_usage` and on the channel stats page counts
 **live bytes only**. Live bytes are the latest version of each key that has no
 delete marker. A noncurrent version and a key with a delete marker do not
 count against your plan's quota. Thus a delete does free space, although the
-store erases nothing. The gateway does not compute the usage on the request
+store keeps the deleted version for 120 days. The gateway does not compute the usage on the request
 path, so the new number appears about one minute later. After a large delete,
 wait about one minute before you decide that the quota is wrong.
 

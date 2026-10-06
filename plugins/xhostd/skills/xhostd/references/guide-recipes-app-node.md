@@ -202,7 +202,7 @@ started: 2026-10-04T06:10:42.032256Z   finished: 2026-10-04T06:10:56.605659Z
 [2026-10-04T06:10:42+00:00] git_sync ok: synced app=3ea579f7-... channel=937e4d14-... sha=f6efff40...
 [2026-10-04T06:10:42+00:00] [build] start sha=f6efff40baac92e30d30dd207272130c8e502372
 [2026-10-04T06:10:42+00:00] [build] queued 0s, starting
-[2026-10-04T06:10:43+00:00] [build] #5 [1/3] FROM xhost-registry:5000/xhost-runtime:node22-py313@sha256:7b7967779b81...
+[2026-10-04T06:10:43+00:00] [build] #5 [1/3] FROM ghcr.io/xhostd/xhost-runtime:node22-py313-...@sha256:...
 [2026-10-04T06:10:43+00:00] [build] #5 CACHED
 [2026-10-04T06:10:43+00:00] [build] #6 [2/3] COPY --chown=app:app . /app
 [2026-10-04T06:10:43+00:00] [build] #7 [3/3] RUN if [ -f /app/install.sh ]; then chmod +x /app/install.sh && cd /app && ./install.sh && rm -f /app/install.sh; fi && chown -R app:app /app
@@ -225,9 +225,10 @@ started: 2026-10-04T06:10:42.032256Z   finished: 2026-10-04T06:10:56.605659Z
 
 Read these five lines with attention.
 
-**`FROM xhost-runtime:node22-py313`.** The platform builds on its own base
-image. That image has Node 22 and Python 3.13 together. You do not select the
-image, and you do not write a Dockerfile.
+**`FROM ghcr.io/xhostd/xhost-runtime:node22-py313-...`.** The platform builds
+on its own base image, `xhost-runtime:node22-py313`. That image has Node 22 and
+Python 3.13 together. You do not select the image, and you do not write a
+Dockerfile.
 
 **The `RUN` line is the Dockerfile that the platform writes.** The build copies
 your repo to `/app`, with the owner `app:app`. Then `install.sh` runs as root,

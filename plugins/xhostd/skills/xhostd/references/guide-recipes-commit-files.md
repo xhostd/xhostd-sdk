@@ -163,8 +163,10 @@ deploy(app_name="recipe-commit-files",
 ```
 
 Use `sha` on this path, not `ref`. `commit_files` returns the exact commit
-that it wrote, so you deploy that commit. `ref="master"` is also valid, and it
-resolves to the branch's current head. `sha` wins if you give both. `deploy`
+that it wrote, so you deploy that commit. `ref` binds the channel; `sha`
+deploys once. `ref="master"` deploys the branch's current head and binds the
+channel to `master`, so a later deploy can omit both. `sha` wins if you give
+both. `deploy`
 returns as soon as it queues the deploy, and the work runs asynchronously.
 Follow it with `get_deploy_log`: the first line of its reply states the
 outcome.
@@ -365,7 +367,7 @@ you clone that repo and continue your work.
 `commit_files` is refused outright, with
 
 ```text
-this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — changes sync to xhostd automatically.
+this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — each deploy fetches from GitHub first, and sync_git fetches without deploying.
 ```
 
 There is no way around this refusal. On a connected app, GitHub is the

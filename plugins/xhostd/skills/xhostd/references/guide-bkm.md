@@ -248,8 +248,9 @@ local copy that you edit in place.
 separate operations, and the separation lets you name the commit that goes
 live. After a push, call `deploy(app_name, channel, ref="master")`. The `ref`
 value is a branch name, and xhostd finds the current head of that branch. Thus
-you never need to know the sha. Pass `sha` instead when you want an exact
-commit. If you pass both, `sha` wins.
+you never need to know the sha. The ref binds the channel. Pass `sha` instead
+when you want an exact commit; a `sha` binds nothing. If you pass both, `sha`
+wins.
 
 **`sync_git` has no part in this path.** It refreshes an app's mirror of a
 *connected GitHub repo*. It has no relation to a push to the app's own repo. If

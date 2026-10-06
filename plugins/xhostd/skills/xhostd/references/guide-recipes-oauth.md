@@ -1,4 +1,4 @@
-# OAuth recipe: how to gate a route on the signed-in visitor
+# OAuth recipe: gate routes behind sign-in {#oauth-recipe-how-to-gate-a-route-on-the-signed-in-visitor}
 
 ## What you get
 
