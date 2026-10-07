@@ -11,7 +11,7 @@ description: >-
 
 # xhostd — Agent-First Hosting
 
-xhostd is hosting designed for agents. You create an app, push its code to the git repo the app owns, and deploy it. Every app gets a production HTTPS URL; named channels give preview URLs. The same remote MCP tools are available on Claude Code, claude.ai, Codex, and other OAuth-capable clients. The procedure below is identical across clients — except that a runtime with no shell has no git, and there the `commit_files` fallback stands in for the push. Tool names are client-specific: examples below use `mcp__xhostd__<name>` as a Claude-style spelling; use the actual names exposed by your runtime.
+xhostd is hosting designed for agents. You create an app, push its code to the git repo the app owns, and deploy it. Every app gets a production HTTPS URL; named channels give preview URLs. The same remote MCP tools are available on Claude Code, claude.ai, Codex, Cursor, and other OAuth-capable clients. The procedure below is identical across clients — except that a runtime with no shell has no git, and there the `commit_files` fallback stands in for the push. Tool names are client-specific: examples below use `mcp__xhostd__<name>` as a Claude-style spelling; use the actual names exposed by your runtime.
 
 ## Authentication
 
@@ -20,6 +20,7 @@ There are two ways to hold an authenticated session. Pick the one that matches w
 **A. A person is present: OAuth.** The plugin (Claude Code) and the connector (claude.ai) open `/auth/login` in a browser. The user signs in with a username or email and password, or uses Google as an alternative. A preprovisioned account signs in directly without signup, email verification, multifactor authentication (MFA), or SMS. Call the tools. If a tool reports unauthenticated:
 - **Claude Code:** tell the user to run `/mcp`, select **xhostd**, and choose **Authenticate**. A browser opens for sign-in and approval.
 - **Codex:** refresh or reconnect the xhostd plugin, then retry the first tool call. Browser-based sign-in opens on its own.
+- **Cursor:** tell the user to open **Customize** in the sidebar, find the **xhostd** MCP server, and turn it on or follow its sign-in prompt. A browser opens for sign-in. Then retry the first tool call.
 - **claude.ai:** tell the user to reconnect the xhostd connector in Settings → Connectors.
 
 Never ask a person for an API token on this path. The OAuth session carries one.
@@ -90,7 +91,7 @@ B7. **Verify an email for person-present access.** When a person gives you an ad
 
 If a tool listed in this skill or in llms-full.txt is missing from your runtime tool list, the client cached an older tool set at connect time. llms-full.txt is the source of truth — tell the user to reconnect (Claude Code: `/mcp` → xhostd → reconnect; claude.ai: Settings → Connectors → reconnect xhostd) to pick up the current tools.
 
-Claude Code may expose this workflow as `/xhostd`; Codex and other clients may not support slash commands. In those clients, describe the task normally or mention the xhostd skill.
+Claude Code might expose this workflow as `/xhostd`; Codex, Cursor, and other clients might not support slash commands. In those clients, describe the task normally or mention the xhostd skill.
 
 ## Write safety
 

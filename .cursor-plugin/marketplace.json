@@ -1,0 +1,16 @@
+{
+  "name": "xhostd-sdk",
+  "owner": {
+    "name": "xhostd",
+    "email": "support@xhostd.com"
+  },
+  "metadata": {
+    "description": "Plugins for xhostd — agent-first hosting. Install to get the xhostd plugin: MCP tools, skill, and OAuth-mediated auth for create-app/commit/deploy flows."
+  },
+  "plugins": [
+    {
+      "name": "xhostd",
+      "source": "./plugins/xhostd"
+    }
+  ]
+}
