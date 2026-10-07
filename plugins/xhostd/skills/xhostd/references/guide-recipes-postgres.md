@@ -143,21 +143,47 @@ Run each of these over `DATABASE_URL_DIRECT`, or use the
 transaction-scoped form. A migration tool and a job queue that listens
 both read `DATABASE_URL_DIRECT`. This app's `migrations/env.py` does.
 
-Each role has a cap on the **server sessions** it holds. The cap does not
-count the connections your app opens:
+#### Prefer `DATABASE_URL` for your app's traffic
 
-| Limit | With a pooler | Without a pooler |
-|---|---|---|
-| Write role, server sessions through the pooler | 5 | — |
-| Write role, server sessions in all | 15 | 40 |
-| Read-only role, server sessions | 5 | 10 |
-| Connections per role to the pooler | 100 | — |
+On every plan, send your app's queries through `DATABASE_URL`, because
+the pooler gives it the higher limits. Through the pooler, many client
+connections share a few real database connections, called **server
+sessions**, and a server session is in use only while a transaction
+runs. An idle connection in your app's pool holds nothing on the server.
 
-Through the pooler, a transaction waits for a free session when all 5 are
-busy, so keep your transactions short. Keep the pool that uses
-`DATABASE_URL_DIRECT` at 10 connections or fewer. Your direct sessions
-and your pooled ones share the write role's 15, so a larger direct pool
-leaves your own pooled queries waiting.
+Each `DATABASE_URL_DIRECT` connection holds a server session of its own,
+even while it is idle. It counts against your write role's cap and
+against the server's total. Keep `DATABASE_URL_DIRECT` for the few
+connections that need a session feature from the list in
+[What a transaction pooler changes](#what-a-transaction-pooler-changes),
+such as a migration tool or a job queue that listens.
+
+#### Connection limits
+
+Each role has a cap on the server sessions it holds. The cap does not
+count the connections your app opens to the pooler. The caps follow
+your plan:
+
+| Limit | Other plans | Studio | Pro |
+|---|---|---|---|
+| Write role, server sessions through the pooler | 5 | 10 | 20 |
+| Write role, server sessions in all | 15 | 20 | 40 |
+| Read-only role, server sessions | 5 | 10 | 20 |
+| Connections per role to the pooler | 100 | 100 | 100 |
+
+Through the pooler, a transaction waits for a free server session when
+all of the role's pooled sessions are busy, so keep your transactions
+short. Your direct sessions and your pooled ones share the write role's
+cap, so a large direct pool leaves your own pooled queries waiting. Keep
+the pool that uses `DATABASE_URL_DIRECT` at 10 connections or fewer on
+Studio and the other plans, and at 20 or fewer on Pro.
+
+On Studio and Pro, your databases run on a database server of your own,
+and all of your apps and channels share about 180 server sessions on it:
+its `max_connections` of 200, less the sessions Postgres and the
+platform keep for themselves. A direct pool in each of many channels
+adds up toward that total, which is one more reason to send your app's
+traffic through `DATABASE_URL`.
 
 ### alembic.ini
 

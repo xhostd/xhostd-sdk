@@ -1,6 +1,6 @@
 # xhostd SDK
 
-Claude Code and Codex plugin for [xhostd](https://xhostd.com) — deploy applications, sites, and services. Push code, get HTTPS URLs.
+Claude Code, Codex, and Cursor plugin for [xhostd](https://xhostd.com) — deploy applications, sites, and services. Push code, get HTTPS URLs.
 
 ## Install
 
@@ -20,6 +20,20 @@ After installing, reload plugins in your current session:
 ```
 /reload-plugins
 ```
+
+## Cursor
+
+This repository also includes the Cursor plugin manifest at `plugins/xhostd/.cursor-plugin/plugin.json` and a Cursor marketplace at `.cursor-plugin/marketplace.json`. The manifest points at the same `plugins/xhostd/.mcp.json` that Codex uses.
+
+Until the plugin is listed in the Cursor Marketplace, install it as a local plugin:
+
+```
+git clone https://github.com/xhostd/xhostd-sdk.git
+mkdir -p ~/.cursor/plugins/local
+cp -r xhostd-sdk/plugins/xhostd ~/.cursor/plugins/local/xhostd
+```
+
+Then run **Developer: Reload Window**, open **Customize** in the sidebar, find **xhostd**, and select **Install**. To sign in, turn on the **xhostd** MCP server in Customize; a browser opens for sign-in. A team admin can instead import this repository as a team marketplace, and the plugin then appears in Customize for the team.
 
 ## Connect
 
@@ -43,7 +57,7 @@ Or invoke it explicitly:
 
 The single `/xhostd` skill handles account setup, app creation, deploys, previews, and status checks. Claude figures out what you need from context.
 
-In Codex, describe the task normally or mention the xhostd skill; slash-command syntax is client-specific.
+In Codex and Cursor, describe the task normally or mention the xhostd skill; slash-command syntax is client-specific.
 
 ## Example use cases
 
