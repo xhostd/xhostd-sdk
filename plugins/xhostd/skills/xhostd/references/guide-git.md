@@ -248,6 +248,94 @@ Then clear the stale entry for `git.xhostd.com`:
 The next push then asks you for a new token, or reads the token from the
 URL.
 
+## Deploy on each GitHub push
+
+This section applies to an app whose source is a GitHub repo, connected
+in the console under **Git → GitHub source**. On such an app you push to
+GitHub, not to xhostd. A push to GitHub can deploy on its own, with two
+steps:
+
+1. The repo tells xhostd that it changed. This is a **ping**: one
+   `POST` to the app's notify URL. The ping carries no secret, because
+   xhostd trusts nothing in it. xhostd fetches the repo from GitHub
+   itself, with the app's read-only deploy key.
+2. A channel **follows its branch**. Each ping syncs the mirror. A
+   channel that follows its branch then deploys the branch's new head.
+   A channel that does not follow keeps its deploys as its own call.
+
+Find the notify URL with `sync_git`, which returns it as `notify_url`, or
+on the console's Git page. It has the form
+`https://api.xhostd.com/webhooks/github/<app-id>`.
+
+### Send the ping with a GitHub Action (recommended)
+
+Commit this file as `.github/workflows/notify-xhostd.yml`, with your
+app's id in the URL:
+
+```yaml
+name: Notify xhostd
+on: push
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --retry 5 --retry-all-errors -X POST https://api.xhostd.com/webhooks/github/<app-id>
+```
+
+The file holds no secret, so an agent with push access can add it alone.
+Over HTTPS, a push of a workflow file needs a GitHub token with the
+`workflow` scope; an SSH push needs nothing extra.
+
+A branch pings only when its own files carry the workflow. Commit the
+file to every branch that should deploy on push.
+
+### Or send the ping with a repo webhook
+
+In GitHub, open the repo's **Settings → Webhooks**, and add a webhook:
+
+- **Payload URL:** the notify URL.
+- **Secret:** none.
+- **Events:** the push event only.
+
+A webhook covers every branch with no file in the repo. It needs admin
+access to the repo, and it uses no GitHub Actions minutes.
+
+### Follow the branch
+
+Turn following on for each channel that should deploy on push:
+
+```text
+update_channel(app_name="shop", channel="prod", follows_branch=True)
+```
+
+The console has the same switch, **Deploy each GitHub push**, under each
+channel on the project's Overview page. Turning it on needs a connected
+GitHub repo and a channel bound to a branch. A token that turns it on
+needs the `deploy:*` scope too. Turning it off is always allowed.
+
+How a following channel behaves:
+
+- A push to its branch deploys the new head. A push to another branch
+  deploys nothing to it.
+- After a rewind, the channel keeps the rewound version until its branch
+  moves again. The next push to the branch deploys over the rewind.
+- A commit that is already queued, building, or serving does not deploy
+  twice.
+- A failed push deploy, or a push xhostd cannot fetch, sends the app's
+  owner a notice on the console and by mail.
+- A push made while your account moves to a new machine deploys when the
+  move ends.
+- A commit you force-push away before its deploy fetched it does not
+  deploy, and sends no notice.
+
+`sync_git` returns `last_ping_at`, the time the last ping arrived. If a
+push did not deploy, check that time first: a ping that never arrived
+means the workflow file is missing from that branch, or the webhook is
+missing.
+
+One notify URL names one app. A repo that feeds two apps needs two
+`curl` lines in its workflow, or two webhooks.
+
 ## Notes
 
 - Over HTTPS, git.xhostd.com authenticates you with **Basic auth and the

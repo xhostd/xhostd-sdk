@@ -15,9 +15,10 @@ Do these checks in the given order. A different order costs you the most time.
 
 **1. Did the deploy finish?** `get_deploy_log(app_name, channel, deploy_id)`
 answers in its first line: `deploy <id> — <status> (sha <sha>)`, with a
-status of `queued`, `running`, `success`, or `failed`. Read the status from
-that header, not from the log text. Poll while the status is `queued` or
-`running`. The rest of the reply is the record of the build, the health check
+status of `queued`, `running`, `success`, `failed`, or `superseded`. Read the
+status from that header, not from the log text. Poll while the status is
+`queued` or `running`. On `superseded`, a newer deploy request for this
+channel replaced this one, and the header names it: poll that id instead. The rest of the reply is the record of the build, the health check
 and the route swap. On `failed`, the reason is in the log tail, and no other
 check helps. The old container still serves the traffic, and the URL that you
 test gives you the previous version. `get_app` shows an in-flight deploy too:
