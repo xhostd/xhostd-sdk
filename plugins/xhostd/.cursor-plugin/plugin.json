@@ -1,7 +1,7 @@
 {
   "name": "xhostd",
   "description": "Deploy web apps, APIs, and static sites from your coding agent. Push code and get a live HTTPS URL, with preview environments, Postgres, and custom domains built in.",
-  "version": "0.62.1",
+  "version": "0.64.0",
   "author": {
     "name": "xhostd",
     "email": "support@xhostd.com"

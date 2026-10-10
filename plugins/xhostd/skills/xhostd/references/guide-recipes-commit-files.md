@@ -367,7 +367,7 @@ you clone that repo and continue your work.
 `commit_files` is refused outright, with
 
 ```text
-this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — each deploy fetches from GitHub first, and sync_git fetches without deploying.
+this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — each push syncs once the repo pings xhostd (sync_git shows the setup), and each deploy fetches from GitHub first.
 ```
 
 There is no way around this refusal. On a connected app, GitHub is the

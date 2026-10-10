@@ -40,6 +40,7 @@ List all apps owned by the authenticated user.
           "name": "prod",
           "hostname": "my-app-alice.xhostd.app",
           "git_ref_binding": "branch:master",
+          "follows_branch": false,
           "current_sha": "abc1234567890abcdef1234567890abcdef12345",
           "status": "running",
           "pending_deploy": null
@@ -95,6 +96,7 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
       "name": "prod",
       "hostname": "my-app-alice.xhostd.app",
       "git_ref_binding": null,
+      "follows_branch": false,
       "current_sha": null,
       "status": "provisioning",
       "pending_deploy": null
@@ -147,6 +149,7 @@ List all channels for an app.
     "name": "prod",
     "hostname": "my-app-alice.xhostd.app",
     "git_ref_binding": "branch:master",
+    "follows_branch": false,
     "current_sha": "abc1234...",
     "status": "running",
     "pending_deploy": null
@@ -156,6 +159,7 @@ List all channels for an app.
     "name": "staging",
     "hostname": "staging-my-app-alice.xhostd.app",
     "git_ref_binding": "branch:staging",
+    "follows_branch": false,
     "current_sha": null,
     "status": "provisioning",
     "pending_deploy": null
@@ -218,26 +222,29 @@ Get details of a single channel.
 
 ## PATCH /apps/{app_id}/channels/{channel_id}
 
-Change the branch a channel is bound to, without deploying. The MCP tool is `update_channel`. The branch does not have to exist in the repo yet. The project's activity feed records a `channel.update` event; a PATCH to the current value records nothing.
+Change the branch a channel is bound to, whether it follows that branch, or both, without deploying. The MCP tool is `update_channel`. The branch does not have to exist in the repo yet. The project's activity feed records a `channel.update` event per changed field; a PATCH to the current value records nothing.
 
-**Required scope:** `channel:*`
+**Required scope:** `channel:*`, and `deploy:*` as well to set `follows_branch` to `true`
 
 **Request body:**
 ```json
 {
-  "git_ref_binding": "branch:main"
+  "git_ref_binding": "branch:main",
+  "follows_branch": true
 }
 ```
 
-- `git_ref_binding` (string, required) — `branch:<name>`, following "git_ref_binding Format". `null` answers 400: a channel cannot be unbound.
+- `git_ref_binding` (string, optional) — `branch:<name>`, following "git_ref_binding Format". `null` answers 400: a channel cannot be unbound.
+- `follows_branch` (boolean, optional) — `true` makes each push to the channel's branch on the connected GitHub repo deploy the new head, once the repo pings xhostd (see "Deploy on push" under `POST /apps/{app_id}/github/sync`). It needs a connected repo and a bound branch. `false` is always accepted. A body with both fields applies the binding first; send at least one.
 
-**Response (200):** The channel, in the `GET /apps/{app_id}/channels/{channel_id}` shape.
+**Response (200):** The channel, in the `GET /apps/{app_id}/channels/{channel_id}` shape, with `follows_branch`.
 
 **Errors:**
 - `bad_request` (400) — an empty body, `null`, or a binding outside the rule
 - `branch_wildcard_deprecated` (400) — `branch:*`
-- `scope_denied` (403) — the credential lacks `channel:*`
+- `scope_denied` (403) — the credential lacks `channel:*`, or lacks `deploy:*` for `follows_branch: true`
 - `not_found` (404) — app or channel not found
+- `conflict` (409) — `follows_branch: true` on an app with no GitHub repo connected, or on a channel with no branch
 
 ---
 
@@ -278,9 +285,12 @@ If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged
 {
   "deploy_id": "uuid",
   "channel_id": "uuid",
-  "status": "queued"
+  "status": "queued",
+  "joined": false
 }
 ```
+
+`joined` is true when a deploy of the same commit was already queued for this channel. `deploy_id` names that deploy, and no second deploy was queued. It reads the current env when it starts, so poll it as usual. A request for another commit replaces a deploy still queued for the channel, and the replaced deploy turns `superseded`.
 
 **Note:** This endpoint must be called explicitly after `git push` to trigger a deploy. Pushing code does not automatically deploy.
 
@@ -336,6 +346,7 @@ Fetch one deploy's status and a byte window of its build log.
   "deploy_id": "uuid",
   "git_sha": "84c0cf68c769def1234567890abcdef123456789",
   "status": "success",
+  "superseded_by": null,
   "started_at": "2026-08-27T14:09:36Z",
   "finished_at": "2026-08-27T14:10:45Z",
   "log_bytes": 31004,
@@ -345,7 +356,8 @@ Fetch one deploy's status and a byte window of its build log.
 }
 ```
 
-- `status` — one of `queued`, `running`, `success`, `failed`. Read the outcome here; never grep the log text for `deploy success`.
+- `status` — one of `queued`, `running`, `success`, `failed`, `superseded`. Read the outcome here; never grep the log text for `deploy success`.
+- `superseded_by` — set only when the status is `superseded`: a newer deploy request for this channel replaced this one, and this field names it, so poll that id. A superseded deploy's log is empty, or ends where a control-plane restart paused it.
 - `finished_at` — `null` while the status is `queued` or `running`.
 - `log_bytes` — the total size of the log. `offset` is where the returned window starts.
 - `window_bytes` — the byte length of the returned window, counted before utf-8 decoding (`len(log)` is not byte-exact when a window boundary splits a multibyte character). The next page starts at `offset + window_bytes`; `offset + window_bytes` equal to `log_bytes` means the reply reaches the end of the log.
@@ -977,11 +989,28 @@ For apps connected to a GitHub source: fetch the latest GitHub commits into the 
   "last_sync_status": "ok",
   "last_sync_error": null,
   "last_sync_refs": {"main": "abc1234..."},
-  "default_branch": "main"
+  "default_branch": "main",
+  "notify_url": "https://api.xhostd.com/webhooks/github/f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "last_ping_at": "2025-01-16T10:34:58Z"
 }
 ```
 
 - `default_branch` — GitHub's default branch, `null` until a sync reads it. A hint only: it binds no channel. Deploy it with `ref` to bind `prod` to it.
+- `notify_url` — the app's push ping URL, `POST /webhooks/github/{app_id}`. `last_ping_at` — when the last ping arrived, or `null`.
+
+**Deploy on push.** A `POST` to `notify_url` needs no auth and always answers 202; xhostd reads no body, fetches the repo from GitHub itself, and deploys the new branch head of each channel with `follows_branch` (see `PATCH /apps/{app_id}/channels/{channel_id}`). The first choice is a GitHub Action: commit `.github/workflows/notify-xhostd.yml` to every branch that should ping. It holds no secret; over HTTPS, the push of a workflow file needs a GitHub token with the `workflow` scope.
+
+```yaml
+name: Notify xhostd
+on: push
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl -fsS --retry 5 --retry-all-errors -X POST https://api.xhostd.com/webhooks/github/<app-id>
+```
+
+The second choice is a repo webhook: in GitHub, Settings → Webhooks, the same URL, no secret, push events only. It needs repo admin and uses no Actions minutes. A branch whose files lack the workflow does not ping, and a repo that feeds two apps needs two `curl` lines or two webhooks. More than 300 pings in 60 seconds from one address answer 429 for 60 seconds.
 
 **Errors:**
 - `scope_denied` (403) — the credential lacks `repo:*`
@@ -1557,6 +1586,7 @@ All user-facing names (app names, usernames, channel names) must be valid **DNS 
 - `running` — Deploy is currently building/deploying
 - `success` — Deploy completed successfully
 - `failed` — Deploy failed (check logs for details)
+- `superseded` — A newer deploy request for this channel replaced this one; `superseded_by` names it
 
 ---
 
