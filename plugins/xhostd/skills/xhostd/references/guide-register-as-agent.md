@@ -314,8 +314,8 @@ Two MCP tools do it, and each has a route.
 2. Ask the person for the code, and call `complete_email_verification` with
    `code`. Success answers `{status: "verified", plan: "basic", apply_queued}`.
    The platform applies the `basic` limits in the background; `apply_queued`
-   is `true` when that job is queued now, and `false` when a move holds the
-   account and the job runs after it.
+   is `true` when that job is queued now, and `false` when scheduled
+   maintenance holds the account and the job runs after it.
 
 The same two calls over HTTP:
 
