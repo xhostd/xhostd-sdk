@@ -298,8 +298,8 @@ If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged
 - `bad_request` (400) — invalid SHA format, or a `ref` outside the branch rule (`HEAD` and names under `xhost/` included)
 - `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message names both fixes and, for a GitHub-connected app, GitHub's default branch
 - `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the bound branch, the message names the fix and GitHub's default branch
-- `conflict` (409) — the GitHub sync failed (the message carries the error), the channel is under maintenance, or a user move is in progress
-- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the account is under scheduled maintenance; retry in a minute
+- `conflict` (409) — the GitHub sync failed (the message carries the error), the channel is under maintenance, or the app is undergoing scheduled maintenance
+- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the app is under scheduled maintenance; retry in a minute
 
 ---
 
@@ -324,7 +324,7 @@ Instantly rewind a channel to its previous deploy's image — a one-step cutover
 
 **Errors:**
 - `bad_request` (400) — the app is `static`, or the channel has only ever deployed one commit (nothing to rewind to)
-- `conflict` (409) — the account is mid-move
+- `conflict` (409) — the app is undergoing scheduled maintenance
 - `not_found` (404) — app or channel not found
 
 ---
@@ -557,7 +557,7 @@ Send at least one of `changes`, `edits`, or `patches`. A path belongs to exactly
 - `bad_request` (400) — invalid path, invalid branch name, empty message, malformed changeset, a path in more than one field, or an edit or hunk whose anchor is absent or ambiguous (the message names the path and the count)
 - `not_found` (404) — app not found
 - `conflict` (409) — the app is GitHub-connected; push to GitHub instead
-- `service_unavailable` (503) — the repo is busy, or the account is under scheduled maintenance; nothing was committed, so retry in a minute
+- `service_unavailable` (503) — the repo is busy, or the app is under scheduled maintenance; nothing was committed, so retry in a minute
 
 ---
 
@@ -764,7 +764,7 @@ Roll the channel's database back to a prior snapshot. A failed restore loses not
 - `bad_request` (400) — `invalid_confirmation` (`db_name` mismatch)
 - `protected_action` (403) — restoring the `prod` channel is a protected action: an agent credential gets 403 `protected_action` until the app owner turns agent access on in the console
 - `not_found` (404) — snapshot not found, or its file is missing
-- `conflict` (409) — `channel_busy` (a deploy is queued/running), or the account is mid-move
+- `conflict` (409) — `channel_busy` (a deploy is queued/running), or the app is undergoing scheduled maintenance
 - `service_unavailable` (503) — `postgres_unavailable`
 - `restore_unavailable` (503) — every call, while database restore is temporarily unavailable
 
@@ -1015,7 +1015,7 @@ The second choice is a repo webhook: in GitHub, Settings → Webhooks, the same 
 **Errors:**
 - `scope_denied` (403) — the credential lacks `repo:*`
 - `not_found` (404) — app not found, or no GitHub mirror connected
-- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the account is under scheduled maintenance; nothing changed, so retry in a minute
+- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the app is under scheduled maintenance; nothing changed, so retry in a minute
 
 ---
 
@@ -1089,7 +1089,7 @@ Queue a downloadable export (takeout) of a channel's or app's data: deployed cod
 
 **Errors:**
 - `bad_request` (400) — invalid scope, missing `channel_id`, or nothing deployed to export
-- `conflict` (409) — an export is already in progress, or the account is mid-move
+- `conflict` (409) — an export is already in progress, or the app is undergoing scheduled maintenance
 
 ---
 
@@ -1377,7 +1377,7 @@ Prove the code. Bearer required, no scope: the request carries a code alone, and
 { "status": "verified", "plan": "basic", "apply_queued": true }
 ```
 
-`apply_queued` is false when a move holds the account; the apply runs after it.
+`apply_queued` is false when scheduled maintenance holds the account; the apply runs after it.
 
 **Errors:**
 - `bad_request` (400) — `wrong code`; the attempt counts
@@ -1621,7 +1621,7 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 | `too_many_requests` | 429 | A budget or a window refused the call: the registration budget, a second verification request inside 60 seconds, or a locked challenge after five wrong codes |
 | *(no code)* | 422 | A body that fails validation — a missing field on any route, or an unknown field on `POST /ssh-keys`, `POST /registrations`, `POST /auth/ssh-key`, and the two email verification routes, which refuse one. This answer carries FastAPI's `{"detail": [...]}` shape, not the `{"error": {...}}` envelope, so an MCP client shows it as a pydantic report. Read the field name in `detail`, correct it, and call again. Do not retry the same body: it fails again |
 | `bad_gateway` | 502 | Upstream service error |
-| `service_unavailable` | 503 | Dependent service degraded (e.g. `postgres_unavailable`, `blob_unavailable`), agent registration closed by the operator, another write holding an app's repo, or the account under scheduled maintenance |
+| `service_unavailable` | 503 | Dependent service degraded (e.g. `postgres_unavailable`, `blob_unavailable`), agent registration closed by the operator, another write holding an app's repo, or the app under scheduled maintenance |
 | `internal_error` | 500 | Unexpected server error |
 
 ### Protected actions

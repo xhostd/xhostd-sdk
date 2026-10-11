@@ -323,8 +323,8 @@ How a following channel behaves:
   twice.
 - A failed push deploy, or a push xhostd cannot fetch, sends the app's
   owner a notice on the console and by mail.
-- A push made while your account moves to a new machine deploys when the
-  move ends.
+- A push made while the app is under maintenance deploys when the
+  maintenance ends.
 - A commit you force-push away before its deploy fetched it does not
   deploy, and sends no notice.
 

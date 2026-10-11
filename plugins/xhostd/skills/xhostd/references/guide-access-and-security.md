@@ -31,22 +31,36 @@ address; an account an agent registered has none until someone adds one.
 
 Accepting moves the project onto your account, and its channels count against
 your plan from that moment. If your plan has no room for them, the console says
-so and the transfer stays pending until you upgrade. The previous owner stays
-on the project as an admin.
+so and the transfer stays pending until you upgrade. The same holds for
+database storage: when the project's databases and your own would together
+store more than your plan includes, the accept is refused until you upgrade or
+remove data. The previous owner stays on the project as an admin.
 
 Each running channel restarts under the new owner's account. The restart is a
 blue-green swap, the same one a deploy uses, so the old container keeps serving
 until the new one is healthy. The accept is refused while the project has a
-deploy in progress; retry once it finishes.
+deploy in progress, while one of the project's databases is not ready yet, or
+while an export of the project runs; retry once it finishes. A database the
+platform has not measured yet also refuses the accept, for up to about 15
+minutes after the database is created. The platform can refuse an accept for a
+while for a reason of its own; try again later, and contact support if the
+refusal persists.
 
-**Accepting can also move the project's databases.** When you keep your own
-databases on another database server of the same machine, accepting moves the
-project's databases into your account. The console says so before you accept.
-Each app pauses for about 15 seconds while its database moves. Until the move
-ends, you cannot create or delete projects or channels, and deploys and git
-pushes wait during each pause. The accept is refused while one of
-the project's databases is not ready yet, or while an export of the
-project runs; retry once it finishes.
+The start and the accept are both refused while one of the project's databases
+gives access to a role that is not its own, or another database gives access
+to the project's database role. The refusal names what to revoke and who
+revokes it. The project's owner revokes access that the project's databases,
+or the owner's other projects, give. The recipient revokes access that one of
+their own projects gives. Support handles access that another account's
+database gives.
+[A transfer is refused because a database gives access to a role that is not its own](https://docs.xhostd.com/guides/recipes-postgres#a-transfer-is-refused-because-a-database-gives-access-to-a-role-that-is-not-its-own)
+shows how to find and revoke it.
+
+While the platform hands the project over, its deploys can wait for a while,
+and for a few minutes a deploy that changes its database schema can be
+refused. Deploy again later:
+[A schema change is refused with "this database is undergoing scheduled maintenance"](https://docs.xhostd.com/guides/recipes-postgres#a-schema-change-is-refused-with-this-database-is-undergoing-scheduled-maintenance)
+explains the refusal.
 
 **A channel URL keeps the previous owner's username.** The platform does not
 rename a channel hostname, so a transferred project serves from the same

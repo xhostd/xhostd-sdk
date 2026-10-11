@@ -26,10 +26,13 @@ from an injected `DATABASE_URL`. A static channel has no database, so it gets no
 `DATABASE_URL`.
 
 The container also carries `DATABASE_URL_READONLY`: the same database, a
-second role that can `SELECT` from every table in `public` and run no write.
+second role that can `SELECT` from every table in `public` by default and run no write.
 Use it for a query surface you expose to visitors. Writes use
-`DATABASE_URL`, and migrations use `DATABASE_URL_DIRECT`. Data the read-only role must not see goes in a schema you
-create (`CREATE SCHEMA private`).
+`DATABASE_URL`, and migrations use `DATABASE_URL_DIRECT`. To hide a table in
+`public` from the read-only role, run `REVOKE SELECT ON public.<table> FROM <the user in DATABASE_URL_READONLY>`
+with `DATABASE_URL`; the revoke stays. Or put the data in a schema you
+create (`CREATE SCHEMA private`), which the read-only role cannot read
+until you grant it.
 
 Schema changes ship as ordinary alembic migrations, and they run at container
 start. The first boot of a new app applies every migration in order against
@@ -105,9 +108,11 @@ A database on a newer server runs behind a transaction pooler, PgBouncer.
 `DATABASE_URL` and `DATABASE_URL_READONLY` reach the pooler on port 6432,
 and `DATABASE_URL_DIRECT` reaches the server itself on port 5432. A
 database on an older server has no pooler, and all three name port 5432.
-Read the port in `DATABASE_URL` to tell which case you are in. When the
-platform moves a database to a newer server, `DATABASE_URL` can switch to
-the pooler, and the notification that ends the move tells you so.
+Read the port in `DATABASE_URL` to tell which case you are in. Scheduled
+maintenance can put a database behind the pooler, and `DATABASE_URL` then
+switches to the pooler with no notice. Send work that holds a database
+session over `DATABASE_URL_DIRECT` in both cases, so the switch changes
+nothing for it.
 
 The pooler lends your connection a server session for one transaction at
 a time. Anything that lives in a session and outlives a transaction
@@ -660,7 +665,7 @@ def upgrade() -> None:
 Only `postgis` is installable. `postgis_raster`, `postgis_topology`,
 `postgis_sfcgal`, and the tiger geocoder stay untrusted. `spatial_ref_sys`
 is read-only for your role, with every EPSG code present. A snapshot
-restore, a move, and an export all carry a PostGIS database.
+restore, scheduled maintenance, and an export all carry a PostGIS database.
 
 ## When it goes wrong
 
@@ -766,13 +771,13 @@ fails, and Postgres rolls the statement back:
 ```text
 ERROR:  UNLOGGED tables and sequences are not supported on xhost
 DETAIL:  public.cache is UNLOGGED.
-HINT:  Remove UNLOGGED from the statement. xhost backs up, restores, and moves only logged data; see docs.xhostd.com/postgres. In Rails, remove create_unlogged_tables from config/environments.
+HINT:  Remove UNLOGGED from the statement. xhost backs up, restores, and copies only logged data; see docs.xhostd.com/postgres. In Rails, remove create_unlogged_tables from config/environments.
 ```
 
 Why: Postgres writes no write-ahead log for the rows of an UNLOGGED table.
-xhost backs up your database from that log, and it moves your database
-between servers with logical replication, which carries none of those rows
-either. A restore or a move would come back without them, and a crash of the
+xhost backs up your database from that log, and scheduled maintenance copies
+your database with logical replication, which carries none of those rows
+either. A restore or a copy would come back without them, and a crash of the
 database server empties the table.
 
 The refusal covers each statement that leaves a table or a sequence
@@ -782,7 +787,8 @@ UNLOGGED: `CREATE UNLOGGED TABLE`, `CREATE UNLOGGED TABLE … AS`,
 table is not affected.
 
 To fix a refused statement, remove the `UNLOGGED` keyword. A logged table
-accepts the same queries, and it survives a restore and a move. A framework
+accepts the same queries, and it survives a restore and scheduled
+maintenance. A framework
 can add the keyword for you:
 
 - **Alembic and SQLAlchemy.** The keyword comes from `prefixes=["UNLOGGED"]`
@@ -792,8 +798,8 @@ can add the keyword for you:
   from each file in `config/environments/`.
 
 A database made before xhost refused UNLOGGED tables can still hold one. The
-table keeps its rows. Until you make it logged, xhost cannot move the
-database to another server, and the table takes no change that leaves it
+table keeps its rows. Until you make it logged, xhost cannot run scheduled
+maintenance on the database, and the table takes no change that leaves it
 UNLOGGED, such as `ADD COLUMN` or `CREATE INDEX`. Make it logged from a
 migration of its own:
 
@@ -828,6 +834,91 @@ it. The console's dump download and an export leave it out. A `pg_dump` that
 you run yourself contains a `CREATE EXTENSION IF NOT EXISTS xhost_guard`
 line, which a Postgres server outside xhost cannot load. For such a server,
 pass `--exclude-extension=xhost_guard`, which needs `pg_dump` 17 or later.
+
+### A schema change is refused with "this database is undergoing scheduled maintenance"
+
+While xhost runs scheduled maintenance on your database, it pauses schema
+changes there. A statement that changes the schema fails, and Postgres rolls
+it back:
+
+```text
+ERROR:  this database is undergoing scheduled maintenance — schema changes are paused
+HINT:  Reads and writes work as usual. Try the schema change again later.
+```
+
+The pause is temporary, and it ends when the maintenance ends. Until then,
+these statements work as usual:
+
+- Reads and writes: `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `COPY`, and
+  `TRUNCATE`.
+- Temporary tables, and everything you create on them.
+- A statement with `IF NOT EXISTS` that finds the object already there, such
+  as `CREATE TABLE IF NOT EXISTS` on an existing table, or `ALTER TABLE …
+  ADD COLUMN IF NOT EXISTS` on an existing column.
+- `GRANT` and `REVOKE`.
+- `REFRESH MATERIALIZED VIEW` and `REINDEX`.
+
+A migration that changes the schema fails the deploy, and the version that
+was live before keeps serving. Your data is not affected. Deploy again after
+the maintenance ends, and the migration runs then.
+
+A migration tool runs only the migrations that have not run yet, so a deploy
+whose migrations have all run starts as usual. A tool that syncs the schema
+at every boot, such as Sequelize's `sync({ alter: true })`, issues schema
+changes at each start, and so it fails each deploy during the maintenance.
+Use migrations instead.
+
+### A transfer is refused because a database gives access to a role that is not its own
+
+Each channel's database has two roles of its own: the user in `DATABASE_URL`,
+`r_<32 hex characters>`, and the read-only user in `DATABASE_URL_READONLY`,
+the same name with `_ro` added. A project changes owner only while each of its
+databases gives access to no other role, and no other database gives access to
+its roles. Otherwise the transfer is refused, and the refusal names the first
+reference it found:
+
+```text
+This project's database `ch_…` gives access to a role that is not its own: `GRANT SELECT ON TABLE public.orders TO "r_…"`. Revoke it, then offer the transfer again.
+```
+
+The roles `PUBLIC`, any role whose name starts with `pg_`, `xhost_admin`, and
+`xhost_pooler_auth` are allowed. A grant between two of your own channels is a
+reference too, even inside one project. To share data between channels, have
+one of them expose it over HTTP.
+
+Connect to the database the refusal names with its own `DATABASE_URL_DIRECT`,
+and list what it grants:
+
+```text
+\dp      -- privileges on tables, views, sequences, and their columns, and policies
+\ddp     -- default privileges
+\l       -- privileges on the databases
+\df+     -- functions, with their privileges
+\dn+     -- schemas, with their privileges
+\dT+     -- types, with their privileges
+```
+
+Then revoke each reference. Run each statement as the database's own role,
+the user in `DATABASE_URL`:
+
+```sql
+REVOKE SELECT ON TABLE public.orders FROM r_other;
+REVOKE CONNECT ON DATABASE ch_this FROM r_other;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM r_other;
+ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM r_other;
+ALTER POLICY my_policy ON public.orders TO public;
+```
+
+An object that another role owns needs support. Only the object's current
+owner can run `ALTER TABLE public.orders OWNER TO r_this`, and Postgres also
+requires that owner to be a member of the new owning role. Another channel's
+role is not a member of your database's role, so support gives the object back
+to the database's own role. When the refusal
+says another of your projects gives access to this
+project's database role, run the revoke in that project's database. When it
+says another account's database does, contact support.
+
+After the last revoke, offer the transfer again, or accept it again.
 
 ### 404 and 502 from the hostname mean different things
 
