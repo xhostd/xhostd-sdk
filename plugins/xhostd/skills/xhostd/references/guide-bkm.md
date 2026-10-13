@@ -31,7 +31,7 @@ with **no** `command`. The platform starts no container to answer this call, so
 it is the cheapest call available. It returns the status header only:
 
 ```
-container #2 (xhost-fbae88c8-41dbea1f-00000002) — running
+container #2 (xhost-fbae88c8-41dbea1f-00000002, id 3f9a1c0b7d2e) — running
 started: 2026-07-29T21:49:26.989002493Z
 readable containers: #1, #2 (pass container_index to read an older one)
 no command given — pass one (e.g. "tail -n 200 app.log") to read the log itself
@@ -75,8 +75,11 @@ get_runtime_log(app_name="...", channel="prod",
                 command="tail -n 200 app.log", container_index=1)
 ```
 
-Without `container_index`, you get the highest available index. That index is
-usually the live container.
+Without `container_index`, you get the highest available index. After a
+deploy that failed its health check, that index is the crashed new container,
+and the older container still serves traffic. The header then carries a line
+such as `running now: container #1 — this reply shows #2; pass
+container_index=1 to read it`. Pass that index to read the live container.
 
 ### Make the log easy to read
 

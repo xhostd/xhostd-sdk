@@ -55,6 +55,10 @@ are these:
   without a test of its port. Listen on `0.0.0.0` and on the port in
   `XHOSTD_HTTP_PORT`.
 - The app restarted and is still starting.
+- The app server closes an idle connection after 1 second or less. The
+  platform keeps an idle connection to your app for up to 1 second, so an
+  occasional request, usually a POST, gets a 502. Set your server's
+  keep-alive timeout to 2 seconds or more.
 
 Read the runtime log to see what the process printed: call `get_runtime_log`,
 or open the Runtime status card on the project's Activity page. A background

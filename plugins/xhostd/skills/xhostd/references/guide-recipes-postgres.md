@@ -562,6 +562,9 @@ platform took it.
 `recoverable: true` tells you that a restore can still reach the snapshot. A
 new snapshot reads `false` until the database's archived backup reaches the
 moment that the snapshot records. Expect that for some minutes after a deploy.
+`recoverable: null` means the platform cannot tell yet, for example until the
+database's next nightly backup records its restore window. Treat it as
+unknown, not as `false`.
 
 ### Restore the database
 
@@ -868,6 +871,76 @@ at every boot, such as Sequelize's `sync({ alter: true })`, issues schema
 changes at each start, and so it fails each deploy during the maintenance.
 Use migrations instead.
 
+### A grant to another role is refused
+
+Each channel's database has two roles of its own: the user in `DATABASE_URL`,
+`r_<32 hex characters>`, and the read-only user in `DATABASE_URL_READONLY`,
+the same name with `_ro` added. A database on xhost gives access only to
+those two roles, to `PUBLIC`, to any role whose name starts with `pg_`, and
+to the platform's roles `xhost_admin` and `xhost_pooler_auth`. A statement
+that gives access to any other role fails, and Postgres rolls it back:
+
+```text
+ERROR:  a database on xhost can give access only to its own roles
+DETAIL:  table public.orders names the role r_…, which is not one of this database's roles.
+HINT:  Grant to this database's own roles or to PUBLIC. See docs.xhostd.com/postgres-roles.
+```
+
+Why: every other `r_…` role belongs to another channel, often another
+account's. Access you gave it would let that channel read or change your
+data. Scheduled maintenance also copies your database together with its own
+two roles alone, so it could not keep such a grant.
+
+The refusal covers each way to give access: `GRANT` on a table, a column, a
+sequence, a function, a schema, or a type; `ALTER DEFAULT PRIVILEGES`; and
+`CREATE POLICY` or `ALTER POLICY` that names the role. It covers the same
+statements inside a function or a `DO` block.
+
+To fix a refused statement, grant to one of the database's own roles, or to
+`PUBLIC`. Only the database's own roles can connect to it, so a grant to
+`PUBLIC` reaches no other account. To share data between two channels, yours
+included, have one of them expose it over HTTP.
+
+A dump from another database can carry `GRANT` lines that name that
+database's roles. Restore it with `--no-acl` and `--no-owner`, which skip
+those lines:
+
+```sh
+pg_restore --no-acl --no-owner -d "$DATABASE_URL_DIRECT" backup.dump
+```
+
+If the error names an object that the statement did not touch, the database
+already gave access to another role before xhost refused it. xhost normally
+keeps the refusal off in such a database until the access is gone, so this
+is rare. While the access stays, every schema change fails. Connect with
+`DATABASE_URL_DIRECT`, and list each object that names another role:
+
+```sql
+SELECT r.rolname, o.type, o.identity
+FROM pg_shdepend s
+JOIN pg_roles r ON r.oid = s.refobjid
+CROSS JOIN LATERAL pg_identify_object(s.classid, s.objid, s.objsubid) o
+WHERE s.dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+  AND s.refclassid = 'pg_authid'::regclass
+  AND s.deptype IN ('a', 'o', 'r')
+  AND r.rolname !~ '^pg_'
+  AND r.rolname NOT IN (current_user, current_user || '_ro', 'xhost_admin', 'xhost_pooler_auth');
+```
+
+A revoke passes only when it removes the last of that access, because xhost
+checks the database after each statement. Revoke all of it in one statement:
+
+```sql
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM r_…;
+```
+
+If the list names more than one kind of object, such as a table and a
+default privilege, no one statement can remove it all. Contact support, and
+xhost removes it with you.
+
+The refusal comes from the `xhost_guard` extension, the same extension that
+refuses UNLOGGED tables, and your role cannot drop or disable it.
+
 ### A transfer is refused because a database gives access to a role that is not its own
 
 Each channel's database has two roles of its own: the user in `DATABASE_URL`,
@@ -892,7 +965,6 @@ and list what it grants:
 ```text
 \dp      -- privileges on tables, views, sequences, and their columns, and policies
 \ddp     -- default privileges
-\l       -- privileges on the databases
 \df+     -- functions, with their privileges
 \dn+     -- schemas, with their privileges
 \dT+     -- types, with their privileges
@@ -903,7 +975,6 @@ the user in `DATABASE_URL`:
 
 ```sql
 REVOKE SELECT ON TABLE public.orders FROM r_other;
-REVOKE CONNECT ON DATABASE ch_this FROM r_other;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM r_other;
 ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM r_other;
 ALTER POLICY my_policy ON public.orders TO public;
