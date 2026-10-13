@@ -315,7 +315,7 @@ container to answer it:
 
 ```text
 get_runtime_log(app_name="recipe-worker", channel="prod")
-→ container #1 (xhost-6aa59e3b-98a26f59-00000001) — running
+→ container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
   no command given — pass one (e.g. "tail -n 200 app.log") to read the log itself
@@ -333,7 +333,7 @@ Give the call a `command`, and it returns the log:
 
 ```text
 get_runtime_log(..., channel="prod", command="tail -n 5 app.log")
-→ container #1 (xhost-6aa59e3b-98a26f59-00000001) — running
+→ container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
   log file: /log/app.log (7792 bytes)
@@ -425,11 +425,13 @@ contact support for help with a restore.
 ### The crashed container is readable, and the old one still runs
 
 Call `get_runtime_log` with no `command` after a failed deploy. The header
-describes the dead container:
+describes the dead container, and its second line names the container that
+still runs:
 
 ```text
 get_runtime_log(app_name="recipe-worker", channel="prod")
-→ container #2 (xhost-6aa59e3b-98a26f59-00000002) — exited
+→ container #2 (xhost-6aa59e3b-98a26f59-00000002, id d2f7a3910c5e) — exited
+  running now: container #1 — this reply shows #2; pass container_index=1 to read it
   exit code: 1
   restarts: 4
   started: 2026-10-04T06:21:42.516008956Z
@@ -441,7 +443,9 @@ get_runtime_log(app_name="recipe-worker", channel="prod")
 
 `source: archive` tells you that the platform removed the container and kept
 its log. `readable containers: #1, #2` names the two logs that you can read
-now. `container_index` selects one of them, and both reads below use it:
+now. The `running now:` line names container #1 as the one that serves, so
+`container_index=1` reads the live container. `container_index` selects one
+of the logs, and both reads below use it:
 
 ```text
 get_runtime_log(..., command="grep -c ValueError app.log", container_index=2)
@@ -449,7 +453,7 @@ get_runtime_log(..., command="grep -c ValueError app.log", container_index=2)
   10
 
 get_runtime_log(..., command="tail -n 3 app.log", container_index=1)
-→ container #1 (xhost-6aa59e3b-98a26f59-00000001) — running
+→ container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   ...
   2026-10-04T06:21:36.461535434Z {"ts": "2026-10-04T06:21:36.461363+00:00", "event": "tick", "count": 63, "uptime_s": 310.0}
   2026-10-04T06:21:41.461877482Z {"ts": "2026-10-04T06:21:41.461616+00:00", "event": "tick", "count": 64, "uptime_s": 315.0}

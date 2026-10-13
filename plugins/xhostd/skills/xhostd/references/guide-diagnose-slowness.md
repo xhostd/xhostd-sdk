@@ -97,7 +97,10 @@ detail, or when you write a report for the user.
 - **`resource`** — recent CPU, memory, memory pressure, disk pressure and
   OOM-kill counts of the account.
 - **`runtime`** — the container of this channel: whether it runs, its exit
-  code, whether the kernel stopped it, and its restart count.
+  code, whether the kernel stopped it, and its restart count. The block
+  describes the running container, and the newest container when none runs.
+  `container_index`, `container_id`, and `source` (`live` or `archive`) name
+  that container.
 - **`build`** — how many recent builds of this channel the kernel stopped for
   memory, and when the last one was.
 - **`database`** — the size of the channel database, its cache-hit percent,

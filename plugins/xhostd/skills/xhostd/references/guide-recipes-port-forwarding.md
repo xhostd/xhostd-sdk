@@ -485,7 +485,7 @@ reports what you can read, and it reads nothing:
 
 ```text
 get_runtime_log(app_name="recipe-tcp", channel="prod")
-→ container #2 (xhost-cb2ecd27-a9832287-00000002) — running
+→ container #2 (xhost-cb2ecd27-a9832287-00000002, id 5b0e9c34a1f8) — running
   started: 2026-10-04T06:12:30.055278693Z
   readable containers: #1, #2 (pass container_index to read an older one)
   no command given — pass one (e.g. "tail -n 200 app.log") to read the log itself
