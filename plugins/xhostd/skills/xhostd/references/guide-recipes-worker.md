@@ -18,7 +18,7 @@ hostname returns 502. That is correct, and
 [The HTTPS hostname returns 502](#the-https-hostname-returns-502) explains why.
 
 **The worker's only output is its log.** An HTTP recipe proves itself with a
-request to a URL. This one has no URL to request. `get_runtime_log` replaces
+request to a URL. This one has no URL to request. `get_logs` with `source="runtime"` replaces
 `curl` here, and every proof below comes from it.
 
 **The container's local disk does not survive a redeploy.** Each deploy starts a
@@ -195,18 +195,25 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Your credential is the token from `get_credentials()`. Put it in the
-**password** field of the remote URL:
+Your credential is your own token in the `XHOSTD_TOKEN` environment variable.
+A person mints it on the console [/tokens](https://console.xhostd.com/tokens)
+page and exports it; a registered agent exports the token that registration
+returned. No tool result carries a token. Send it as a header on each git
+command:
 
 ```text
-https://<username>:<token>@git.xhostd.com/<username>/<app>.git
+git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
 ```
+
+You can also mint a scoped, short-lived token with the request that
+`get_credentials` describes, and send it the same way from a variable of its
+own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 A new xhostd repo is empty, and git reports this. The warning is correct, and it
 is not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-worker.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-worker.git
 Cloning into 'recipe-worker'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -222,14 +229,14 @@ $ git commit -m "tick worker that signals readiness with a file"
  2 files changed, 75 insertions(+)
  create mode 100755 launch.sh
  create mode 100644 worker.py
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 To https://git.xhostd.com/docs/recipe-worker.git
  * [new branch]      master -> master
 ```
 
-Do not commit or paste the token. `$XHOSTD_TOKEN` above is the value from
-`get_credentials`. A remote URL with a real token in it stays in `.git/config`,
-in your shell history, and in the output of every `git remote -v`.
+Never write the token value itself into a command, a commit, or pasted text.
+`$XHOSTD_TOKEN` stays in the environment, so the token never lands in
+`.git/config`, in your shell history, or in the output of `git remote -v`.
 
 ### Step 3 — start the deploy
 
@@ -250,7 +257,7 @@ no deploy. `deploy` is always its own call.
 
 ### The deploy log
 
-`get_deploy_log(app_name, channel, deploy_id)` returns the record: a status
+`get_logs(app_name, channel, source="deploy", deploy_id)` returns the record: a status
 header first, then the log. The first line states the outcome — poll while
 the status is `queued` or `running`. Below is the end of deploy
 `521e2723-bfdb-44e0-843e-6170e48752a9`. The `...` mark stands for the
@@ -309,12 +316,12 @@ that route, so the hostname answers 502.
 
 ### The status header
 
-`get_runtime_log` with no `command` reports what you can read, and it reads
-nothing. It is the cheapest call available, because the platform starts no
+`get_logs` with `source="runtime"` and no `command` reports what you can read,
+and it reads nothing. It is the cheapest call available, because the platform starts no
 container to answer it:
 
 ```text
-get_runtime_log(app_name="recipe-worker", channel="prod")
+get_logs(app_name="recipe-worker", channel="prod", source="runtime")
 → container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
@@ -332,7 +339,7 @@ container, so an older container stays readable.
 Give the call a `command`, and it returns the log:
 
 ```text
-get_runtime_log(..., channel="prod", command="tail -n 5 app.log")
+get_logs(..., channel="prod", source="runtime", command="tail -n 5 app.log")
 → container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
@@ -358,7 +365,7 @@ An HTTP recipe proves itself with `curl`. A worker has no URL, so count its
 work instead:
 
 ```text
-get_runtime_log(..., channel="prod", command="grep -c '\"event\": \"tick\"' app.log")
+get_logs(..., channel="prod", source="runtime", command="grep -c '\"event\": \"tick\"' app.log")
 → ...
   62
 ```
@@ -418,18 +425,18 @@ left behind must not certify that process.
 **`pre-deploy DB snapshot ... was taken before this failure`.** Every non-static
 channel gets a database, and the platform takes a snapshot of it before each
 deploy. This worker uses no database, so the line changes nothing here.
-Database restore is temporarily unavailable, so `restore_channel_db`
-refuses with `restore_unavailable`. For a worker that uses a database,
+Database restore is temporarily unavailable, so `restore_channel_snapshot`
+with `part="database"` refuses with `restore_unavailable`. For a worker that uses a database,
 contact support for help with a restore.
 
 ### The crashed container is readable, and the old one still runs
 
-Call `get_runtime_log` with no `command` after a failed deploy. The header
+Call `get_logs` with `source="runtime"` and no `command` after a failed deploy. The header
 describes the dead container, and its second line names the container that
 still runs:
 
 ```text
-get_runtime_log(app_name="recipe-worker", channel="prod")
+get_logs(app_name="recipe-worker", channel="prod", source="runtime")
 → container #2 (xhost-6aa59e3b-98a26f59-00000002, id d2f7a3910c5e) — exited
   running now: container #1 — this reply shows #2; pass container_index=1 to read it
   exit code: 1
@@ -448,11 +455,11 @@ now. The `running now:` line names container #1 as the one that serves, so
 of the logs, and both reads below use it:
 
 ```text
-get_runtime_log(..., command="grep -c ValueError app.log", container_index=2)
+get_logs(..., source="runtime", command="grep -c ValueError app.log", container_index=2)
 → ...
   10
 
-get_runtime_log(..., command="tail -n 3 app.log", container_index=1)
+get_logs(..., source="runtime", command="tail -n 3 app.log", container_index=1)
 → container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   ...
   2026-10-04T06:21:36.461535434Z {"ts": "2026-10-04T06:21:36.461363+00:00", "event": "tick", "count": 63, "uptime_s": 310.0}
@@ -540,7 +547,7 @@ value="1")` gives the same result.
 
 **A log file inside the container.** The platform captures the stdout and the
 stderr of your process, and it merges the two. A worker that writes its output
-to a file in the container writes nothing that `get_runtime_log` can read. That
+to a file in the container writes nothing that the runtime log can read. That
 file also goes away with the container at the next deploy. Write to stdout.
 
 ### The HTTPS hostname returns 502

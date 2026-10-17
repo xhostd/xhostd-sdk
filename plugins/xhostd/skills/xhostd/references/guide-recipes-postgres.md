@@ -242,7 +242,7 @@ Keep the log configuration blocks, but note that they do nothing until
 `env.py` applies them. The next file shows how. After `env.py` applies them,
 alembic logs at `INFO`. The line
 `Running upgrade 0001 -> 0002, add done flag to notes` then goes to stdout.
-The deploy log and `get_runtime_log` both read stdout.
+The deploy log and the runtime log (`get_logs` with `source="runtime"`) both read stdout.
 
 ### migrations/env.py
 
@@ -427,8 +427,8 @@ where you work.
 Both paths keep the same rule. **A push stores your code, but it does not
 deploy your code.** `deploy` is a separate and explicit call.
 [The Docker recipe](https://docs.xhostd.com/guides/recipes-docker) gives the
-full sequence step by step: `create_app`, `get_credentials`, the clone and
-the push, then `deploy`. This guide shows only the call that matters here:
+full sequence step by step: `create_app`, your own token from
+`$XHOSTD_TOKEN`, the clone and the push, then `deploy`. This guide shows only the call that matters here:
 
 ```text
 deploy(app_name="recipe-docker-pg",
@@ -569,7 +569,7 @@ unknown, not as `false`.
 ### Restore the database
 
 **Database restore is temporarily unavailable.** xhostd refuses every
-`restore_channel_db` call with `restore_unavailable` while it changes how a
+`restore_channel_snapshot` call with `part="database"` with `restore_unavailable` while it changes how a
 restore runs to make it safer. For help with a restore, contact support.
 This section shows the call, the refusal that it gets today, and the result
 that a restore gives when it returns.
@@ -594,9 +594,10 @@ Restore the channel to the snapshot from immediately before the second
 deploy. That snapshot holds note 1 and not note 2.
 
 ```text
-restore_channel_db(app_name="recipe-docker-pg",
-                   channel="prod",
-                   snapshot_id="5f6aac2f-1852-482d-9aa5-40332376d0f6")
+restore_channel_snapshot(app_name="recipe-docker-pg",
+                         channel="prod",
+                         snapshot_id="5f6aac2f-1852-482d-9aa5-40332376d0f6",
+                         part="database")
 → restore_unavailable: database restore is temporarily unavailable — contact support for help with a restore
 ```
 
@@ -684,7 +685,7 @@ health check. No line in the deploy log mentions the database. Read the
 container's own output, not the health-check line alone:
 
 ```text
-get_runtime_log(app_name="...", channel="prod", command="tail -n 200 app.log")
+get_logs(app_name="...", channel="prod", source="runtime", command="tail -n 200 app.log")
 ```
 
 To correct it, name the driver in the URL at each point where you make an
@@ -727,7 +728,7 @@ sqlalchemy.exc.ProgrammingError: (psycopg.errors.UndefinedColumn) column "done" 
 
 The deploy then fails on the health check, and its log says nothing about a
 column. The exception is in the container's own output, which you read with
-`get_runtime_log`. Ship a migration in the same commit as the code that needs
+`get_logs` and `source="runtime"`. Ship a migration in the same commit as the code that needs
 it. The code and the schema are then never one deploy apart, and
 `alembic upgrade head` in the start command is sufficient. Some changes
 cannot travel together, such as a rename or a column drop. For those, first

@@ -101,15 +101,14 @@ later call takes one or both. A new app is not online: the hostname serves
 nothing until a deploy completes. `repo_url` is the repo that you push to. If
 you lose it, `get_app` returns it again.
 
-**2. Mint a credential.** One token is your git password, your Postgres
-password and your platform API bearer. It is valid for 30 days.
-
-```text
-get_credentials()
-→ {"token": "xh_...", "username": "docs",
-   "expires_at": "2026-08-30T17:26:27Z",
-   "scopes": ["blob:*", "deploy:*", "repo:*", "db:*", "channel:*", "stats:read"]}
-```
+**2. Have your token ready.** The token authenticates git, Postgres, and the
+platform API. Use your own token from the
+`XHOSTD_TOKEN` environment variable. A person mints it on the console
+[/tokens](https://console.xhostd.com/tokens) page and exports it; a registered
+agent exports the token that registration returned. No tool result carries a
+token. You can also mint a scoped, short-lived token with the request that
+`get_credentials` describes, and send it the same way from a variable of its
+own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 **This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
 first git transport, because the private half of the key never enters a tool
@@ -117,18 +116,17 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Put the token in the **password** field of the remote URL. This detail is
-important:
+Send the token as a header on each git command. This detail is important:
 
 ```text
-https://<username>:<token>@git.xhostd.com/<username>/<app>.git
+git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
 ```
 
 **3. Clone, commit, push.** A new xhostd repo is empty, and git tells you so.
 The warning is correct; it is not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-static.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-static.git
 Cloning into 'recipe-static'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -139,13 +137,13 @@ Write `index.html` into that directory. Then commit and push it:
 $ cd recipe-static
 $ git add -A
 $ git commit -m "add landing page"
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 ```
 
-Do not put the token in a file that you commit, or in text that you paste.
-`$XHOSTD_TOKEN` above holds the value from `get_credentials`. A remote URL with
-a real token in it stays in `.git/config`, in your shell history and in the
-output of every `git remote -v`.
+Never write the token value itself into a command, a file that you commit, or
+text that you paste. `$XHOSTD_TOKEN` stays in the environment, so the token
+never lands in `.git/config`, in your shell history, or in the output of
+`git remote -v`.
 
 **4. Deploy the branch.**
 
@@ -163,15 +161,16 @@ so after a push you do not need the sha. `deploy` also accepts `sha` when you
 want an exact commit, and `sha` has priority if you pass both.
 
 `deploy` returns as soon as it queues the deploy, and the work continues in
-the background. Use `get_deploy_log` to follow it: the first line of its
+the background. Use `get_logs` with `source="deploy"` to follow it: the first line of its
 reply states the outcome.
 
 ## Verify it
 
 ```text
-get_deploy_log(app_name="recipe-static",
-               channel="prod",
-               deploy_id="bbd8effc-a9f2-4b57-a5a1-dcdf830a3861")
+get_logs(app_name="recipe-static",
+         channel="prod",
+         source="deploy",
+         deploy_id="bbd8effc-a9f2-4b57-a5a1-dcdf830a3861")
 ```
 
 This is the reply for that deploy. A status header comes first, then the log.
@@ -199,7 +198,7 @@ started: 2026-07-31T17:30:18Z   finished: 2026-07-31T17:30:19Z
 
 The first line states the outcome. `status` is one of `queued`, `running`,
 `success`, or `failed`. Read the status from that header, not from the log
-text. Poll `get_deploy_log` while the status is `queued` or `running` — the
+text. Poll `get_logs` while the status is `queued` or `running` — the
 log grows as the deploy progresses. `success` means the deploy is done, and
 on `failed` the reason is in the log tail. `get_app` also shows an in-flight
 deploy: the channel's `pending_deploy` field holds `{deploy_id, sha, status}`

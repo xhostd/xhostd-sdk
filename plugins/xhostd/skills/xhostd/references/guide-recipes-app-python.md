@@ -26,7 +26,7 @@ from fastapi import FastAPI
 app = FastAPI()
 
 
-# The health check probes GET / and needs a 2xx. A pure API whose routes
+# The health check probes GET / and needs a 2xx or 3xx. A pure API whose routes
 # all live under /api fails the deploy even though the process is running,
 # unless it creates the file named by $XHOSTD_READY_FILE instead.
 @app.get("/")
@@ -115,15 +115,15 @@ create_app(name="recipe-python", template="app")
 Keep the app `id` and the `prod` channel `id`, because every later call takes
 one or both.
 
-**2. Mint a credential.** The token is your git password, and it is valid for
-30 days.
-
-```text
-get_credentials()
-→ {"token": "xh_...", "username": "docs",
-   "expires_at": "2026-08-30T17:26:27Z",
-   "scopes": ["blob:*", "deploy:*", "repo:*", "db:*", "channel:*", "stats:read"]}
-```
+**2. Have your token ready.** The token authenticates git, Postgres, and the
+platform API. Use your own
+token from the `XHOSTD_TOKEN` environment variable. A person mints it on the
+console [/tokens](https://console.xhostd.com/tokens) page and exports it; a
+registered agent exports the token that registration returned. No tool result
+carries a token. You can also mint a scoped, short-lived token with the request
+that `get_credentials` describes, and send it the same way from a variable of
+its own; the [Git guide](https://docs.xhostd.com/guides/git) shows the
+commands.
 
 **This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
 first git transport, because the private half of the key never enters a tool
@@ -131,14 +131,14 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Put the token in the **password** field of the remote URL:
-`https://<username>:<token>@git.xhostd.com/<username>/<app>.git`.
+Send the token as a header on each git command:
+`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>`.
 
 **3. Clone, commit and push.** A new xhostd repo is empty, and git tells you so.
 The `warning:` line below is correct, and it is not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-python.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-python.git
 Cloning into 'recipe-python'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -149,13 +149,13 @@ Write the four files into that directory. Then commit and push them:
 $ cd recipe-python
 $ git add -A
 $ git commit -m "fastapi service on the app template"
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 ```
 
-Do not put the token in a file that you commit, and do not paste it.
-`$XHOSTD_TOKEN` above is the value from `get_credentials`. A remote URL with a
-real token goes into `.git/config`, into your shell history, and into the
-output of every `git remote -v`.
+Never write the token value itself into a command, a file that you commit, or
+text that you paste. `$XHOSTD_TOKEN` stays in the environment, so the token
+never lands in `.git/config`, in your shell history, or in the output of
+`git remote -v`.
 
 **4. Deploy the branch.**
 
@@ -171,16 +171,17 @@ deploy(app_name="recipe-python",
 `ref` is a branch name, and xhostd resolves it to the current head of that
 branch. After a push, you do not need to know the sha. `deploy` also accepts
 `sha` when you want an exact commit, and `sha` has priority if you give both.
-The deploy then runs in the background. Use `get_deploy_log` to follow it:
+The deploy then runs in the background. Use `get_logs` with `source="deploy"` to follow it:
 the first line of its reply states the outcome, and you poll while the
 status is `queued` or `running`.
 
 ## Verify it
 
 ```text
-get_deploy_log(app_name="recipe-python",
-               channel="prod",
-               deploy_id="d8ceb2cf-3614-41a6-a916-9205a23212a6")
+get_logs(app_name="recipe-python",
+         channel="prod",
+         source="deploy",
+         deploy_id="d8ceb2cf-3614-41a6-a916-9205a23212a6")
 ```
 
 This is that deploy. The reply starts with a status header, then the log. The
