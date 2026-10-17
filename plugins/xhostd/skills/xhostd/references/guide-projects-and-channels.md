@@ -17,7 +17,7 @@ hostnames yourself. Platform sites use `xhostd.com`; tenant app addresses use
 
 ## Create and inspect a project
 
-Connect an agent using the [setup guide](https://docs.xhostd.com/getting-started).
+[Connect your agent](https://xhostd.com/integrations) to xhostd.
 Ask it to create a project with the template your workload needs. Choose a
 [working recipe](https://docs.xhostd.com/guides) before writing the build and
 launch scripts.

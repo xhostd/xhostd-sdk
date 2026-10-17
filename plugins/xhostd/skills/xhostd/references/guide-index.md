@@ -8,7 +8,7 @@ follow a recipe for you. The fastest method is to give your agent the recipe
 and say "do this".
 
 If your agent has no connection to xhostd, start with
-[Getting Started](https://docs.xhostd.com/getting-started). Then come back
+[Connect your agent](https://xhostd.com/integrations). Then come back
 here. An agent that works with no person at a browser opens its own account:
 [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
 

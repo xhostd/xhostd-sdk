@@ -5,7 +5,7 @@ different decisions. Choose the smallest scope that supports your task.
 
 ## Connect your account
 
-Follow the [tool setup](https://docs.xhostd.com/getting-started) instructions.
+Follow the steps to [connect your agent](https://xhostd.com/integrations).
 Account sign-in authenticates you to xhostd; it is not the same as adding Google
 login to your own application.
 
