@@ -20,15 +20,13 @@ wait for a failure.
    below. Reuse `~/.ssh/xhost_ed25519` if that file exists. If the file
    is absent, make a keypair and call `register_ssh_key` once.
 3. **The network blocks outbound port 22, or an SSH push fails.** Push
-   over HTTPS with a token in the URL. Read **The clone / push URL**
-   below.
+   over HTTPS with a token: your own token from the `XHOSTD_TOKEN`
+   environment variable, or a scoped, short-lived token that you mint
+   from it. Read **The clone / push URL** below.
 
 SSH is the first transport because a private key never enters a tool
-call. An HTTPS remote holds a 30-day token, and a content filter in your
-AI tool can refuse a tool call that holds a secret. Such a refusal is
-not a clean error that your tool can act on. Your tool can stop, or it
-can ask the person to run a command by hand. One extra step at the start
-is better than that risk.
+call, and an SSH push needs no token. HTTPS needs a token in the
+environment, and that token expires.
 
 The SSH path costs no extra step in the steady state. Your tool makes a
 keypair only when the key file is absent. A key belongs to the account
@@ -37,26 +35,56 @@ that machine.
 
 ## Mint credentials
 
-You mint one **unified credential**. A single `xh_` token is your git
+You use one **unified credential**. A single `xh_` token is your git
 password over HTTPS, your Postgres password, and your platform API
 bearer. It carries the full default scopes: repo, deploy, channel, db,
 blob, and stats read. Thus the same token can push code, deploy code,
 and manage your apps. An SSH push needs no token; read **Push over SSH**
 below.
 
-- **From your AI tool:** call the `get_credentials` MCP tool. It
-  returns `{token, username, expires_at, scopes}`.
+Keep the token in the `XHOSTD_TOKEN` environment variable, and never
+write its value into a command. It comes from one of two places:
+
 - **From the console:** open
-  [console.xhostd.com/tokens](https://console.xhostd.com/tokens) and
-  create a token.
+  [console.xhostd.com/tokens](https://console.xhostd.com/tokens),
+  create a token, and export it as `XHOSTD_TOKEN`.
 - **From an account you registered with your key:** the token
-  `POST /registrations` answered. Renew it with `POST /auth/ssh-key`; read
+  `POST /registrations` answered. Export it as `XHOSTD_TOKEN`. Renew it
+  with `POST /auth/ssh-key`; read
   [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
+
+You can use that token directly, or mint a scoped, short-lived token
+from it, and both work the same way. A scoped token suits an unattended
+job, or a token that you hand to another process. No MCP tool result
+carries a token: the `get_credentials` MCP tool describes the
+`POST /credentials` request, and you run that request with your own
+token. Keep the minted token in a variable of its own, so its value
+stays out of every command and out of the output:
+
+```sh
+XHOSTD_GIT_TOKEN="$(curl -sS --fail-with-body -X POST \
+  -H "Authorization: Bearer $XHOSTD_TOKEN" \
+  --json '{"scopes":["repo:*"],"expires_in":3600}' \
+  https://api.xhostd.com/credentials \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(json.dumps(d)) if "token" not in d else print(d["token"])')" \
+  && git -c http.extraHeader="Authorization: Bearer $XHOSTD_GIT_TOKEN" push https://git.xhostd.com/<username>/<app>.git HEAD:master
+```
+
+Run the mint and the command that uses the token as one shell command. A
+shell variable does not survive into a new shell, and an agent's tool
+often starts a new shell for each command. If the mint fails, `python3`
+prints the error envelope to stderr and exits, so `&&` stops before the
+push.
+
+`"scopes":["repo:*"]` holds the token to git access, and
+`"expires_in":3600` ends it after one hour. For Postgres, mint with
+`"scopes":["db:*"]` into a variable such as `XHOSTD_DB_TOKEN`, and chain
+`&& PGPASSWORD="$XHOSTD_DB_TOKEN" psql ...` the same way.
 
 The token starts with `xh_` and is valid for up to **30 days**. A mint
 never outlives its caller, so a token you mint from another token expires
 with it: read `expires_at` in the response for the exact time. After it
-expires, mint a new token.
+expires, get a new token.
 
 ## Push over SSH
 
@@ -135,8 +163,18 @@ the next section describes, or use the `commit_files` tool.
 This is the HTTPS transport. Push over HTTPS where the network blocks
 outbound port 22, or where an SSH push fails.
 
-Put the token in the **password** field of the URL. This is the one
-important detail:
+An agent sends its own token from `XHOSTD_TOKEN` as a header, so the
+token value never appears in a command or in `.git/config`:
+
+```sh
+git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push https://git.xhostd.com/<username>/<app>.git HEAD:master
+```
+
+A scoped token that you mint works the same way from its own variable,
+as **Mint credentials** shows.
+
+A person at a terminal can also put the token in the **password** field
+of the URL:
 
 ```
 https://<username>:<token>@git.xhostd.com/<username>/<app>.git
@@ -198,18 +236,20 @@ is the same on every surface:
 git config http.extraHeader "Authorization: Bearer <token>"
 ```
 
-Of the two HTTPS forms, the Basic-password form above is the usual one,
-because git's credential helpers use it. Use the Bearer header only if
-your tools already add an `Authorization` header.
+For a person, the Basic-password form is the usual one, because git's
+credential helpers use it. An agent uses the Bearer header with
+`$XHOSTD_TOKEN`, as the start of this section shows, because the token
+value then stays out of every command and file.
 
 ## Renew an expired token
 
-When a token expires, a push returns `401`. Mint a new token with
-`get_credentials`, or with the console. An agent that registered with its
-key signs a new login message instead;
+When a token expires, a push returns `401`. Create a new token on the
+console [/tokens](https://console.xhostd.com/tokens) page and export it
+as `XHOSTD_TOKEN`. An agent that registered with its key signs a new
+login message instead;
 [Register as an agent](https://docs.xhostd.com/guides/register-as-agent)
 shows the command.
-Then update the remote URL:
+If your remote URL holds the old token, update it:
 
 ```sh
 git remote set-url xhostd "https://<username>:<new-token>@git.xhostd.com/<username>/<app>.git"

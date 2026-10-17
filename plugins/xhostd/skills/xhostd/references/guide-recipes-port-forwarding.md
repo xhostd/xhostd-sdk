@@ -17,7 +17,7 @@ The app is `recipe-tcp`, the template is `app`, and the channel is `prod`.
 exists, so you can give it to your users.
 
 Two conditions control this recipe before your code is important. First, your
-**plan** must include port forwarding; check `get_account_overview`. Second, a
+**plan** must include port forwarding; check `get_stats(view="overview")`. Second, a
 person must set the project's **port forwarding toggle** to on in the web
 console. The sections below give the full detail on both. There is no tool for
 the toggle, and the platform refuses it to an agent, so an agent must ask the
@@ -195,7 +195,7 @@ Five steps. The first one is not a tool call.
 thing:
 
 - **`port_forwarding_available`** — the account's **plan** permits port
-  forwarding. `get_account_overview` reports the same availability.
+  forwarding. `get_stats(view="overview")` reports the same availability.
 - **`port_forwarding_enabled`** — the **project toggle**. Its default is
   **false**, also when the plan permits port forwarding.
 
@@ -264,18 +264,25 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Your credential is the token from `get_credentials()`. Put it in the
-**password** field of the remote URL:
+Your credential is your own token in the `XHOSTD_TOKEN` environment variable.
+A person mints it on the console [/tokens](https://console.xhostd.com/tokens)
+page and exports it; a registered agent exports the token that registration
+returned. No tool result carries a token. Send it as a header on each git
+command:
 
 ```text
-https://<username>:<token>@git.xhostd.com/<username>/<app>.git
+git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
 ```
+
+You can also mint a scoped, short-lived token with the request that
+`get_credentials` describes, and send it the same way from a variable of its
+own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 A new xhostd repo is empty, and git reports this. The warning is correct, and it
 is not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-tcp.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-tcp.git
 Cloning into 'recipe-tcp'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -291,14 +298,14 @@ $ git commit -m "tcp line service on the forward port"
  2 files changed, 87 insertions(+)
  create mode 100755 launch.sh
  create mode 100644 server.py
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 To https://git.xhostd.com/docs/recipe-tcp.git
  * [new branch]      master -> master
 ```
 
-Do not commit or paste the token. `$XHOSTD_TOKEN` above is the value from
-`get_credentials`. A remote URL with a real token in it stays in `.git/config`,
-in your shell history, and in the output of every `git remote -v`.
+Never write the token value itself into a command, a commit, or pasted text.
+`$XHOSTD_TOKEN` stays in the environment, so the token never lands in
+`.git/config`, in your shell history, or in the output of `git remote -v`.
 
 ### Step 3 — deploy the branch
 
@@ -480,11 +487,11 @@ purpose of a raw TCP port.
 
 ### The log in the container
 
-`get_runtime_log` reads the log of the live container. With no `command`, it
-reports what you can read, and it reads nothing:
+`get_logs` with `source="runtime"` reads the log of the live container. With
+no `command`, it reports what you can read, and it reads nothing:
 
 ```text
-get_runtime_log(app_name="recipe-tcp", channel="prod")
+get_logs(app_name="recipe-tcp", channel="prod", source="runtime")
 → container #2 (xhost-cb2ecd27-a9832287-00000002, id 5b0e9c34a1f8) — running
   started: 2026-10-04T06:12:30.055278693Z
   readable containers: #1, #2 (pass container_index to read an older one)
@@ -494,7 +501,7 @@ get_runtime_log(app_name="recipe-tcp", channel="prod")
 Give it a command, and it returns the log:
 
 ```text
-get_runtime_log(..., command="tail -n 20 app.log")
+get_logs(..., source="runtime", command="tail -n 20 app.log")
 → log file: /log/app.log (258 bytes)
   2026-10-04T06:12:30.267725334Z [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
   2026-10-04T06:12:30.308825779Z 2026-10-04 06:12:30,308 INFO listening on 0.0.0.0:7000
@@ -547,7 +554,7 @@ tests `connect()` reports the endpoint as healthy.
 The app saw nothing of this:
 
 ```text
-get_runtime_log(..., command="grep -c 'connection from' app.log")
+get_logs(..., source="runtime", command="grep -c 'connection from' app.log")
 → log file: /log/app.log (258 bytes)
   1
 ```

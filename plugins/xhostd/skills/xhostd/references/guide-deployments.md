@@ -17,7 +17,7 @@ across review and execution. A branch reference resolves at deploy time.
 ## Follow the operation
 
 The deployment call returns queued work, not proof of success. Read
-[get_deploy_log](https://docs.xhostd.com/mcp-tools#get_deploy_log) and inspect its
+[get_logs](https://docs.xhostd.com/mcp-tools#get_logs) with `source="deploy"` and inspect its
 status until it is terminal. Build output and runtime output answer different
 questions. A missing build log does not establish that the running app is healthy.
 

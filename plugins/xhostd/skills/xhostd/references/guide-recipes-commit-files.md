@@ -168,7 +168,7 @@ deploys once. `ref="master"` deploys the branch's current head and binds the
 channel to `master`, so a later deploy can omit both. `sha` wins if you give
 both. `deploy`
 returns as soon as it queues the deploy, and the work runs asynchronously.
-Follow it with `get_deploy_log`: the first line of its reply states the
+Follow it with `get_logs` and `source="deploy"`: the first line of its reply states the
 outcome.
 
 **4. Change one file, and only that file.** The platform does not change a
@@ -277,9 +277,10 @@ match is far more likely to land the first time.
 ## Verify it
 
 ```text
-get_deploy_log(app_name="recipe-commit-files",
-               channel="prod",
-               deploy_id="df8750a5-ada3-45fe-b3b1-1543ec14873d")
+get_logs(app_name="recipe-commit-files",
+         channel="prod",
+         source="deploy",
+         deploy_id="df8750a5-ada3-45fe-b3b1-1543ec14873d")
 ```
 
 That is the first deploy. The reply starts with a status header, then the
@@ -309,7 +310,7 @@ started: 2026-07-31T23:20:42Z   finished: 2026-07-31T23:20:44Z
 
 The first line states the outcome. `status` is one of `queued`, `running`,
 `success`, or `failed`. Read the status from that header, not from the log
-text. Poll `get_deploy_log` while the status is `queued` or `running`.
+text. Poll `get_logs` while the status is `queued` or `running`.
 `success` means the deploy is done, and on `failed` the reason is in the log
 tail.
 
@@ -386,7 +387,7 @@ know which commit is live, call `get_app` for the channel's `current_sha`.
 Call `list_files` for the content of the repo. If the two disagree, the repo
 is ahead and a deploy is absent. A non-null `pending_deploy` on the channel
 means the deploy is in flight and `current_sha` has not caught up yet — poll
-`get_deploy_log` rather than starting another deploy.
+`get_logs` with `source="deploy"` rather than starting another deploy.
 
 ### You send the whole file on every edit
 

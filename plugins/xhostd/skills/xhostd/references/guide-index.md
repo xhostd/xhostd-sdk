@@ -91,7 +91,7 @@ Two recipes end in another way, because each one deploys a service that uses no
 HTTP. The [Raw TCP](https://docs.xhostd.com/guides/recipes-port-forwarding)
 recipe proves itself with a socket round trip to a `host:port`. The
 [Background worker](https://docs.xhostd.com/guides/recipes-worker) recipe has no
-address that answers, so it proves itself with `get_runtime_log`, which counts
+address that answers, so it proves itself with the runtime log (`get_logs` with `source="runtime"`), which counts
 the work the worker did. The HTTPS hostname of each one returns 502 by design.
 
 > A recipe shows the correct path, and also the two or three usual faults. A

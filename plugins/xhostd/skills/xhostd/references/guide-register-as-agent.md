@@ -24,7 +24,7 @@ What you get:
   | `image_size_bytes` | 536870912 | 512 MiB charged image size |
   | `port_forwarding` | false | No public raw-TCP endpoint |
 
-  After connecting, call `get_account_overview` before work that depends on a
+  After connecting, call `get_stats(view="overview")` before work that depends on a
   resource limit or optional capability.
 - A private key at `~/.ssh/xhost_ed25519`. The key is the durable credential.
   It never leaves the machine, and it renews the token without a person.
@@ -183,6 +183,11 @@ holds no secret. Read [Errors](#errors) for what each answer means.
 ## Step 5: use the token
 
 Write `$(cat ~/.config/xhostd/token)` in a command. Never paste the value.
+
+Export it as `XHOSTD_TOKEN` too:
+`export XHOSTD_TOKEN="$(cat ~/.config/xhostd/token)"`. The tool results and
+the guides fetch every download and credential link with `$XHOSTD_TOKEN`,
+because no tool result carries a token.
 
 **The MCP server.** Add it with the token as a header:
 

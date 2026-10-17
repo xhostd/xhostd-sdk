@@ -4,7 +4,7 @@ This is the underlying HTTP API that the MCP tools wrap. For normal agent usage,
 
 Base URL: `https://api.xhostd.com`
 
-All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server) or a unified credential minted via the `get_credentials` MCP tool (git + Postgres + object storage + downloads + platform API, full default scopes, up to 30 days), or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Pass `scopes` and `expires_in` to the `get_credentials` tool for a narrower, shorter-lived credential.
+All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send `-H "Authorization: Bearer $XHOSTD_TOKEN"`; never write the value into a command. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credentials` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
 
 All error responses use the envelope: `{"error": {"code": "<code>", "message": "<message>"}}`
 
@@ -74,7 +74,7 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
 
 - `name` (string, required) — Must be a valid DNS label and must not use a reserved prefix (see Hostname Rules)
 - `branch` (string, optional) — The branch `prod` deploys. It follows the branch rule in "git_ref_binding Format". Omit it and `prod` has no branch (`git_ref_binding: null`) until the first deploy with `ref` binds it. An invalid name answers 400 and creates nothing.
-- `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"` (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`. The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build** time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template builds the `Dockerfile` at the repo root on every deploy and runs the image with its own `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` is still injected at the same value, so existing apps keep working, but it is deprecated and will be removed — use `$XHOSTD_HTTP_PORT` in new code) and answer `GET /` with a 2xx, **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy listener; create it once the app is actually running, not at the top of the start command. Such a channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are injected at run time only — never as build args, so secrets are unavailable during the build and must never be baked into the image. Charged image size (total minus warm-base layers) follows the current account entitlement; plugin workflows read the current cap from `get_account_overview`. Match every `FROM` to a warm base image — including a build-only stage in a multi-stage build, since every stage that names one starts with no pull: `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position, build duration, image size vs cap) into the deploy log.
+- `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"` (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`. The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build** time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template builds the `Dockerfile` at the repo root on every deploy and runs the image with its own `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` is still injected at the same value, so existing apps keep working, but it is deprecated and will be removed — use `$XHOSTD_HTTP_PORT` in new code) and answer `GET /` with a 2xx or 3xx (the request carries the channel's hostname as its `Host` header, and a redirect is never followed), **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy listener; create it once the app is actually running, not at the top of the start command. Such a channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are injected at run time only — never as build args, so secrets are unavailable during the build and must never be baked into the image. Charged image size (total minus warm-base layers) follows the current account entitlement; plugin workflows read the current cap from `get_stats(view="overview")`. Match every `FROM` to a warm base image — including a build-only stage in a multi-stage build, since every stage that names one starts with no pull: `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position, build duration, image size vs cap) into the deploy log.
 
 **Response (200):**
 ```json
@@ -577,9 +577,9 @@ Set (upsert) an environment variable or secret on an app.
 }
 ```
 
-- `key` (string, required) — Must match `^[A-Z_][A-Z0-9_]*$`. Reserved keys (system-injected) are rejected: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`, `XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOST_USER`, `XHOST_SHA`, `XHOST_HTTP_PORT`, `PORT`, `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`, `DATABASE_URL`, `DATABASE_URL_READONLY`, `DATABASE_URL_DIRECT`, `DATABASE_HOST`, `DATABASE_PASSWORD`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`. Every other key that starts with `XHOSTD_` is reserved too.
+- `key` (string, required) — Must match `^[A-Z_][A-Z0-9_]*$`. Reserved keys (system-injected) are rejected: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`, `XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOSTD_HOSTNAME`, `XHOSTD_URL`, `XHOSTD_DOMAINS`, `XHOST_USER`, `XHOST_SHA`, `XHOST_HTTP_PORT`, `PORT`, `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`, `DATABASE_URL`, `DATABASE_URL_READONLY`, `DATABASE_URL_DIRECT`, `DATABASE_HOST`, `DATABASE_PASSWORD`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`. Every other key that starts with `XHOSTD_` is reserved too.
 - `value` (string, required) — The value to set (stored encrypted). Capped at 16 KiB of UTF-8, per value.
-- `kind` (string, optional) — `env` (plain variable) or `secret`. Omitted, an existing key keeps its kind and a new key defaults to `env`. Secret values are omitted from list responses (metadata only); the single reveal path is `GET /apps/{app_id}/env/{key}/value` (the web console's reveal uses the same endpoint), and each reveal is audit-logged.
+- `kind` (string, optional) — `env` (plain variable) or `secret`. Omitted, an existing key keeps its kind and a new key defaults to `env`. `secret` turns a plain variable into a secret. `env` over a secret in the same scope answers 409: a secret never becomes a plain variable in place. Secret values are omitted from list responses (metadata only); the single reveal path is `GET /apps/{app_id}/env/{key}/value` (the web console's reveal uses the same endpoint), and each reveal is audit-logged.
 - `channel_id` (string, optional) — Omit for an app-level default; set to a channel id for a per-channel override. At deploy time the channel override wins over the app default, and system-injected keys win over both.
 
 **Response:** 204 No Content
@@ -587,12 +587,64 @@ Set (upsert) an environment variable or secret on an app.
 **Errors:**
 - `bad_request` (400) — invalid key format or reserved key
 - `not_found` (404) — channel not found on this app
+- `conflict` (409) — `kind` is `env` and the key holds a secret in that scope; delete it first, or upload a new secret value
+
+---
+
+## PUT /apps/{app_id}/env/{key}
+
+Store one env value from the raw request body, so a secret goes from a file straight to xhostd and never through a tool call. `set_secret` returns this request.
+
+**Required scope:** `deploy:*`
+
+**Query parameters:**
+- `kind` (optional) — `secret` (the default) or `env`. The default never keeps an existing kind, so an upload over a plain variable makes it a secret.
+- `channel_id` (optional) — A channel id for a per-channel override; without it, the app-level default.
+
+**Request body:** the raw value, byte for byte, with `Content-Type: application/octet-stream`, `text/plain` (no charset, or `utf-8`), or none. xhostd stores a trailing newline too, so strip it from a one-line value.
+
+```bash
+curl -sS --fail-with-body -X PUT \
+  -H "Authorization: Bearer $XHOSTD_TOKEN" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @stripe-key.txt \
+  "https://api.xhostd.com/apps/<app_id>/env/STRIPE_KEY?kind=secret"
+```
+
+**Response:** 204 No Content. The response never carries the value.
+
+**Errors:**
+- `bad_request` (400) — invalid key format or reserved key, a body past 16 KiB, an empty body (an empty plain value goes through `POST /apps/{app_id}/env`), a body that is not UTF-8, or another `Content-Type` such as a form or JSON. curl's `--data-binary` sends a form type unless you set the header.
+- `scope_denied` (403) — the token lacks `deploy:*`
+- `not_found` (404) — app, or channel on this app, not found
+- `conflict` (409) — `kind=env` and the key holds a secret in that scope
+
+---
+
+## POST /apps/{app_id}/env/{key}/generate
+
+Store a new random secret under a new key: 43 URL-safe characters, 256 bits. The response never carries the value; read it with the console's audited reveal.
+
+**Required scope:** `deploy:*`
+
+**Query parameters:**
+- `channel_id` (optional) — A channel id for a per-channel override; without it, the app-level default.
+
+**Request body:** none.
+
+**Response:** 204 No Content
+
+**Errors:**
+- `bad_request` (400) — invalid key format, a reserved key, or a request body
+- `scope_denied` (403) — the token lacks `deploy:*`
+- `not_found` (404) — app, or channel on this app, not found
+- `conflict` (409) — the key already has a value in that scope. Generate creates a new key only: delete the key first to rotate it.
 
 ---
 
 ## DELETE /apps/{app_id}/env/{key}
 
-Delete an environment variable from an app.
+Delete an environment variable or a secret from an app.
 
 **Required scope:** `deploy:*`
 
@@ -684,7 +736,7 @@ Return the env snapshot recorded when a deploy started — what the app actually
     {"key": "MY_VAR", "kind": "env", "source": "app", "value": "my-value"},
     {"key": "API_TOKEN", "kind": "secret", "source": "channel", "value": null}
   ],
-  "system_keys": ["DATABASE_URL", "S3_BUCKET", "XHOSTD_SHA", "XHOSTD_USER", "XHOST_SHA", "XHOST_USER"]
+  "system_keys": ["DATABASE_URL", "S3_BUCKET", "XHOSTD_DOMAINS", "XHOSTD_HOSTNAME", "XHOSTD_SHA", "XHOSTD_URL", "XHOSTD_USER", "XHOST_SHA", "XHOST_USER"]
 }
 ```
 
@@ -698,7 +750,7 @@ Return the env snapshot recorded when a deploy started — what the app actually
 
 ## GET /apps/{app_id}/channels/{channel_id}/postgres/snapshots
 
-List a channel's pre-deploy Postgres snapshots, newest first. A snapshot is taken automatically before every non-static deploy. Retention follows the current account entitlement; plugin workflows read the current count and retention window from `get_account_overview`.
+List a channel's pre-deploy Postgres snapshots, newest first. A snapshot is taken automatically before every non-static deploy. Retention follows the current account entitlement; plugin workflows read the current count and retention window from `get_stats(view="overview")`.
 
 **Request body:** None
 
@@ -845,7 +897,8 @@ Attach a custom domain to a channel (max 5 per channel; domains are globally uni
     "a_values": ["198.51.100.7"]
   },
   "created_at": "2025-01-16T10:30:00Z",
-  "verified_at": null
+  "verified_at": null,
+  "notice": null
 }
 ```
 
@@ -864,6 +917,8 @@ Re-run the TXT + routing DNS check for an attached domain and update its status.
 **Required scope:** `deploy:*`
 
 **Response (200):** Same shape as the attach response, with updated `status`, `reason`, and `verified_at`. `status` flips `pending → verified` on a passing check. `reason` uses a closed vocabulary: `txt_nxdomain`, `txt_token_mismatch`, `dns_not_pointing`, `domain_nxdomain` (the four definitive failures — the only ones that downgrade a verified domain), plus the transient `txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`.
+
+`notice` is a string when this call moved the domain into or out of `verified`, and `null` otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a verify does not restart the container. Relay it, and deploy the channel when the app checks the `Host` header.
 
 **Errors:**
 - `not_found` (404) — app/channel/domain not found
@@ -894,9 +949,12 @@ Detach a custom domain. Removes the routing and stops certificate renewals; the 
 **Response (200):**
 ```json
 {
-  "ok": true
+  "ok": true,
+  "notice": null
 }
 ```
+
+- `notice` — a string when the removed domain was verified, and `null` otherwise. The app's `XHOSTD_DOMAINS` drops the domain at the channel's next deploy.
 
 **Errors:**
 - `not_found` (404) — app/channel/domain not found
@@ -1395,7 +1453,7 @@ Submit free-text feedback to the xhostd team about platform friction (many itera
 **Request body:**
 ```json
 {
-  "message": "Deploy logs don't stream — had to poll get_deploy_log repeatedly.",
+  "message": "Deploy logs don't stream — had to poll get_logs repeatedly.",
   "subject": "Deploy logs don't stream",
   "app_id": "uuid"
 }
@@ -1541,13 +1599,13 @@ The storage cap warns and blocks nothing: no write fails and no deploy fails. Eg
 
 Return the subscription catalog and the caps each entry grants, lowest rank first.
 
-The route takes **no token**, reads no database, and answers every caller the same body. It carries no price. This endpoint is documented for HTTP API accuracy but is outside plugin workflows: plugins must not display or compare the subscription catalog. Use `get_account_overview` for the authenticated account's current entitlement, limits, headroom, and feature availability.
+The route takes **no token**, reads no database, and answers every caller the same body. It carries no price. This endpoint is documented for HTTP API accuracy but is outside plugin workflows: plugins must not display or compare the subscription catalog. Use `get_stats(view="overview")` for the authenticated account's current entitlement, limits, headroom, and feature availability.
 
 **Request body:** None
 
 **Response (200):** an object with a `plans` array. Each row includes the entitlement identifier, rank, resource limits, retention settings, feature flags, and whether agent registration alone can create that entitlement. The catalog is intentionally not reproduced here.
 
-**Plugin workflow:** call `get_account_overview`. It composes the applicable row with `/me/stats`, `/me/usage/resources`, `/apps`, `/me/usage`, and `/me/blob/storage`, and returns only the authenticated account's current limits beside current usage in `plan_headroom`.
+**Plugin workflow:** call `get_stats(view="overview")`. It composes the applicable row with `/me/stats`, `/me/usage/resources`, `/apps`, `/me/usage`, and `/me/blob/storage`, and returns only the authenticated account's current limits beside current usage in `plan_headroom`.
 
 ---
 

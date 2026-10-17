@@ -43,7 +43,7 @@ import express from "express";
 
 const app = express();
 
-// The health check probes GET / and needs a 2xx. An API whose routes all
+// The health check probes GET / and needs a 2xx or 3xx. An API whose routes all
 // live under /api will fail the deploy even though the process is running,
 // unless it creates the file named by $XHOSTD_READY_FILE instead.
 app.get("/", (req, res) => {
@@ -123,15 +123,15 @@ create_app(name="recipe-node", template="app")
 Keep the app `id` and the `prod` channel `id`, because each later call takes one
 or both.
 
-**2. Get a credential.** The token is your git password, and it is valid for
-30 days.
-
-```text
-get_credentials()
-→ {"token": "xh_...", "username": "docs",
-   "expires_at": "2026-08-30T17:26:27Z",
-   "scopes": ["blob:*", "deploy:*", "repo:*", "db:*", "channel:*", "stats:read"]}
-```
+**2. Have your token ready.** The token authenticates git, Postgres, and the
+platform API. Use your own
+token from the `XHOSTD_TOKEN` environment variable. A person mints it on the
+console [/tokens](https://console.xhostd.com/tokens) page and exports it; a
+registered agent exports the token that registration returned. No tool result
+carries a token. You can also mint a scoped, short-lived token with the request
+that `get_credentials` describes, and send it the same way from a variable of
+its own; the [Git guide](https://docs.xhostd.com/guides/git) shows the
+commands.
 
 **This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
 first git transport, because the private half of the key never enters a tool
@@ -139,14 +139,14 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Put it in the **password** field of the remote URL:
-`https://<username>:<token>@git.xhostd.com/<username>/<app>.git`.
+Send the token as a header on each git command:
+`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>`.
 
 **3. Clone, commit and push.** A new xhostd repo is empty, and git reports this.
 The warning is correct, and it is not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-node.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-node.git
 Cloning into 'recipe-node'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -157,12 +157,12 @@ Write the four files into that directory. Then commit them and push them:
 $ cd recipe-node
 $ git add -A
 $ git commit -m "express service on the app template"
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 ```
 
-Do not commit or paste the token. `$XHOSTD_TOKEN` above is the value from
-`get_credentials`. A remote URL with a real token in it stays in `.git/config`,
-in your shell history, and in the output of every `git remote -v`.
+Never write the token value itself into a command, a commit, or pasted text.
+`$XHOSTD_TOKEN` stays in the environment, so the token never lands in
+`.git/config`, in your shell history, or in the output of `git remote -v`.
 
 **4. Deploy the branch.**
 
@@ -178,16 +178,17 @@ deploy(app_name="recipe-node",
 `ref` is a branch name. xhostd resolves it to the current head of that branch,
 so after a push you do not need the sha. `sha` is also permitted, when you want
 an exact commit, and `sha` has priority if you give both. The deploy then runs
-in the background. Read its progress with `get_deploy_log`: the first line of
+in the background. Read its progress with `get_logs` and `source="deploy"`: the first line of
 its reply states the outcome, and you poll while the status is `queued` or
 `running`.
 
 ## Verify it
 
 ```text
-get_deploy_log(app_name="recipe-node",
-               channel="prod",
-               deploy_id="57c7a687-81a7-46bc-a666-7202594a44aa")
+get_logs(app_name="recipe-node",
+         channel="prod",
+         source="deploy",
+         deploy_id="57c7a687-81a7-46bc-a666-7202594a44aa")
 ```
 
 This is that deploy. The reply starts with a status header, then the log. The
@@ -255,11 +256,11 @@ process must bind, immediately before `launch.sh` runs. Your own line
 replaced a running container, so `stop_and_remove old container` comes after
 the route, and the old container served every request until then.
 
-To find out if the app is alive, and to read no log, call `get_runtime_log` with
-**no** `command`:
+To find out if the app is alive, and to read no log, call `get_logs` with
+`source="runtime"` and **no** `command`:
 
 ```text
-get_runtime_log(app_name="recipe-node", channel="prod")
+get_logs(app_name="recipe-node", channel="prod", source="runtime")
 ```
 
 A call with no command starts no container on the host, and it returns only the

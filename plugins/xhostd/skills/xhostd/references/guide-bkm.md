@@ -13,7 +13,7 @@ reason. A rule without a reason is easy to forget when it is not convenient.
 
 Do these checks in the given order. A different order costs you the most time.
 
-**1. Did the deploy finish?** `get_deploy_log(app_name, channel, deploy_id)`
+**1. Did the deploy finish?** `get_logs(app_name, channel, source="deploy", deploy_id)`
 answers in its first line: `deploy <id> — <status> (sha <sha>)`, with a
 status of `queued`, `running`, `success`, `failed`, or `superseded`. Read the
 status from that header, not from the log text. Poll while the status is
@@ -26,7 +26,7 @@ the channel's `pending_deploy` field holds `{deploy_id, sha, status}` until
 the deploy finishes, so an old `current_sha` next to a non-null
 `pending_deploy` means the deploy has not finished, not that it failed.
 
-**2. Is the container alive now?** Call `get_runtime_log(app_name, channel)`
+**2. Is the container alive now?** Call `get_logs(app_name, channel, source="runtime")`
 with **no** `command`. The platform starts no container to answer this call, so
 it is the cheapest call available. It returns the status header only:
 
@@ -46,7 +46,7 @@ limit)`. Read the header before you read one log line.
 the log itself:
 
 ```
-get_runtime_log(app_name="...", channel="prod", command="tail -n 200 app.log")
+get_logs(app_name="...", channel="prod", source="runtime", command="tail -n 200 app.log")
 ```
 
 The command runs in a temporary Debian container. The platform copies the
@@ -71,8 +71,8 @@ the fault worse, you can still read why the old container was correct. You can
 also read why the new container is not correct:
 
 ```
-get_runtime_log(app_name="...", channel="prod",
-                command="tail -n 200 app.log", container_index=1)
+get_logs(app_name="...", channel="prod", source="runtime",
+         command="tail -n 200 app.log", container_index=1)
 ```
 
 Without `container_index`, you get the highest available index. After a
@@ -261,9 +261,16 @@ wins.
 an app has a connected GitHub source, the platform refuses `commit_files`, and
 you put the code in GitHub.
 
-One call gives you the credential. `get_credentials` returns a 30-day token.
-Put the token in the **password** field of the remote URL. Never put the token
-in a file that you commit.
+Your credential is your own token in the `XHOSTD_TOKEN` environment variable:
+a person mints it on the console [/tokens](https://console.xhostd.com/tokens)
+page, and a registered agent exports the token that registration returned.
+Send it as a header,
+`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push ...`, and
+never write the token value into a command or a file that you commit. No tool
+result carries a token. You can also mint a scoped, short-lived token with the
+request that `get_credentials` describes, and send it the same way from a
+variable of its own; the [Git guide](https://docs.xhostd.com/guides/git) shows
+the commands.
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static) shows the
 full sequence, from the create step to the deploy step. The four steps are the
 same on every template.
@@ -291,9 +298,10 @@ database with no pooler the two values are equal, so code that reads
 lists what else the pooler changes.
 
 **Read the platform's variables by their `XHOSTD_` names.** The platform
-injects these into the container. Each one keeps the legacy `XHOST_` name it
-shipped under, at the same value, so an app that reads the legacy name keeps
-working. New code reads the `XHOSTD_` name.
+injects these into the container. A name that shipped under a legacy `XHOST_`
+name keeps it, at the same value, so an app that reads the legacy name keeps
+working. A name with no legacy name shows "—". New code reads the `XHOSTD_`
+name.
 
 | Variable | Legacy name | What it carries |
 |---|---|---|
@@ -302,6 +310,9 @@ working. New code reads the `XHOSTD_` name.
 | `XHOSTD_FORWARD_PORT` | `XHOST_FORWARD_PORT` | The container-side raw TCP port, `7000`. Not set on `static`. |
 | `XHOSTD_USER` | `XHOST_USER` | The username of the project owner. |
 | `XHOSTD_SHA` | `XHOST_SHA` | The commit that the deploy runs. |
+| `XHOSTD_HOSTNAME` | — | The channel's platform hostname. The deploy health probe sends it as the `Host` header. |
+| `XHOSTD_URL` | — | `https://` plus the channel's platform hostname, with no trailing slash. It never names a custom domain. |
+| `XHOSTD_DOMAINS` | — | The channel's platform hostname and its verified custom domains, comma-separated. Treat the value as a set: don't infer a primary domain from its position, and read the platform hostname from `XHOSTD_HOSTNAME` or `XHOSTD_URL`. Deploy again after you verify or remove a domain. |
 
 `PORT` is a deprecated alias of `XHOSTD_HTTP_PORT`, with the same value. The
 platform injects `PORT`, but it will remove the alias. New code must never read
@@ -359,10 +370,16 @@ result is worse than a failed deploy.
 
 ## Secrets and environment variables
 
-Set a secret with `set_env(..., secret=True)`. The MCP tools can never read a
-secret back, and `list_env` returns the metadata only. The tools can read a
-plain variable back. The platform encrypts both at rest. The difference is who
-can see the value later.
+Set a secret with `set_secret(app_name, key)`. It takes no value: it returns
+the request that uploads the value from a file with your own token, and a
+console link where a person pastes it. `set_secret(..., generate=True)` stores
+a random value instead. So a secret never passes through the conversation.
+The MCP tools can never read a secret back, and `list_env` returns the
+metadata only. `set_env` stores a plain variable: its value passes through the
+conversation, and the tools can read it back. Never give `set_env` a
+credential. The platform encrypts both kinds at rest. A secret is still an
+environment variable: `delete_env` deletes it, a channel override works the
+same way, and the app reads it at its next deploy.
 
 **Never commit a secret to the repo.** The build copies your repository into
 the image. On the `app` template, the Dockerfile that the platform makes does
@@ -373,7 +390,8 @@ cannot remove the key from that layer.
 **The platform rejects a reserved key; it does not ignore the key without a
 message.** The platform injects these keys, and `set_env` refuses to write
 them: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`,
-`XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOST_USER`, `XHOST_SHA`,
+`XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOSTD_HOSTNAME`, `XHOSTD_URL`,
+`XHOSTD_DOMAINS`, `XHOST_USER`, `XHOST_SHA`,
 `XHOST_HTTP_PORT`, `PORT`, `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`,
 `DATABASE_URL`, `DATABASE_URL_READONLY`, `DATABASE_URL_DIRECT`,
 `DATABASE_HOST`, `DATABASE_PASSWORD`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
@@ -422,14 +440,14 @@ near.
 
 The platform counts blob storage for the full account, across every channel.
 It applies the other limits per container or per image. Call
-`get_account_overview` for the current account's limits and remaining
+`get_stats(view="overview")` for the current account's limits and remaining
 headroom; do not infer them from a subscription catalog.
 
 **The memory limit applies to the live container, not to the build.** A build
 runs under a separate 4 GB budget. Thus an image that builds correctly can
 still run out of memory when it boots under a smaller runtime limit. The kernel
 then stops the container. Read the current memory limit from
-`get_account_overview`. The status header of the runtime log tells you when the
+`get_stats(view="overview")`. The status header of the runtime log tells you when the
 container exceeds it. Its exit-code line carries the note
 `(out of memory — the container hit its memory limit)`.
 
@@ -441,7 +459,7 @@ number, not the first.
 
 **The CPU limit is a time limit.** Your plan's CPU figure is a share of CPU
 time, not a count of cores you own. Read the current value from
-`get_account_overview` rather than assuming a fixed share.
+`get_stats(view="overview")` rather than assuming a fixed share.
 
 **Set the worker count yourself.** `nproc` reports the cores your container can
 run on, but `/proc/cpuinfo` still shows the full topology of the host. Thus a
@@ -450,7 +468,7 @@ workers and uses all the memory. Write `--workers 2`; do not let a library
 select the number.
 
 **Port forwarding is not on every plan.** Check
-`plan_headroom.port_forwarding` in `get_account_overview`. When it is false,
+`plan_headroom.port_forwarding` in `get_stats(view="overview")`. When it is false,
 the endpoint is unavailable and the request returns a plan error, not a port.
 
 ## Read a quota error
@@ -503,10 +521,10 @@ advance.
 
 **To roll the data back:** call `list_channel_snapshots(app_name, channel)` to
 see the snapshots. Then call
-`restore_channel_db(app_name, channel, snapshot_id)`.
+`restore_channel_snapshot(app_name, channel, snapshot_id, part="database")`.
 
 **Database restore is temporarily unavailable.** xhostd refuses every
-`restore_channel_db` call with `restore_unavailable` while it changes how a
+`restore_channel_snapshot` call with `part="database"` with `restore_unavailable` while it changes how a
 restore runs to make it safer. Do not retry the call. Tell the user to
 contact support for help with a restore.
 
@@ -532,9 +550,9 @@ the bad deploy changed the schema, a rewind leaves the old code with a new
 schema. Restore the database as well, or deploy a correction. `rewind` is not
 available on the `static` template, because that template keeps no image.
 
-**Restore the blob storage with `restore_channel_blobs`.** The tool rolls a
-channel's object storage back to a checkpoint and takes the same prod guard as
-the database restore. Pass the checkpoint id from `list_channel_snapshots`
+**Restore the blob storage with `restore_channel_snapshot` and
+`part="files"`.** The tool rolls a channel's object storage back to a
+checkpoint and takes the same prod guard as the database restore. Pass the checkpoint id from `list_channel_snapshots`
 whose `aligned_blob` flag is true; a checkpoint with no aligned blob leg
 answers `no_aligned_blob_snapshot` (409). You can also restore from the web
 console.

@@ -162,15 +162,15 @@ not tell you that the statement stopped early.
 
 The health tool names the cause. Three other tools give you the detail.
 
-- **`get_runtime_log`** — on the `container_exited_nonzero` finding, or on
+- **`get_logs` with `source="runtime"`** — on the `container_exited_nonzero` finding, or on
   `container_restart_loop`, read the error text that the app itself wrote.
   Call it with no `command` for the status header, then with
   `command="tail -n 200 app.log"` for the lines. The
   [Best practices](https://docs.xhostd.com/guides/bkm) guide covers this tool
   in full.
-- **`get_deploy_log`** — on a `build_oom_killed` finding, read the build that
+- **`get_logs` with `source="deploy"`** — on a `build_oom_killed` finding, read the build that
   the kernel stopped, and find the step that used the memory.
-- **`get_app_stats`** — the health tool reads one hour of resource figures,
+- **`get_stats` with `view="traffic"`** — the health tool reads one hour of resource figures,
   and one day of latency figures. Use the stats tool for a 24-hour, 7-day or
   30-day view of the traffic.
 

@@ -11,8 +11,8 @@ into the container, and boto3 uses them unchanged.
 
 The two reads are public. The two writes need
 `Authorization: Bearer <token>`. The app compares that token with a
-`WRITE_TOKEN` that you set yourself with
-`set_env(app_name, key="WRITE_TOKEN", value=..., secret=True)`.
+`WRITE_TOKEN` that you set yourself as a secret: `set_secret(app_name,
+key="WRITE_TOKEN")` returns the request that uploads it from a file.
 
 The split between the reads and the writes is necessary. An app on a public
 hostname that accepts files from anyone is an open object store. That store
@@ -162,7 +162,7 @@ def require_write_token(authorization: str = Header(default="")) -> None:
 # threadpool instead of on the event loop.
 
 
-# The health check probes GET / and needs a 2xx.
+# The health check probes GET / and needs a 2xx or 3xx.
 @app.get("/")
 def root():
     return {"ok": True, "service": "recipe-blob-uploads", "bucket": BUCKET}
@@ -349,15 +349,15 @@ create_app(name="recipe-blob", template="app")
 Keep the app `id` and the `prod` channel `id`. Every later call takes one or
 both.
 
-**2. Mint a credential.** The token is your git password, and it is valid for
-30 days.
-
-```text
-get_credentials()
-→ {"token": "xh_...", "username": "docs",
-   "expires_at": "2026-08-30T17:26:27Z",
-   "scopes": ["blob:*", "deploy:*", "repo:*", "db:*", "channel:*", "stats:read"]}
-```
+**2. Have your token ready.** The token authenticates git, Postgres, and the
+platform API. Use your own
+token from the `XHOSTD_TOKEN` environment variable. A person mints it on the
+console [/tokens](https://console.xhostd.com/tokens) page and exports it; a
+registered agent exports the token that registration returned. No tool result
+carries a token. You can also mint a scoped, short-lived token with the request
+that `get_credentials` describes, and send it the same way from a variable of
+its own; the [Git guide](https://docs.xhostd.com/guides/git) shows the
+commands.
 
 **This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
 first git transport, because the private half of the key never enters a tool
@@ -365,14 +365,14 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Put it in the **password** field of the remote URL:
-`https://<username>:<token>@git.xhostd.com/<username>/<app>.git`.
+Send the token as a header on each git command:
+`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>`.
 
 **3. Clone, commit, push.** A new xhostd repo is empty, and git tells you so.
 The warning is correct; it is not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-blob.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-blob.git
 Cloning into 'recipe-blob'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -383,30 +383,47 @@ Write the four files into that directory. Then commit and push them:
 $ cd recipe-blob
 $ git add -A
 $ git commit -m "blob-uploads recipe"
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 ```
 
-Do not put the token in a file that you commit, or in text that you paste.
-`$XHOSTD_TOKEN` above holds the value from `get_credentials`. A remote URL with
-a real token in it stays in `.git/config`, in your shell history and in the
-output of every `git remote -v`.
+Never write the token value itself into a command, a file that you commit, or
+text that you paste. `$XHOSTD_TOKEN` stays in the environment, so the token
+never lands in `.git/config`, in your shell history, or in the output of
+`git remote -v`.
 
-**4. Set the write token.** The two write routes check this value.
+**4. Set the write token.** The two write routes check this value. Ask
+`set_secret` for the request that uploads it:
 
 ```text
-set_env(app_name="recipe-blob",
-        key="WRITE_TOKEN",
-        value="<a long random value of your own — redacted here>",
-        secret=True)
+set_secret(app_name="recipe-blob", key="WRITE_TOKEN")
+→ {"key": "WRITE_TOKEN", "scope": "app", "method": "PUT",
+   "url": "https://api.xhostd.com/apps/efb0f79a-ab98-4bb2-ad8a-40b27ab3f7fc/env/WRITE_TOKEN?kind=secret",
+   "content_type": "application/octet-stream", ...}
 ```
 
-`secret=True` is important. MCP never gives a secret value back: `list_env`
-returns the key, its kind, its scope and its change time, but a null value. To
-read the value, use the click-to-reveal control in the web console, or the
-HTTP API call `GET /apps/{app_id}/env/{key}/value`. The platform audits every
-reveal. A plain variable is the default, and `list_env` returns it as
-cleartext. Cleartext is the wrong place for a credential that permits writes
-to your object store.
+Make a random token in a file that only you can read, then run that request
+with the file as the body:
+
+```console
+$ mkdir -p ~/.xhostd
+$ (umask 077; openssl rand -hex 32 | tr -d '\n' > ~/.xhostd/recipe-blob-write-token)
+$ curl -sS --fail-with-body -X PUT \
+    -H "Authorization: Bearer $XHOSTD_TOKEN" \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary @"$HOME/.xhostd/recipe-blob-write-token" \
+    "https://api.xhostd.com/apps/efb0f79a-ab98-4bb2-ad8a-40b27ab3f7fc/env/WRITE_TOKEN?kind=secret"
+```
+
+`set_secret` is important. The token goes from the file straight to xhostd,
+so it never passes through a tool call or the conversation. MCP never gives a
+secret value back: `list_env` returns the key, its kind, its scope and its
+change time, but a null value. To read the value, use the click-to-reveal
+control in the web console, or the HTTP API call
+`GET /apps/{app_id}/env/{key}/value`. The platform audits every reveal. A
+plain variable from `set_env` is different: its value passes through the
+conversation, and `list_env` returns it as cleartext. That is the wrong place
+for a credential that permits writes to your object store. Your own copy of
+the token stays in `~/.xhostd/recipe-blob-write-token`.
 
 The order of step 4 and step 5 is important. The platform injects the
 environment into a container when the container starts. Thus the token must
@@ -428,7 +445,7 @@ deploy(app_name="recipe-blob",
 `ref` is a branch name. xhostd resolves it to the current head of that branch,
 so after a push you do not need the sha. `deploy` also accepts `sha` when you
 want an exact commit, and `sha` has priority if you pass both. The deploy then
-runs in the background. Use `get_deploy_log` to follow it: the first line of
+runs in the background. Use `get_logs` with `source="deploy"` to follow it: the first line of
 its reply states the outcome, and you poll while the status is `queued` or
 `running`.
 
@@ -489,8 +506,9 @@ standard image-size report: only the layers that you add on the warm
 
 The transcript below shows the full sequence against the live channel. It
 shows the public reads, the two conditions that refuse a write, and the two
-writes that carry the token. `$WRITE_TOKEN` holds the value from step 4. The token itself
-never appears in a transcript.
+writes that carry the token. `$WRITE_TOKEN` holds the value from step 4, read
+from its file with `WRITE_TOKEN="$(cat ~/.xhostd/recipe-blob-write-token)"`.
+The token itself never appears in a transcript.
 
 ```console
 $ curl -sS https://recipe-blob-docs.xhostd.app/
@@ -591,7 +609,7 @@ that was current at that moment, and writes that version again as the new
 head. A restore only adds versions. Thus a restore cannot destroy another
 snapshot, and you can undo a restore.
 
-The usage number in `get_blob_usage` and on the channel stats page counts
+The usage number in `get_stats` with `view="object_storage"` and on the channel stats page counts
 **live bytes only**. Live bytes are the latest version of each key that has no
 delete marker. A noncurrent version and a key with a delete marker do not
 count against your plan's quota. Thus a delete does free space, although the
@@ -677,9 +695,9 @@ closed, so the app refuses every upload and every delete. Without a token to
 compare, the only safe answer is a refusal. The reads still work. Thus the
 deploy passed, and the first upload showed you the fault.
 
-Set the value with
-`set_env(app_name, key="WRITE_TOKEN", value=..., secret=True)`. Then deploy the
-channel again. A change to the environment reaches the container at the next
+Set the value with the upload request that
+`set_secret(app_name, key="WRITE_TOKEN")` returns, as in step 4. Then deploy
+the channel again. A change to the environment reaches the container at the next
 deploy only. Thus a change against a live channel does nothing until you
 deploy that channel again.
 
@@ -696,7 +714,7 @@ The 503 above and this 401 are different codes on purpose. The 503 means that
 the app has no write token. The 401 means that *your* request has no correct
 credential. If you are sure that you sent the correct value, confirm the value
 itself. `list_env` never returns a secret. Thus you cannot recover a lost
-token; you set a new one with another `set_env`.
+token; you upload a new one with the request that `set_secret` returns.
 
 ### You added a botocore `Config`
 

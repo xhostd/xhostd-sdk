@@ -192,7 +192,7 @@ class NoteIn(BaseModel):
     body: str
 
 
-# The health check probes GET / and needs a 2xx, so / must not 404 —
+# The health check probes GET / and needs a 2xx or 3xx, so / must not 404 —
 # unless the app creates the file named by $XHOSTD_READY_FILE instead.
 @app.get("/")
 def root():
@@ -271,15 +271,14 @@ Keep the app id and the `prod` channel id, because every later call needs one
 or both. `repo_url` is the repo for your push. `get_app` returns that URL
 again if you lose it.
 
-**2. Make a credential.** One token is your git password, your Postgres
-password and your platform API bearer. It is valid for 30 days.
-
-```text
-get_credentials()
-→ {"token": "xh_...", "username": "docs",
-   "expires_at": "2026-08-30T17:26:27Z",
-   "scopes": ["blob:*", "deploy:*", "repo:*", "db:*", "channel:*", "stats:read"]}
-```
+**2. Have your token ready.** The token authenticates git, Postgres, and the
+platform API. Use your own token from the
+`XHOSTD_TOKEN` environment variable. A person mints it on the console
+[/tokens](https://console.xhostd.com/tokens) page and exports it; a registered
+agent exports the token that registration returned. No tool result carries a
+token. You can also mint a scoped, short-lived token with the request that
+`get_credentials` describes, and send it the same way from a variable of its
+own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 **This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
 first git transport, because the private half of the key never enters a tool
@@ -287,18 +286,18 @@ call. One registration then covers every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Put the token in the **password** field of the remote URL. That detail is the
-important one:
+Send the token as a header on each git command. That detail is the important
+one:
 
 ```text
-https://<username>:<token>@git.xhostd.com/<username>/<app>.git
+git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
 ```
 
 **3. Clone the repo, then commit and push.** A new xhostd repo is empty, and
 git tells you so. This warning is normal, not a fault:
 
 ```bash
-$ git clone https://docs:$XHOSTD_TOKEN@git.xhostd.com/docs/recipe-docker-pg.git
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-docker-pg.git
 Cloning into 'recipe-docker-pg'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -309,13 +308,13 @@ Write the eight files into that directory. Then commit and push them:
 $ cd recipe-docker-pg
 $ git add -A
 $ git commit -m "notes API on the docker template"
-$ git push origin master
+$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
 ```
 
-Never put the token in a file that you commit, or in text that you paste.
-`$XHOSTD_TOKEN` above holds the value from `get_credentials`. A remote URL
-with a real token in it goes into `.git/config`, into your shell history and
-into the output of every `git remote -v`.
+Never write the token value itself into a command, a file that you commit, or
+text that you paste. `$XHOSTD_TOKEN` stays in the environment, so the token
+never lands in `.git/config`, in your shell history, or in the output of
+`git remote -v`.
 
 **4. Deploy the branch.**
 
@@ -333,7 +332,7 @@ After a push you thus do not need the sha. `sha` is also valid when you want
 an exact commit, and `sha` wins if you give both.
 
 The deploy runs asynchronously. Follow it with
-`get_deploy_log(app_name=..., channel=..., deploy_id=...)`. The first line
+`get_logs(app_name=..., channel=..., source="deploy", deploy_id=...)`. The first line
 of the reply states the outcome — `status` is one of `queued`, `running`,
 `success`, `failed`, or `superseded`. Poll while the status is `queued` or
 `running`, and on `failed` the reason is in the log tail. On `superseded`, a
@@ -394,7 +393,7 @@ your image. Here that base is the ~179 MB difference, and the platform
 charges you for the 94.64 MB that you added. It subtracts one base only, and
 only if your image is truly built on that base.
 
-Call `get_account_overview` for the current account's charged image-size cap.
+Call `get_stats(view="overview")` for the current account's charged image-size cap.
 Do not infer it from a subscription catalog.
 
 **`channel snapshot marker recorded`.** Every non-static deploy records a
@@ -437,11 +436,11 @@ $ curl -sS https://recipe-docker-pg-docs.xhostd.app/notes
 [Postgres recipe](https://docs.xhostd.com/guides/recipes-postgres) shows the
 call, and what then happened to the row.
 
-To learn whether the app is alive, call `get_runtime_log` with **no**
-`command`:
+To learn whether the app is alive, call `get_logs` with `source="runtime"`
+and **no** `command`:
 
 ```text
-get_runtime_log(app_name="recipe-docker-pg", channel="prod")
+get_logs(app_name="recipe-docker-pg", channel="prod", source="runtime")
 ```
 
 Without a `command`, the call starts no container on the host. It returns the
@@ -452,7 +451,49 @@ the fastest check for a crash.
 
 Those indices are useful after a redeploy. The platform archives the previous
 container's log, so you can still read the output of the version that
-crashed. Give its `container_index` to `get_runtime_log`.
+crashed. Give its `container_index` to `get_logs`.
+
+## Your public hostnames
+
+The platform sets three variables in every container, so your app can know
+the names it answers on:
+
+- `XHOSTD_HOSTNAME` is the channel's platform hostname, for example
+  `recipe-docker-pg-docs.xhostd.app`.
+- `XHOSTD_URL` is `https://` plus that hostname, with no trailing slash. It
+  never names a custom domain.
+- `XHOSTD_DOMAINS` holds that hostname and each verified custom domain of the
+  channel, separated by commas with no spaces. Treat the value as a set:
+  don't infer a primary domain from its position, and read the platform
+  hostname from `XHOSTD_HOSTNAME` or `XHOSTD_URL`.
+
+A framework that checks the `Host` header reads its list from
+`XHOSTD_DOMAINS`. For Django, put this in `settings.py`:
+
+```python
+import os
+
+ALLOWED_HOSTS = os.environ.get("XHOSTD_DOMAINS", "localhost").split(",")
+# The platform ends TLS at its edge, so a visitor's browser sends an https
+# origin. A local run on http needs no entry: Django accepts a same-origin
+# request without this list.
+CSRF_TRUSTED_ORIGINS = ["https://" + host for host in ALLOWED_HOSTS]
+BASE_URL = os.environ.get("XHOSTD_URL", "http://localhost:8000")
+```
+
+Build an absolute link from the request's own host when the visitor might
+arrive on a custom domain. `BASE_URL` always names the platform hostname.
+
+The deploy health probe sends the channel's platform hostname as its `Host`
+header. An app that rejects that host fails the probe, so the deploy fails.
+`GET /` must answer with a 2xx or 3xx status, or the app must create the
+file that `$XHOSTD_READY_FILE` names.
+
+The values are fixed when the platform creates the container. After you
+verify or remove a custom domain, deploy the channel again, so that
+`XHOSTD_DOMAINS` includes the change. Until then, the running container
+keeps the old list, and an app that checks the host rejects a newly
+verified domain.
 
 ## Compress your responses
 

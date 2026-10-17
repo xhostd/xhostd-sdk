@@ -40,7 +40,7 @@ The two codes point at different stages, so read the right log for each.
 **404: the channel has no route yet.** Either nobody has deployed the channel
 yet, or every deploy so far stopped before the app went live. A deploy gives the
 channel its address only after the app passes its health check. Read the deploy
-log to find the step that stopped: call `get_deploy_log`, or select the
+log to find the step that stopped: call `get_logs` with `source="deploy"`, or select the
 deployment on the project's Activity page in the console. A failed deploy of a
 channel that is already live leaves the previous version serving, so it does
 not cause a 404. A 404 that your own app returns is different: the route works,
@@ -60,7 +60,7 @@ are these:
   occasional request, usually a POST, gets a 502. Set your server's
   keep-alive timeout to 2 seconds or more.
 
-Read the runtime log to see what the process printed: call `get_runtime_log`,
+Read the runtime log to see what the process printed: call `get_logs` with `source="runtime"`,
 or open the Runtime status card on the project's Activity page. A background
 worker that serves no HTTP returns 502 by design. The
 [worker recipe](https://docs.xhostd.com/guides/recipes-worker#the-https-hostname-returns-502)

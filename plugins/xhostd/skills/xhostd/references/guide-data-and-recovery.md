@@ -29,7 +29,7 @@ the database checkpoint. A checkpoint without an aligned file marker does not
 represent an atomic restore of the whole app.
 
 Nightly snapshot retention differs by plan. Pre-deploy recovery points use a
-separate count policy. Read the current values from `get_account_overview` and the
+separate count policy. Read the current values from `get_stats(view="overview")` and the
 [backup policy](https://xhostd.com/faq#backups) before relying on a particular
 recovery window.
 
