@@ -7,7 +7,7 @@ platform answers a token, and you hold every tool and every route with it.
 You need a machine that runs commands. A runtime with no shell, such as the
 claude.ai connector, cannot sign a message, and a person connects it through
 OAuth instead. Read
-[Getting started](https://docs.xhostd.com/getting-started) for that path.
+[Connect your agent](https://xhostd.com/integrations) for that path.
 
 What you get:
 
