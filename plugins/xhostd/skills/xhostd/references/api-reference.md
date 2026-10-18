@@ -1398,7 +1398,7 @@ An account holds at most 20 tokens from this route. After a renewal, remove and 
 
 ## POST /me/email-verifications
 
-Start one email challenge for the caller's account. Bearer required, scope `email:bind`. Only `POST /registrations` and `POST /auth/ssh-key` grant that scope, because the address becomes the account's sign-in email; a credential from `POST /credentials` or `POST /tokens` reads 403. The platform mails an 8-character code (lowercase letters and digits without `0`, `1`, `i`, `l`, `o`) that expires in 15 minutes. This is the first of the two steps that move a `starter` account to `basic` and enable person-present account access. MCP: `request_email_verification(email)`.
+Mail one confirmation link for the caller's account. Bearer required, scope `email:bind`. Only `POST /registrations` and `POST /auth/ssh-key` grant that scope, because the address becomes the account's sign-in email; a credential from `POST /credentials` or `POST /tokens` reads 403. The platform mails the address a link that works once for 60 minutes; the person who reads the mail opens it and presses Confirm in the console. Confirming moves a `starter` account to `basic` and enables person-present account access. A new request replaces the account's previous link. An account whose email nobody confirms may be deleted after 7 days. MCP: `request_email_verification(email)`.
 
 **Request body:**
 ```json
@@ -1410,39 +1410,31 @@ Start one email challenge for the caller's account. Bearer required, scope `emai
 { "status": "sent", "expires_at": "2026-09-07T12:15:00Z" }
 ```
 
-The response repeats no address.
+The response repeats no address and carries no link.
 
 **Errors:**
 - `bad_request` (400) — `enter a valid email address`
 - `scope_denied` (403) — the token holds no `email:bind`; sign the login message with the account's SSH key and call `POST /auth/ssh-key`
 - `conflict` (409) — `this account already has a verified email`
 - *(no code)* (422) — an unknown or missing field
-- `too_many_requests` (429) — `a verification code was sent less than 60 seconds ago; wait before you ask again`
+- `too_many_requests` (429) — `a confirmation link was sent less than 60 seconds ago; wait before you ask again`
+- `too_many_requests` (429) — `this address was sent 3 confirmation links in the last hour; wait an hour before you ask again`
+- `too_many_requests` (429) — `xhostd sends at most 9 confirmation links to one address, and this address has had them all; use another address`
 
 ---
 
-## POST /me/email-verifications/complete
+## GET /me/email-verifications
 
-Prove the code. Bearer required, no scope: the request carries a code alone, and it binds the address the start route chose. Success writes the address as the account's sign-in email, moves a `starter` account to `basic`, and queues the plan apply. Google sign-in with that address then opens the console for this account. The person can set a password in the console and later sign in with the username or email address; the console also lists the registration key and tokens for revocation. MCP: `complete_email_verification(code)`.
-
-**Request body:**
-```json
-{ "code": "abcd2345" }
-```
+Read where the account's email verification stands. Bearer required, no scope. Call it once, after the person says they pressed Confirm; do not poll. MCP: `get_email_verification()`.
 
 **Response (200):**
 ```json
-{ "status": "verified", "plan": "basic", "apply_queued": true }
+{ "status": "verified", "expires_at": null, "plan": "basic" }
 ```
 
-`apply_queued` is false when scheduled maintenance holds the account; the apply runs after it.
+`status` is `verified` (the account holds an address), `none` (no link was requested), `conflict` (the newest link met an address another account holds; ask for another address), `expired` (request a new link), or `pending` (nobody has confirmed the live link yet). `expires_at` is the newest link's expiry, and `null` for `verified` and `none`. The response never carries the address or the link.
 
-**Errors:**
-- `bad_request` (400) — `wrong code`; the attempt counts
-- `conflict` (409) — `this email belongs to another account`; the challenge clears, the plan stays
-- `gone` (410) — `no verification is pending; request a code first`, or `the verification code expired; request a new one`
-- *(no code)* (422) — an unknown or missing field
-- `too_many_requests` (429) — `too many wrong codes; request a new code`: five wrong codes locked the challenge, and the right code answers this too
+`POST /me/email-verifications/complete`, the retired code route, answers `gone` (410) with a message that names this route and `POST /me/email-verifications`.
 
 ---
 
@@ -1675,8 +1667,8 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 | `channel_unbound` | 400 | A deploy named neither `sha` nor `ref`, and the channel has no branch yet. Deploy with `ref`, or bind it with `PATCH /apps/{app_id}/channels/{channel_id}` |
 | `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: a GitHub-connected app that never synced. Pass `ref` |
 | `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy`, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
-| `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: an expired or absent email challenge. Request a new code |
-| `too_many_requests` | 429 | A budget or a window refused the call: the registration budget, a second verification request inside 60 seconds, or a locked challenge after five wrong codes |
+| `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: the retired `POST /me/email-verifications/complete` route. Read `GET /me/email-verifications` instead |
+| `too_many_requests` | 429 | A budget or a window refused the call: the registration budget, a second verification request inside 60 seconds, or an address past its confirmation-link caps |
 | *(no code)* | 422 | A body that fails validation — a missing field on any route, or an unknown field on `POST /ssh-keys`, `POST /registrations`, `POST /auth/ssh-key`, and the two email verification routes, which refuse one. This answer carries FastAPI's `{"detail": [...]}` shape, not the `{"error": {...}}` envelope, so an MCP client shows it as a pydantic report. Read the field name in `detail`, correct it, and call again. Do not retry the same body: it fails again |
 | `bad_gateway` | 502 | Upstream service error |
 | `service_unavailable` | 503 | Dependent service degraded (e.g. `postgres_unavailable`, `blob_unavailable`), agent registration closed by the operator, another write holding an app's repo, or the app under scheduled maintenance |
