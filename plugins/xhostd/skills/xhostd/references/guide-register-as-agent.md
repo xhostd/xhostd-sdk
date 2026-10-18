@@ -309,18 +309,33 @@ only ones that grant it. A token you minted from `POST /credentials` reads
 `403` with a message that names the remedy: sign the login message again and
 call `POST /auth/ssh-key`, and use the token that one request answers.
 
-Two MCP tools do it, and each has a route.
+You never handle a secret here. The platform mails a confirmation link to
+the address, and the person who reads that mailbox opens it in a browser and
+presses Confirm. Two MCP tools do your part, and each has a route.
 
-1. Call `request_email_verification` with `email`. The platform mails an
-   8-character code to the address and answers `{status: "sent", expires_at}`.
-   The code expires 15 minutes after the mail. The code alphabet is lowercase
-   letters and digits without `0`, `1`, `i`, `l`, and `o`, so a person can
-   read it out with no ambiguity.
-2. Ask the person for the code, and call `complete_email_verification` with
-   `code`. Success answers `{status: "verified", plan: "basic", apply_queued}`.
-   The platform applies the `basic` limits in the background; `apply_queued`
-   is `true` when that job is queued now, and `false` when scheduled
-   maintenance holds the account and the job runs after it.
+1. Call `request_email_verification` with `email`. The platform mails a link
+   to the address and answers `{status: "sent", expires_at}`. The link works
+   once, for 60 minutes. The answer never carries the address or the link.
+2. Ask the person to open the mail, read what the page shows, and press
+   Confirm. Ask them to tell you when they have done it.
+3. Call `get_email_verification` once, after the person says they confirmed.
+   It answers `{status, expires_at, plan}`. Do not call it in a loop.
+
+`status` is one of five words:
+
+| `status` | What it means | What to do |
+|---|---|---|
+| `verified` | The address is the account's sign-in email, and a `starter` account is now `basic` | Nothing; tell the person they can sign in to the console with Google |
+| `pending` | The link is live, and nobody has confirmed it yet | Ask the person to open the mail and press Confirm |
+| `expired` | The 60 minutes passed | Request a new link |
+| `conflict` | The address belongs to another xhostd account | Ask the person for another address |
+| `none` | No link was ever requested | Request a link |
+
+The platform applies the `basic` limits in the background after the
+confirmation.
+
+An account whose email address nobody confirms may be deleted after 7 days,
+so request a link as soon as a person gives you an address.
 
 The same two calls over HTTP:
 
@@ -329,9 +344,8 @@ curl -sS https://api.xhostd.com/me/email-verifications \
   -H "Authorization: Bearer $(cat ~/.config/xhostd/token)" \
   -H 'Content-Type: application/json' --data '{"email": "<address>"}'
 
-curl -sS https://api.xhostd.com/me/email-verifications/complete \
-  -H "Authorization: Bearer $(cat ~/.config/xhostd/token)" \
-  -H 'Content-Type: application/json' --data '{"code": "<code>"}'
+curl -sS https://api.xhostd.com/me/email-verifications \
+  -H "Authorization: Bearer $(cat ~/.config/xhostd/token)"
 ```
 
 The rules:
@@ -340,13 +354,13 @@ The rules:
   again with the key through `POST /auth/ssh-key` and use the token it
   answers.
 - A second request inside 60 seconds of the last one answers `429`. After
-  that window a new request replaces the code, and the old one stops working.
-- Five wrong codes lock the challenge, and every later code answers `429`.
-  Request a new code after the window.
-- An expired code, or no pending request, answers `410`. Request a new code.
-- An address that another account verified already answers `409`, and the
-  challenge clears. The account keeps `starter`.
+  that window a new request replaces the link, and the old one stops working.
+- One address receives at most 3 links in any 60 minutes, and at most 9 in
+  all, whichever accounts ask for it. Past either cap the request route
+  answers `429`; after the 9th, use another address.
 - An account that has a verified email answers `409` on the request route.
+- `POST /me/email-verifications/complete` is retired and answers `410`. Read
+  `GET /me/email-verifications` instead.
 
 Once the address is verified, a person who signs in to
 [the console](https://console.xhostd.com) with it lands on this account. The
