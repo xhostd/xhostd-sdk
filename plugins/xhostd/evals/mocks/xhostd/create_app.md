@@ -1,0 +1,1 @@
+{"id": "aea6786c-52ff-4ed3-bf07-ab3050a42069", "name": "{{input.name}}", "template": "{{input.template}}", "repo_url": "https://git.xhostd.com/eval/{{input.name}}.git", "channels": [{"id": "4e8973a5-2a78-4326-bd7b-f95506d84b9f", "name": "prod", "branch": null, "hostname": "{{input.name}}-eval.xhostd.app", "current_sha": null, "pending_deploy": null}]}

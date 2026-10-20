@@ -18,6 +18,15 @@ guides describe the same app, and they divide the subject between them.
 Nothing here is specific to the `docker` template. The same rules apply to
 the `app` template, where the start command is `launch.sh` instead of `CMD`.
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- PostGIS
+- When it goes wrong
+
 ## What you get
 
 Each non-static channel gets its own Postgres database. The platform makes that
@@ -166,25 +175,38 @@ such as a migration tool or a job queue that listens.
 #### Connection limits
 
 Each role has a cap on the server sessions it holds. The cap does not
-count the connections your app opens to the pooler. The caps follow
-your plan:
+count the connections your app opens to the pooler. The current plan
+sets the caps, and every plan allows at least these:
 
-| Limit | Other plans | Studio | Pro |
-|---|---|---|---|
-| Write role, server sessions through the pooler | 5 | 10 | 20 |
-| Write role, server sessions in all | 15 | 20 | 40 |
-| Read-only role, server sessions | 5 | 10 | 20 |
-| Connections per role to the pooler | 100 | 100 | 100 |
+| Limit | Minimum |
+|---|---|
+| Write role, server sessions through the pooler | 5 |
+| Write role, server sessions in all | 15 |
+| Read-only role, server sessions | 5 |
+| Connections per role to the pooler | 100 |
+
+To read your own caps, run this query:
+
+```sql
+SELECT rolconnlimit FROM pg_roles WHERE rolname = current_user;
+```
+
+- Over `DATABASE_URL_DIRECT`, it returns the write role's cap on server
+  sessions in all.
+- Over `DATABASE_URL_READONLY`, it returns the read-only role's cap, which
+  equals the cap on server sessions through the pooler.
+- The write role's cap minus the read-only role's cap is the room left for
+  direct sessions.
 
 Through the pooler, a transaction waits for a free server session when
 all of the role's pooled sessions are busy, so keep your transactions
 short. Your direct sessions and your pooled ones share the write role's
 cap, so a large direct pool leaves your own pooled queries waiting. Keep
-the pool that uses `DATABASE_URL_DIRECT` at 10 connections or fewer on
-Studio and the other plans, and at 20 or fewer on Pro.
+the pool that uses `DATABASE_URL_DIRECT` at 10 connections or fewer,
+which every plan has room for.
 
-On Studio and Pro, your databases run on a database server of your own,
-and all of your apps and channels share about 180 server sessions on it:
+When your databases run on a database server of your own, all of your
+apps and channels share about 180 server sessions on it:
 its `max_connections` of 200, less the sessions Postgres and the
 platform keep for themselves. A direct pool in each of many channels
 adds up toward that total, which is one more reason to send your app's

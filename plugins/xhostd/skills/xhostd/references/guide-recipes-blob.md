@@ -1,5 +1,15 @@
 # File uploads with S3-compatible storage {#blob-recipe-uploads-on-the-channel-s-object-store}
 
+## Contents
+
+- What you get
+- The five injected variables
+- The files
+- The deploy
+- Verify it
+- Object versions, deletes and your usage number
+- When it goes wrong
+
 ## What you get
 
 A FastAPI service stores uploaded files in the S3-compatible object store.

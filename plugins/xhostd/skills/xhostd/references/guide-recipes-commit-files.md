@@ -1,5 +1,14 @@
 # Recipe: ship without git
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Change a file without resending it
+- Verify it
+- When it goes wrong
+
 ## What you get
 
 You get the same kind of static site as
@@ -11,8 +20,8 @@ push.
 
 **`git push` and then `deploy` is the standard path, and this recipe is not
 that path.** Use this recipe in one case only: git is not available. That
-case is a runtime with no shell, such as the claude.ai connector, a Custom
-GPT, or an MCP client that cannot run a command. If you can run `git` on the
+case is a client with no shell: claude.ai, ChatGPT, a Custom GPT, or an MCP
+client that cannot run a command. If you can run `git` on the
 machine where you work, obey
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static) instead.
 Its four steps are the same on every template.

@@ -1,0 +1,1 @@
+{"restore_id": "{{input.restore_id}}", "status": "succeeded", "activity": "The restore finished. The database now matches the snapshot.", "waiting": false, "queue_ahead": 0, "progress": null, "during_restore": "read_only"}

@@ -1,6 +1,6 @@
 # xhostd API Reference
 
-This is the underlying HTTP API that the MCP tools wrap. For normal agent usage, prefer the `mcp__xhostd__*` tools — an OAuth session or a registered agent's token authenticates them. This reference is here for deep dives, debugging, or direct programmatic access.
+This is the underlying HTTP API that the MCP tools wrap. For normal agent usage, prefer the xhostd MCP tools — an OAuth session or a registered agent's token authenticates them. This reference is here for deep dives, debugging, or direct programmatic access.
 
 Base URL: `https://api.xhostd.com`
 
@@ -8,9 +8,73 @@ All authenticated endpoints require the header: `Authorization: Bearer <token>` 
 
 All error responses use the envelope: `{"error": {"code": "<code>", "message": "<message>"}}`
 
-> **Signing up** happens in the browser via Google sign-in for a person. An agent with no person present registers through `POST /registrations`; read `## POST /registrations`.
+> **Signing up:** a person signs up in the browser. An agent with no person present registers through `POST /registrations`; read `## POST /registrations`.
 
 ---
+
+## Contents
+
+- GET /apps
+- POST /apps
+- GET /apps/{app_id}
+- DELETE /apps/{app_id}
+- GET /apps/{app_id}/channels
+- POST /apps/{app_id}/channels
+- GET /apps/{app_id}/channels/{channel_id}
+- PATCH /apps/{app_id}/channels/{channel_id}
+- DELETE /apps/{app_id}/channels/{channel_id}
+- POST /apps/{app_id}/channels/{channel_id}/deploy
+- POST /apps/{app_id}/channels/{channel_id}/rewind
+- GET /apps/{app_id}/channels/{channel_id}/logs?deploy={deploy_id}
+- POST /apps/{app_id}/channels/{channel_id}/runtime/log
+- GET /apps/{app_id}/channels/{channel_id}/images
+- GET /apps/{app_id}/tree
+- GET /apps/{app_id}/blob
+- POST /apps/{app_id}/changeset
+- POST /apps/{app_id}/env
+- PUT /apps/{app_id}/env/{key}
+- POST /apps/{app_id}/env/{key}/generate
+- DELETE /apps/{app_id}/env/{key}
+- GET /apps/{app_id}/env
+- GET /apps/{app_id}/env/{key}/value
+- GET /apps/{app_id}/channels/{channel_id}/deploys/{deploy_id}/env
+- GET /apps/{app_id}/channels/{channel_id}/postgres/snapshots
+- POST /apps/{app_id}/channels/{channel_id}/postgres/restore
+- GET /postgres/restores/{restore_id}
+- POST /apps/{app_id}/channels/{channel_id}/blob/credentials
+- GET /apps/{app_id}/channels/{channel_id}/blob
+- POST /apps/{app_id}/channels/{channel_id}/domains
+- POST /apps/{app_id}/channels/{channel_id}/domains/{domain}/verify
+- GET /apps/{app_id}/channels/{channel_id}/domains
+- DELETE /apps/{app_id}/channels/{channel_id}/domains/{domain}
+- POST /apps/{app_id}/channels/{channel_id}/forward
+- GET /apps/{app_id}/forwards
+- DELETE /apps/{app_id}/channels/{channel_id}/forward
+- POST /apps/{app_id}/github/sync
+- GET /apps/{app_id}/events
+- POST /exports
+- GET /exports
+- GET /exports/{export_id}
+- POST /exports/{export_id}/download-token
+- POST /credentials
+- POST /ssh-keys
+- GET /ssh-keys
+- DELETE /ssh-keys/{key_id}
+- POST /registrations
+- POST /auth/ssh-key
+- POST /me/email-verifications
+- GET /me/email-verifications
+- POST /feedback
+- GET /feedback
+- GET /api/user/stats
+- GET /me/usage
+- GET /plans
+- Hostname Rules
+- Channel Status Values
+- Deploy Status Values
+- git_ref_binding Format
+- Error Codes
+- Token Scopes
 
 ## GET /apps
 
@@ -74,7 +138,7 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
 
 - `name` (string, required) — Must be a valid DNS label and must not use a reserved prefix (see Hostname Rules)
 - `branch` (string, optional) — The branch `prod` deploys. It follows the branch rule in "git_ref_binding Format". Omit it and `prod` has no branch (`git_ref_binding: null`) until the first deploy with `ref` binds it. An invalid name answers 400 and creates nothing.
-- `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"` (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`. The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build** time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template builds the `Dockerfile` at the repo root on every deploy and runs the image with its own `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` is still injected at the same value, so existing apps keep working, but it is deprecated and will be removed — use `$XHOSTD_HTTP_PORT` in new code) and answer `GET /` with a 2xx or 3xx (the request carries the channel's hostname as its `Host` header, and a redirect is never followed), **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy listener; create it once the app is actually running, not at the top of the start command. Such a channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are injected at run time only — never as build args, so secrets are unavailable during the build and must never be baked into the image. Charged image size (total minus warm-base layers) follows the current account entitlement; plugin workflows read the current cap from `get_stats(view="overview")`. Match every `FROM` to a warm base image — including a build-only stage in a multi-stage build, since every stage that names one starts with no pull: `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position, build duration, image size vs cap) into the deploy log.
+- `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"` (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`. The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build** time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template builds the `Dockerfile` at the repo root on every deploy and runs the image with its own `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` holds the same value for apps that read it, and new code reads `$XHOSTD_HTTP_PORT`) and answer `GET /` with a 2xx or 3xx (the request carries the channel's hostname as its `Host` header, and a redirect is never followed), **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy listener; create it once the app is actually running, not at the top of the start command. Such a channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are injected at run time only — never as build args, so secrets are unavailable during the build and must never be baked into the image. Charged image size (total minus warm-base layers) follows the current account entitlement; plugin workflows read the current cap from `get_stats(view="overview")`. Match every `FROM` to a warm base image — including a build-only stage in a multi-stage build, since every stage that names one starts with no pull: `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position, build duration, image size vs cap) into the deploy log.
 
 **Response (200):**
 ```json
@@ -183,21 +247,21 @@ Create a new channel on an app.
 **Request body:**
 ```json
 {
-  "name": "wildcard",
-  "git_ref_binding": "branch:*"
+  "name": "staging",
+  "git_ref_binding": "branch:staging"
 }
 ```
 
 - `name` (string, required) — Must be a valid DNS label. Cannot be `prod` (reserved; system-created).
-- `git_ref_binding` (string, required) — Must match the pattern `branch:<name>` or `branch:*`. The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`.
+- `git_ref_binding` (string, required) — Must match the pattern `branch:<name>`, one explicit channel per branch. The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. `branch:*` is refused.
 
 **Response (200):**
 ```json
 {
   "id": "uuid",
-  "name": "wildcard",
-  "hostname": "wildcard-my-app-alice.xhostd.app",
-  "git_ref_binding": "branch:*",
+  "name": "staging",
+  "hostname": "staging-my-app-alice.xhostd.app",
+  "git_ref_binding": "branch:staging",
   "current_sha": null,
   "status": "provisioning",
   "pending_deploy": null
@@ -206,6 +270,7 @@ Create a new channel on an app.
 
 **Errors:**
 - `bad_request` (400) — invalid name, reserved channel name, or invalid `git_ref_binding` format
+- `branch_wildcard_deprecated` (400) — `branch:*`
 
 ---
 
@@ -1270,7 +1335,7 @@ Mint a unified credential for the authenticated user. The returned token serves 
 
 **SSH is the first git transport wherever a shell is available, and it needs no token** — see `POST /ssh-keys` below. This token stays required for the HTTPS push, for Postgres and for the platform API.
 
-To push over HTTPS: set the remote with the token in the **password** field — `https://<username>:<token>@git.xhostd.com/<username>/<app>.git` (the per-app `repo_url` from `GET /apps/{app_id}` already has the right path), then `git push`. Any username works; the password is what git.xhostd.com checks. (git.xhostd.com also accepts the token via `Authorization: Bearer` — e.g. `git config http.extraHeader "Authorization: Bearer <token>"` — but native `git` uses the Basic-password path above.) The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
+To push over HTTPS, send the token as a header from a variable, never in the remote URL: `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push https://git.xhostd.com/<username>/<app>.git <branch>` (the per-app `repo_url` from `GET /apps/{app_id}` is that URL). A minted token works the same way from a variable of its own. The git guide also documents a remote with the token in its URL, as a fallback it warns against, because that remote writes the token to `.git/config`. The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
 
 ---
 
@@ -1278,7 +1343,7 @@ To push over HTTPS: set the remote with the token in the **password** field — 
 
 Register one OpenSSH public key on the authenticated user's account, for git over SSH. A key belongs to the account, not to one app. Send the PUBLIC half only — the content of a `.pub` file; the platform stores no private key. A key reaches every repository on the account, so your calling token must carry `repo:*`; `api_login` asks for all nine default scopes, because that is what the key goes on to mint, and it asks for one more thing: the account holds a verified address, or your own token carries `email:bind`. A token from `POST /registrations` or `POST /auth/ssh-key` carries that scope, so an agent registers a replacement key for itself.
 
-**SSH is the first git transport wherever a shell is available.** The private half never enters a tool call, and one registration covers every app on the machine. Reuse `~/.ssh/xhost_ed25519` if it exists; otherwise make the keypair at exactly that path — never in the project directory, and never with a per-project, per-app or per-tool suffix, which would only mint a second key on the account. HTTPS with the token in the remote URL is the fallback: take it where the network blocks outbound port 22, or after an SSH push fails.
+**SSH is the first git transport wherever a shell is available.** The private half never enters a tool call, and one registration covers every app on the machine. Reuse `~/.ssh/xhost_ed25519` if it exists; otherwise make the keypair at exactly that path — never in the project directory, and never with a per-project, per-app or per-tool suffix, which would only mint a second key on the account. HTTPS with the token sent as a header is the fallback: take it where the network blocks outbound port 22, or after an SSH push fails. Run `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push <repo_url> <branch>`.
 
 **Request body:**
 ```json
@@ -1356,7 +1421,7 @@ Delete one SSH key the caller owns. The delete is the whole revoke, so a push wi
 
 ## POST /registrations
 
-Open a `starter` account for the holder of an `ssh-ed25519` key, with no person and no browser. **No bearer**: the signed message is the proof. The response holds a 30-day token with the default scopes plus `email:bind`, the scope that binds an address to the account, and the key is registered on the account with `api_login`, so it renews the token through `POST /auth/ssh-key` and pushes over SSH with no further call. Full recipe: `guide-register-as-agent.md`.
+Open a `starter` account for the holder of an `ssh-ed25519` key, with no person and no browser. **No bearer**: the signed message is the proof. The response holds a 30-day token with the default scopes plus `email:bind`, the scope that binds an address to the account, and the key is registered on the account with `api_login`, so it renews the token through `POST /auth/ssh-key` and pushes over SSH with no further call. Full recipe: [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
 
 **Request body:**
 ```json
@@ -1405,7 +1470,7 @@ xhostd-register\n<username or empty>\n<timestamp>\n
 }
 ```
 
-`limits` is the complete `starter` row. Store `token` in a file with mode 0600 (`~/.config/xhostd/token`); never print it.
+`limits` is the complete `starter` row. Never print `token`; [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) shows where to keep it.
 
 **Errors:**
 - `bad_request` (400) — a key line the parser refuses; a key of another type (`only ssh-ed25519 keys can register or sign in`); `timestamp is outside the 300-second window; check the clock and sign again`; a block that does not verify (`invalid signature`, `signature namespace mismatch`, `the signature was made with a different key`); a requested name outside the rule; a label over 64 characters
@@ -1668,8 +1733,7 @@ All user-facing names (app names, usernames, channel names) must be valid **DNS 
 
 **Hostname derivation:**
 - Production channel: `<app>-<username>.<domain>` (e.g., `myapp-alice.xhostd.app`)
-- Other channels: `<channel>-<app>-<username>.<domain>` (e.g., `wildcard-myapp-alice.xhostd.app`)
-- Fan-out preview channels: `preview-<branch-slug>-<app>-<username>.<domain>`
+- Other channels: `<channel>-<app>-<username>.<domain>` (e.g., `staging-myapp-alice.xhostd.app`)
 
 ---
 

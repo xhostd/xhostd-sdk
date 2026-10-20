@@ -17,6 +17,16 @@ divide the subject between them.
 Read this guide first if the `docker` template is new to you. Read the other
 guide first if your app builds correctly and the problem is the database.
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- Your public hostnames
+- Compress your responses
+- When it goes wrong
+
 ## What you get
 
 You get a FastAPI service. Your own Dockerfile builds it, and it connects to

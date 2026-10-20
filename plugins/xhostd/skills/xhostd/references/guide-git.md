@@ -8,14 +8,25 @@ costs much less than a full file through an MCP tool call. A push stores
 your code; it does not deploy the code. Start a build separately with
 `deploy`, or with the console.
 
+## Contents
+
+- Pick the path before you push
+- Mint credentials
+- Push over SSH
+- The clone / push URL
+- Renew an expired token
+- A push fails again and again: clear a stale cached credential
+- Deploy on each GitHub push
+- Notes
+
 ## Pick the path before you push
 
 The repo answers two transports, and one MCP tool writes to it directly.
 Test the machine first, and pick one of the three paths below. Do not
 wait for a failure.
 
-1. **The machine runs no command.** A runtime with no shell, such as the
-   claude.ai connector, cannot run git. Use the `commit_files` MCP tool.
+1. **The machine runs no command.** A client with no shell, such as
+   claude.ai or ChatGPT, cannot run git. Use the `commit_files` MCP tool.
 2. **The machine runs commands.** Push over SSH. Read **Push over SSH**
    below. Reuse `~/.ssh/xhost_ed25519` if that file exists. If the file
    is absent, make a keypair and call `register_ssh_key` once.

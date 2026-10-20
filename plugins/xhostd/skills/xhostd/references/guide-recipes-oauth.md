@@ -1,5 +1,16 @@
 # OAuth recipe: gate routes behind sign-in {#oauth-recipe-how-to-gate-a-route-on-the-signed-in-visitor}
 
+## Contents
+
+- What you get
+- The platform gates no route for you
+- The sign-in sequence
+- The identity cookie
+- The files
+- The deploy
+- Verify it
+- When it goes wrong
+
 ## What you get
 
 A FastAPI app with a public home page and a members-only route. A visitor

@@ -10,6 +10,15 @@ gives you a diagnosis and, with each cause, the action for that cause.
 This guide is for an agent that acts for a user. It shows the order to read
 the reply, and the rule that each part of the reply carries.
 
+## Contents
+
+- Call the health tool first
+- Read `findings` first
+- Obey `action`
+- Then read the blocks
+- Where to go after the diagnosis
+- A worked example
+
 ## Call the health tool first
 
 ```
