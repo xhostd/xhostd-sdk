@@ -2,9 +2,22 @@
 
 This walks through what an agent does, end-to-end, when a non-technical user says something like *"build me a little site that lists my favourite coffee shops in Lisbon and put it online"*. Nothing for the user to install, paste or configure — the agent mints the credential and runs the commands.
 
+## Contents
+
+- 0. Prerequisites
+- 1. Decide on a name
+- 2. Create the app
+- 3. Write the site
+- 4. Deploy
+- 5. Watch the build
+- 6. Hand the user the URL
+- 7. Iterate
+- 8. Optional extras
+- Troubleshooting
+
 ## 0. Prerequisites
 
-The xhostd plugin is installed (Claude Code) or the connector named `xhostd` is enabled (claude.ai). The `mcp__xhostd__*` tools are available. The user has authenticated once through the browser — if not, point them to `/mcp` → xhostd → Authenticate (Claude Code) or the connector's Connect button (claude.ai). The sign-in page accepts an xhostd username or email address and password, or Google sign-in. A preprovisioned account signs in directly and requires no signup, username selection, email verification, multifactor authentication (MFA), or SMS. A person who uses Google with an email address that has no xhostd account must choose a **username** on first sign-in (lowercase letters, digits, hyphens; 1–40 chars; cannot start or end with a hyphen). That username becomes part of every public URL. With no person present, the agent registers its own account with an SSH key — `guide-register-as-agent.md`.
+The xhostd plugin is installed (Claude Code) or the connector named `xhostd` is enabled (claude.ai). The xhostd tools are available. This page names each tool by its bare name, such as `deploy`; your client might add a prefix of its own. The user has authenticated once through the browser — if not, point them to `/mcp` → xhostd → Authenticate (Claude Code) or the connector's Connect button (claude.ai). The sign-in page accepts an xhostd username or email address and password, or Google sign-in. A preprovisioned account signs in directly and requires no signup, username selection, email verification, multifactor authentication (MFA), or SMS. A person who uses Google with an email address that has no xhostd account must choose a **username** on first sign-in (lowercase letters, digits, hyphens; 1–40 chars; cannot start or end with a hyphen). That username becomes part of every public URL. With no person present, the agent registers its own account with an SSH key — [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
 
 ## 1. Decide on a name
 
@@ -13,7 +26,7 @@ Pick a DNS-label app name from the user's description — e.g. `lisbon-coffee`. 
 ## 2. Create the app
 
 ```
-mcp__xhostd__create_app(name="lisbon-coffee", template="static")
+create_app(name="lisbon-coffee", template="static")
 ```
 
 Use `template="static"` for plain HTML/CSS/JS (served directly). Use `template="app"` if the user wants a dynamic backend — that template runs `install.sh` then `launch.sh` in a runtime with Node 22, Python 3.13, and common build tools. If the project is a single-page app, its server must serve `index.html` for the client-side routes — the platform proxies every path straight through and rewrites nothing.
@@ -50,7 +63,7 @@ The full step list is in **Pushing code with git** in SKILL.md. Pick the path fr
 
 ```
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/xhost_ed25519   # only if the file is absent
-# then: mcp__xhostd__register_ssh_key(public_key=<content of ~/.ssh/xhost_ed25519.pub>, label="this machine")
+# then: register_ssh_key(public_key=<content of ~/.ssh/xhost_ed25519.pub>, label="this machine")
 git init && git add -A && git commit -m "initial site"
 git remote add xhostd-ssh "git@git.xhostd.com:alice/lisbon-coffee.git"
 GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519 -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master
@@ -71,11 +84,11 @@ You can also mint a scoped, short-lived token with the request that `get_credent
 
 `HEAD:master` on either transport: push under the branch name you then deploy with `ref`, because a fresh `git init` can name the local branch `main`. `deploy(..., ref="master")` in step 4 binds `prod` to `master`. Never write the token value into a command or into a file the user might commit. **Pushing stores the code; it does not deploy** — that is step 4.
 
-**Fallback, one case only:** when git is not available on the machine you are working on — a runtime with no shell, such as the claude.ai connector — use `mcp__xhostd__commit_files(app_name, message, files)` instead; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
+**Fallback, one case only:** when git is not available on the machine you are working on — a client with no shell, such as claude.ai or ChatGPT — use `commit_files(app_name, message, files)` instead; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
 
 For an `app`-template project the push is the same; the repo needs `install.sh` (optional) and `launch.sh` (required) at its root. The deploy only succeeds if the app signals readiness within 120s, and there are **two ways to do that** — whichever comes first. So the process must:
 
-- **Either serve HTTP:** **bind `0.0.0.0` on `$XHOSTD_HTTP_PORT`** — read `$XHOSTD_HTTP_PORT` from the environment, don't hardcode. (`$PORT` is still injected at the same value, so existing apps keep working, but it is deprecated and will be removed — use `$XHOSTD_HTTP_PORT` in new code.) `python app.py` with Flask's default `app.run()` binds `localhost` on a fixed port and will fail the check; pass the host and `$XHOSTD_HTTP_PORT` explicitly — and **answer `/` with a 200**: an API whose routes are all under `/api` fails the check even though it runs; add a minimal `/` handler.
+- **Either serve HTTP:** **bind `0.0.0.0` on `$XHOSTD_HTTP_PORT`** — read `$XHOSTD_HTTP_PORT` from the environment, don't hardcode. (`$PORT` holds the same value for apps that read it; new code reads `$XHOSTD_HTTP_PORT`.) `python app.py` with Flask's default `app.run()` binds `localhost` on a fixed port and will fail the check; pass the host and `$XHOSTD_HTTP_PORT` explicitly — and **answer `/` with a 200**: an API whose routes are all under `/api` fails the check even though it runs; add a minimal `/` handler.
 - **Or create `$XHOSTD_READY_FILE`** — for a process with no HTTP surface at all (a queue consumer, a cron-style daemon), create the file at the injected path instead of adding a dummy listener; it can be empty. Do it once the work loop is genuinely running, not at the top of `launch.sh`. Such a project keeps its hostname, and that URL returns 502 — expected, not a failure.
 - **Boot within 120s and stay within a small memory budget (~128 MB)** at run time — the cap applies to the running server, not to the build.
 - **Run as a non-root user.** The container runs as `app`; writable paths are `/app`, `$HOME`, and `/tmp`. All installation must live in `install.sh`, which runs at **build** time as root — installing from `launch.sh` fails with `Permission denied`.
@@ -99,7 +112,7 @@ exec gunicorn --bind "0.0.0.0:$XHOSTD_HTTP_PORT" app:app
 ## 4. Deploy
 
 ```
-mcp__xhostd__deploy(
+deploy(
   app_name="lisbon-coffee",
   channel="prod",
   ref="master",
@@ -111,14 +124,14 @@ Returns `{"deploy_id": "d…", "channel_id": "c0a1…", "status": "queued"}`. De
 ## 5. Watch the build
 
 ```
-mcp__xhostd__get_logs(app_name="lisbon-coffee", channel="prod", source="deploy", deploy_id="d…")
+get_logs(app_name="lisbon-coffee", channel="prod", source="deploy", deploy_id="d…")
 ```
 
 The first line of the reply states the outcome: `deploy <id> — <status> (sha <sha>)`, with status one of `queued`, `running`, `success`, or `failed`. Read the status from that header, not from the log text. Poll while the status is `queued` or `running`; on `failed` the reason is in the log tail. `static` deploys take a few seconds; the first `app`-template deploy takes 30–90 seconds because `install.sh` runs. The channel's `pending_deploy` field in `get_app` also shows the in-flight deploy (`null` once it finishes).
 
 ## 6. Hand the user the URL
 
-Read `hostname` from the prod channel (it was in step 2's response, and `mcp__xhostd__get_app` will return it later). Tell the user:
+Read `hostname` from the prod channel (it was in step 2's response, and `get_app` will return it later). Tell the user:
 
 > Live at https://lisbon-coffee-alice.xhostd.app
 
@@ -129,24 +142,24 @@ For each follow-up change — "add a section for tea shops", "fix the broken lin
 To preview a change without touching production:
 
 ```
-mcp__xhostd__create_channel(app_name="lisbon-coffee", name="draft", git_ref_binding="branch:draft")
+create_channel(app_name="lisbon-coffee", name="draft", git_ref_binding="branch:draft")
 git push xhostd HEAD:draft
-mcp__xhostd__deploy(app_name="lisbon-coffee", channel="draft", ref="draft")
+deploy(app_name="lisbon-coffee", channel="draft", ref="draft")
 ```
 
 The preview is live at `https://draft-lisbon-coffee-alice.xhostd.app`.
 
 ## 8. Optional extras
 
-- **Env vars & secrets:** `mcp__xhostd__set_env(app_name, key="LOG_LEVEL", value="debug")` stores a plain value, which passes through the conversation, so never pass it a credential. For a credential, call `mcp__xhostd__set_secret(app_name, key="STRIPE_KEY")`: it takes no value and returns the `PUT` request that uploads it from a file with your own token (`curl -sS --fail-with-body -X PUT -H "Authorization: Bearer $XHOSTD_TOKEN" -H "Content-Type: application/octet-stream" --data-binary @<file> "<url>"`), plus a `console_url` where a user without a shell pastes it. `set_secret(..., generate=True)` stores a random value instead. A secret is never readable back through MCP; the reveal is a protected action that answers `protected_action` to an agent credential, and it is audit-logged. Add `channel="staging"` to either tool for a per-channel override that wins over the app default at deploy time. `mcp__xhostd__list_env(app_name, channel=…)` shows the resolved view. Every non-static channel automatically has `DATABASE_URL` for its own Postgres database; don't set it. A static channel has no database and no `DATABASE_URL`.
-- **Custom domain:** `mcp__xhostd__add_custom_domain(app_name, channel, domain)` returns an `instructions` field with the exact TXT + CNAME/A records the user needs to add at their registrar — relay it verbatim. After they add the records, call `mcp__xhostd__add_custom_domain` again with the same args and `verify=True`. HTTPS works automatically once verified.
+- **Env vars & secrets:** `set_env(app_name, key="LOG_LEVEL", value="debug")` stores a plain value, which passes through the conversation, so never pass it a credential. For a credential, call `set_secret(app_name, key="STRIPE_KEY")`: it takes no value and returns the `PUT` request that uploads it from a file with your own token (`curl -sS --fail-with-body -X PUT -H "Authorization: Bearer $XHOSTD_TOKEN" -H "Content-Type: application/octet-stream" --data-binary @<file> "<url>"`), plus a `console_url` where a user without a shell pastes it. `set_secret(..., generate=True)` stores a random value instead. A secret is never readable back through MCP; the reveal is a protected action that answers `protected_action` to an agent credential, and it is audit-logged. Add `channel="staging"` to either tool for a per-channel override that wins over the app default at deploy time. `list_env(app_name, channel=…)` shows the resolved view. Every non-static channel automatically has `DATABASE_URL` for its own Postgres database; don't set it. A static channel has no database and no `DATABASE_URL`.
+- **Custom domain:** `add_custom_domain(app_name, channel, domain)` returns an `instructions` field with the exact TXT + CNAME/A records the user needs to add at their registrar — relay it verbatim. After they add the records, call `add_custom_domain` again with the same args and `verify=True`. HTTPS works automatically once verified.
 - **Google sign-in for parts of the site:** zero-config — no tool to call. `/xhost-auth/*` works on every channel. After sign-in the gateway sets a signed identity cookie `__Host-xhost_id` (an RS256 JWT) on the channel host; the app verifies it against the JWKS at `https://auth.xhostd.com/xhost-auth/jwks` (pin `RS256`, check `iss`/`aud`/`exp`) and gates its own routes. **xhostd does identity only, never edge gatekeeping — nothing is blocked at the edge, so every route stays public (anonymous visitors get `200`) until your app verifies the cookie and enforces access itself in code.** Send signed-out users to `/xhost-auth/login?return_to=<path>`. `__Host-xhost_id` is a reserved cookie name. Per-stack verify snippets: <https://docs.xhostd.com/oauth>.
 
 ## Troubleshooting
 
-**Tool reports unauthenticated.** Tell the user to run `/mcp` → xhostd → Authenticate (Claude Code) or reconnect the connector (claude.ai). On the OAuth path there is no token to set. A registered agent instead re-reads `~/.config/xhostd/token`, or signs in again with its key when the token expired (`guide-register-as-agent.md`).
+**Tool reports unauthenticated.** Tell the user to run `/mcp` → xhostd → Authenticate (Claude Code) or reconnect the connector (claude.ai). On the OAuth path there is no token to set. A registered agent instead renews its token with its key when the token expired, as [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) describes.
 
-**"app name is already taken"** — they already own one with that name. Pick a different name or delete the old app with `mcp__xhostd__delete_app`.
+**"app name is already taken"** — they already own one with that name. Pick a different name or delete the old app with `delete_app`.
 
 **"invalid app name"** — name violates the DNS-label rules or starts with a reserved prefix.
 

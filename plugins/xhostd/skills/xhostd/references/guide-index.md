@@ -15,6 +15,12 @@ here. An agent that works with no person at a browser opens its own account:
 [Push code with git](https://docs.xhostd.com/guides/git) tells you about the
 credential, the remote URL and the `git push` command.
 
+## Contents
+
+- Operate your projects
+- The recipes
+- The parts of a recipe
+
 ## Operate your projects
 
 - [Projects & channels](https://docs.xhostd.com/guides/projects-and-channels) — Project scope, channel isolation, and shared account capacity.

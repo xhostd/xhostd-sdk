@@ -2,16 +2,17 @@
   "name": "xhostd-sdk",
   "description": "Plugins for xhostd — agent-first hosting. Install to get the xhostd plugin: MCP tools, skill, and OAuth-mediated auth for create-app/commit/deploy flows.",
   "owner": {
-    "name": "Yair Lifshitz"
+    "name": "xhostd",
+    "email": "support@xhostd.com"
   },
   "plugins": [
     {
       "name": "xhostd",
       "source": "./plugins/xhostd",
       "description": "Deploy applications, sites, and services with xhostd. Push code, get HTTPS URLs.",
-      "version": "0.69.0",
+      "version": "0.70.0",
       "author": {
-        "name": "xhostd.com",
+        "name": "xhostd",
         "url": "https://xhostd.com"
       }
     }

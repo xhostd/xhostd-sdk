@@ -1,5 +1,14 @@
 # Recipe: a raw TCP service on a public port
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- When it goes wrong
+- See also
+
 ## What you get
 
 A Python service on the `app` template. It speaks a line protocol over **raw
@@ -247,9 +256,9 @@ create_app(name="recipe-tcp", template="app")
 ```
 
 `port_forwarding_available: true` with `port_forwarding_enabled: false` is the
-normal state of a new app on a paid plan. The plan gives the capability, but
-nobody set the project toggle. Keep the app id and the `prod` channel id,
-because the deploy calls take both.
+normal state of a new app whose current plan includes public TCP endpoints.
+The plan gives the capability, but nobody set the project toggle. Keep the
+app id and the `prod` channel id, because the deploy calls take both.
 
 ### Step 2 — push the files
 
@@ -622,8 +631,7 @@ does not apply.
 
 The current account entitlement does not include public TCP endpoints. Explain
 that the feature is unavailable, do not retry, and continue without a public
-raw-TCP endpoint when possible. Do not relay a purchase or plan-change URL from
-the error.
+raw-TCP endpoint when possible.
 
 The concurrent-connection cap is 10 per endpoint, and sessions have no time
 cap. One forward port into one container is not more useful with more

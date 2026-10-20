@@ -1,5 +1,14 @@
 # Recipe: a background worker
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- When it goes wrong
+- See also
+
 ## What you get
 
 A Python worker on the `app` template. It runs one loop without end, and it

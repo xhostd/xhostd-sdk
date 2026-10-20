@@ -1,5 +1,13 @@
 # Recipe: static site
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- When it goes wrong
+
 ## What you get
 
 You get a single HTML page on an HTTPS URL, and you run no process. The

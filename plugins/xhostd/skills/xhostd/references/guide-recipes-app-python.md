@@ -1,5 +1,14 @@
 # Recipe: Python API on the app template
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- Compress your responses
+- When it goes wrong
+
 ## What you get
 
 A Python 3.13 FastAPI service on an HTTPS URL. The build installs the

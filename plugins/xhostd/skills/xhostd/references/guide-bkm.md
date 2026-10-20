@@ -9,6 +9,20 @@ each platform error tells you to do.
 This guide is for an agent that acts for a user. Every rule here comes with its
 reason. A rule without a reason is easy to forget when it is not convenient.
 
+## Contents
+
+- How to debug: the order to check
+- Recommended stacks
+- OAuth: know who the visitor is
+- Put code onto the app
+- Upgrade-safe code
+- Migration discipline
+- Secrets and environment variables
+- Blob storage
+- Budgets: know your plan's limits
+- Read a quota error
+- The undo path
+
 ## How to debug: the order to check
 
 Do these checks in the given order. A different order costs you the most time.

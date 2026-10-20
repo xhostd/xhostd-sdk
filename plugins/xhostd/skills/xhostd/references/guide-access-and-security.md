@@ -3,6 +3,14 @@
 Connecting a tool, sharing a project, and granting a sensitive capability are
 different decisions. Choose the smallest scope that supports your task.
 
+## Contents
+
+- Connect your account
+- Share a project
+- Manage agent permissions
+- Keep credentials separate
+- Publish access deliberately
+
 ## Connect your account
 
 Follow the steps to [connect your agent](https://xhostd.com/integrations).
@@ -30,11 +38,11 @@ accepts in the web console, so they need an account with a verified email
 address; an account an agent registered has none until someone adds one.
 
 Accepting moves the project onto your account, and its channels count against
-your plan from that moment. If your plan has no room for them, the console says
-so and the transfer stays pending until you upgrade. The same holds for
-database storage: when the project's databases and your own would together
-store more than your plan includes, the accept is refused until you upgrade or
-remove data. The previous owner stays on the project as an admin.
+your plan from that moment. If your current plan has no room for them, the
+console says so and the transfer stays pending until room frees up. The same
+holds for database storage: when the project's databases and your own would
+together store more than your current plan includes, the accept is refused
+until the total fits. The previous owner stays on the project as an admin.
 
 Each running channel restarts under the new owner's account. The restart is a
 blue-green swap, the same one a deploy uses, so the old container keeps serving

@@ -1,5 +1,14 @@
 # Recipe: Node API on the app template
 
+## Contents
+
+- What you get
+- The files
+- The deploy
+- Verify it
+- Compress your responses
+- When it goes wrong
+
 ## What you get
 
 A Node 22 Express service on an HTTPS URL. The platform builds it into its own
