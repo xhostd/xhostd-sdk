@@ -15,10 +15,12 @@ Do these checks in the given order. A different order costs you the most time.
 
 **1. Did the deploy finish?** `get_logs(app_name, channel, source="deploy", deploy_id)`
 answers in its first line: `deploy <id> — <status> (sha <sha>)`, with a
-status of `queued`, `running`, `success`, `failed`, or `superseded`. Read the
-status from that header, not from the log text. Poll while the status is
-`queued` or `running`. On `superseded`, a newer deploy request for this
-channel replaced this one, and the header names it: poll that id instead. The rest of the reply is the record of the build, the health check
+status of `queued`, `running`, `success`, `failed`, `superseded`, or
+`cancelled`. Read the status from that header, not from the log text. Poll
+while the status is `queued` or `running`. On `superseded`, a newer deploy
+request for this channel replaced this one, and the header names it: poll that
+id instead. On `cancelled`, a database restore of the channel started before
+the deploy ran, so it never ran: deploy again once the restore ends. The rest of the reply is the record of the build, the health check
 and the route swap. On `failed`, the reason is in the log tail, and no other
 check helps. The old container still serves the traffic, and the URL that you
 test gives you the previous version. `get_app` shows an in-flight deploy too:
@@ -500,9 +502,12 @@ run these operations turns **agent access** on there first. A change of the
 owner of a project is the one exception: the console alone does it, and no
 setting changes that.
 
-**409 `channel_busy` or a conflict — another operation is active.** A deploy or
-a restore already holds the channel. You can retry this error. Wait for the
-active operation to end, then try again.
+**409 `channel_busy`, `restore_in_flight`, or a conflict — another operation
+is active.** `channel_busy` means a deploy holds the channel. `restore_in_flight`
+means a database restore of the channel is active: a deploy, a rewind, and a
+second restore are refused until it ends. You can retry these errors. Wait for the active
+operation to end, then try again. `get_restore_status` shows how far a restore
+got.
 
 **507 — the object storage is full.** The platform refuses a `PUT` that would
 put the account above its blob limit. Delete the objects that you do not need,
@@ -523,19 +528,31 @@ advance.
 see the snapshots. Then call
 `restore_channel_snapshot(app_name, channel, snapshot_id, part="database")`.
 
-**Database restore is temporarily unavailable.** xhostd refuses every
-`restore_channel_snapshot` call with `part="database"` with `restore_unavailable` while it changes how a
-restore runs to make it safer. Do not retry the call. Tell the user to
-contact support for help with a restore.
+The call returns at once, and the restore runs in the background. A restore can
+take up to an hour; for databases under 10 GB it typically takes minutes. Tell
+the user that before you start. Poll `get_restore_status(restore_id)` and relay
+its `activity` sentence.
 
-The restore renames the live schema, and restores the snapshot into a new empty
-schema. It drops the renamed copy only after the restore succeeds. Thus a
-failure in the middle renames the live schema back, and loses nothing.
+Choose what the app does during the restore with `during_restore`:
+`read_only`, the default, keeps the app online and makes its database writes
+fail; `maintenance` shows a maintenance page and makes the writes fail; `live`
+keeps the app writing, and the restore discards those writes. In every mode, a
+write made while the restore still waits to start is discarded. xhostd's
+maintenance page answers HTTP 503, so the user's uptime monitors report the app
+as down. For the user's own page, deploy a static app first, then pass its app
+and channel as `maintenance_app` and `maintenance_channel`. That site answers
+with its own status codes.
+
+The restore loads the snapshot into a new database, and switches the channel to
+it only once the load succeeds. A failed restore leaves the database
+unchanged, and loses nothing.
 
 A restore of `prod` is a protected action. An agent credential gets 403
 `protected_action` until the app owner turns agent access on in the console.
-That control is deliberate, and it is not a formality. A restore also returns `channel_busy` if a deploy on that channel is
-in the queue or is active.
+That control is deliberate, and it is not a formality. The database restore
+cancels the deploys still queued on the channel and lists them as
+`cancelled_deploys`: deploy again once the restore ends. A deploy that already
+runs finishes first, and the restore waits for it.
 
 **To roll the code back:** call `rewind(app_name, channel)`. It moves the
 channel to the image of the last successful deploy with a commit that is

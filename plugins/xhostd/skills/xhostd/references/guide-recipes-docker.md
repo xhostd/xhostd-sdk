@@ -334,10 +334,11 @@ an exact commit, and `sha` wins if you give both.
 The deploy runs asynchronously. Follow it with
 `get_logs(app_name=..., channel=..., source="deploy", deploy_id=...)`. The first line
 of the reply states the outcome — `status` is one of `queued`, `running`,
-`success`, `failed`, or `superseded`. Poll while the status is `queued` or
-`running`, and on `failed` the reason is in the log tail. On `superseded`, a
-newer deploy request for this channel replaced this one: poll the id the
-header names.
+`success`, `failed`, `superseded`, or `cancelled`. Poll while the status is
+`queued` or `running`, and on `failed` the reason is in the log tail. On
+`superseded`, a newer deploy request for this channel replaced this one: poll
+the id the header names. On `cancelled`, a database restore of the channel
+started before the deploy ran: deploy again once the restore ends.
 
 ## Verify it
 
