@@ -1,6 +1,6 @@
 {
   "name": "xhostd",
-  "version": "0.70.0",
+  "version": "0.70.1",
   "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create apps, push code, deploy previews or production, inspect status, and manage channels, environment, storage, and domains.",
   "author": {
     "name": "xhostd",
@@ -47,48 +47,54 @@
   "extensions": {
     "com.openai": {
       "review": {
-        "demo_recording_url": "",
-        "test_cases": [
-          {
-            "prompt": "List my xhostd apps and give me the live URL of review-site.",
-            "tools_triggered": ["list_apps"],
-            "expected_behavior": "Names review-site and gives its HTTPS hostname, read from the channel object."
-          },
-          {
-            "prompt": "Create a static app called hello-review with a one-page site that says Hello, and put it online.",
-            "tools_triggered": ["create_app", "commit_files", "deploy", "get_logs"],
-            "expected_behavior": "Creates the app. Commits index.html with commit_files. Deploys the returned sha. Polls get_logs until the status is success. Returns the URL."
-          },
-          {
-            "prompt": "Change the heading on review-site to 'Updated by the reviewer' and redeploy it.",
-            "tools_triggered": ["read_file", "commit_files", "deploy", "get_logs"],
-            "expected_behavior": "Reads the page, changes the heading with commit_files edits, deploys the commit, and confirms that the deploy succeeded."
-          },
-          {
-            "prompt": "Add a secret named API_KEY to review-site.",
-            "tools_triggered": ["set_secret"],
-            "expected_behavior": "Returns the console link with the key filled in. Never asks for the value in the chat."
-          },
-          {
-            "prompt": "Connect the domain shop.example.com to review-site.",
-            "tools_triggered": ["add_custom_domain"],
-            "expected_behavior": "Relays the DNS records word for word, and tells the user to ask for verification once the records exist."
-          }
-        ],
-        "negative_test_cases": [
-          {
-            "prompt": "Book me a flight to Lisbon next Tuesday.",
-            "reason": "The request is unrelated to hosting, so the plugin does not trigger."
-          },
-          {
-            "prompt": "Show me the value of the API_KEY secret on review-site.",
-            "reason": "No tool returns a secret value."
-          },
-          {
-            "prompt": "Upgrade my xhostd plan and pay with my card.",
-            "reason": "The plugin changes no plan and makes no purchase."
-          }
-        ]
+        "test_cases": {
+          "positive": [
+            {
+              "description": "The user asks for the live URL of an existing app.",
+              "prompt": "List my xhostd apps and give me the live URL of review-site.",
+              "tools_triggered": "list_apps",
+              "expected_behavior": "Names review-site and gives its HTTPS hostname, read from the channel object."
+            },
+            {
+              "description": "The user creates a new static site and puts it online.",
+              "prompt": "Create a static app called hello-review with a one-page site that says Hello, and put it online.",
+              "tools_triggered": "create_app, commit_files, deploy, get_logs",
+              "expected_behavior": "Creates the app. Commits index.html with commit_files. Deploys the returned sha. Polls get_logs until the status is success. Returns the URL."
+            },
+            {
+              "description": "The user edits a page of an existing app and redeploys it.",
+              "prompt": "Change the heading on review-site to 'Updated by the reviewer' and redeploy it.",
+              "tools_triggered": "read_file, commit_files, deploy, get_logs",
+              "expected_behavior": "Reads the page, changes the heading with commit_files edits, deploys the commit, and confirms that the deploy succeeded."
+            },
+            {
+              "description": "The user adds a secret to an app without sharing its value in the chat.",
+              "prompt": "Add a secret named API_KEY to review-site.",
+              "tools_triggered": "set_secret",
+              "expected_behavior": "Returns the console link with the key filled in. Never asks for the value in the chat."
+            },
+            {
+              "description": "The user connects a custom domain to an app.",
+              "prompt": "Connect the domain shop.example.com to review-site.",
+              "tools_triggered": "add_custom_domain",
+              "expected_behavior": "Relays the DNS records word for word, and tells the user to ask for verification once the records exist."
+            }
+          ],
+          "negative": [
+            {
+              "description": "The request is unrelated to hosting, so the plugin does not trigger.",
+              "prompt": "Book me a flight to Lisbon next Tuesday."
+            },
+            {
+              "description": "The user asks for a secret value, which no tool returns.",
+              "prompt": "Show me the value of the API_KEY secret on review-site."
+            },
+            {
+              "description": "The user asks for a plan change and a payment, which the plugin does not make.",
+              "prompt": "Upgrade my xhostd plan and pay with my card."
+            }
+          ]
+        }
       },
       "publication": {
         "release_notes": "xhostd for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains."
