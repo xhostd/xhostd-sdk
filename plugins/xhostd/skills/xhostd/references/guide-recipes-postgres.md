@@ -568,11 +568,8 @@ unknown, not as `false`.
 
 ### Restore the database
 
-**Database restore is temporarily unavailable.** xhostd refuses every
-`restore_channel_snapshot` call with `part="database"` with `restore_unavailable` while it changes how a
-restore runs to make it safer. For help with a restore, contact support.
-This section shows the call, the refusal that it gets today, and the result
-that a restore gives when it returns.
+A restore runs in the background. A restore can take up to an hour; for
+databases under 10 GB it typically takes minutes.
 
 Add a second note, *after* the second deploy's snapshot:
 
@@ -598,26 +595,26 @@ restore_channel_snapshot(app_name="recipe-docker-pg",
                          channel="prod",
                          snapshot_id="5f6aac2f-1852-482d-9aa5-40332376d0f6",
                          part="database")
-→ restore_unavailable: database restore is temporarily unavailable — contact support for help with a restore
 ```
 
-The refusal changes nothing, so the database still holds both notes:
+The call returns at once with a `restore_id`, the restore's `status`, and a
+`notice` that says what the app can do while the restore runs. Pass the
+`restore_id` to `get_restore_status` about every 10 seconds, and read its
+`activity` sentence until `status` is `succeeded` or `failed`.
 
-```bash
-$ curl -sS https://recipe-docker-pg-docs.xhostd.app/
-{"ok":true,"notes":2,"done":0}
+By default the restore runs in `read_only` mode: the app stays online and
+reads its notes, and a `POST /notes` fails until the restore ends. Pass
+`during_restore="maintenance"` to show a maintenance page instead, or
+`during_restore="live"` to keep the app writing; the restore then discards
+those writes. In every mode, a note added while the restore still waits to
+start is discarded too. xhostd's maintenance page answers HTTP 503, so an
+uptime monitor reports the app as down during the restore. To show your own
+page, deploy a static app first and pass its app and channel as
+`maintenance_app` and `maintenance_channel`.
 
-$ curl -sS https://recipe-docker-pg-docs.xhostd.app/notes
-{"notes":[{"id":1,"body":"first note from the recipe","done":false,"created_at":"2026-10-04T06:54:14.952930+00:00"},{"id":2,"body":"second note, added after the snapshot","done":false,"created_at":"2026-10-04T06:54:37.827818+00:00"}]}
-```
-
-When restore returns, it works as follows.
-
-The restore runs in one transaction on the server. xhostd first empties the
-database's `public` schema, then it writes the snapshot's contents into that
-schema. The server rolls the whole transaction back if any step fails, so a
-failed restore loses nothing. The call returns the channel's Postgres status,
-which is `ready` when the restore succeeds. The same `DATABASE_URL` continues
+The restore loads the snapshot into a new database on the database server,
+then switches the channel to it in a few seconds. A failed restore leaves the
+database unchanged, so it loses nothing. The same `DATABASE_URL` continues
 to work with no new deploy. Only the data changes: it is back at the state of
 the snapshot. After a restore to that snapshot, `GET /notes` returns note 1
 alone. Note 2 is gone. Note 1 keeps its original `created_at`, not a new one.
@@ -630,9 +627,10 @@ the column's default. The same default fills the column for the rows already
 in the table when the migration runs. A migration without that default fails
 in exactly that case.
 
-There is a second guard. xhostd refuses a restore while a deploy on the
-channel is queued or in progress. Wait for the deploy to finish, then try
-again.
+A restore and the channel's deploys do not overlap. The restore cancels the
+deploys still queued on the channel and lists them as `cancelled_deploys`. A
+deploy that already runs finishes first, and the restore waits for it. Until
+the restore ends, a new deploy answers `restore_in_flight`.
 
 A restore of the database does not restore your code. If you restore to a
 state before a migration, also deploy the commit that matches that state.

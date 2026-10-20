@@ -356,8 +356,9 @@ Fetch one deploy's status and a byte window of its build log.
 }
 ```
 
-- `status` — one of `queued`, `running`, `success`, `failed`, `superseded`. Read the outcome here; never grep the log text for `deploy success`.
+- `status` — one of `queued`, `running`, `success`, `failed`, `superseded`, `cancelled`. Read the outcome here; never grep the log text for `deploy success`.
 - `superseded_by` — set only when the status is `superseded`: a newer deploy request for this channel replaced this one, and this field names it, so poll that id. A superseded deploy's log is empty, or ends where a control-plane restart paused it.
+- A `cancelled` deploy never ran: a database restore of the channel started first. Its log says so. Deploy again once the restore ends.
 - `finished_at` — `null` while the status is `queued` or `running`.
 - `log_bytes` — the total size of the log. `offset` is where the returned window starts.
 - `window_bytes` — the byte length of the returned window, counted before utf-8 decoding (`len(log)` is not byte-exact when a window boundary splits a multibyte character). The next page starts at `offset + window_bytes`; `offset + window_bytes` equal to `log_bytes` means the reply reaches the end of the log.
@@ -764,7 +765,17 @@ List a channel's pre-deploy Postgres snapshots, newest first. A snapshot is take
     "git_sha": "abcdef0123456789abcdef0123456789abcdef01",
     "created_at": "2025-01-16T10:30:00Z",
     "aligned_blob": true,
-    "recoverable": true
+    "recoverable": true,
+    "restores": [
+      {
+        "restore_id": "uuid",
+        "status": "succeeded",
+        "during_restore": "read_only",
+        "started_at": "2025-01-17T09:00:05Z",
+        "swapped_at": "2025-01-17T09:06:40Z",
+        "finished_at": "2025-01-17T09:06:40Z"
+      }
+    ]
   }
 ]
 ```
@@ -772,6 +783,9 @@ List a channel's pre-deploy Postgres snapshots, newest first. A snapshot is take
 `deploy_id` is null on a `nightly` row, which no deploy triggers. `git_sha` is
 null on a row from before that column. `recoverable` is true while a restore can
 still reach the row, false once it cannot, and null while that is unknown.
+`restores` lists the database restores from this snapshot in the last 30 days,
+and an active one, newest first. `swapped_at` is when the restored database
+replaced the channel's database, and is null unless the restore succeeded.
 
 **Errors:**
 - `not_found` (404) — app/channel not found or channel Postgres not provisioned
@@ -780,45 +794,81 @@ still reach the row, false once it cannot, and null while that is unknown.
 
 ## POST /apps/{app_id}/channels/{channel_id}/postgres/restore
 
-Roll the channel's database back to a prior snapshot. A failed restore loses nothing — the channel's data is left untouched. Each restore is audit-logged.
-
-**Temporarily unavailable.** Every call answers 503 `restore_unavailable` and changes nothing. Do not retry. Tell the user to contact support for help with a restore.
+Start a restore of the channel's database from a snapshot. The call answers 202 at once, and the restore runs in the background. A restore can take up to an hour; for databases under 10 GB it typically takes minutes. A failed restore leaves the database unchanged.
 
 **Request body:**
 ```json
 {
   "confirm_db_name": "ch_<channel-uuid-hex>",
-  "snapshot_id": "uuid"
+  "snapshot_id": "uuid",
+  "during_restore": "read_only",
+  "maintenance_channel_id": null,
+  "request_id": "uuid"
 }
 ```
 
 - `confirm_db_name` (string, required) — Must exactly match the channel's `db_name` (from `GET .../postgres`); mismatches are rejected.
 - `snapshot_id` (string, required) — A snapshot id from the snapshots list.
+- `during_restore` (string, optional) — What the app can do while the restore runs:
+  - `read_only`, the default: the app stays online and reads its database, and every write fails until the restore ends.
+  - `maintenance`: the app's addresses show a maintenance page, and every write fails until the restore ends. xhostd's page answers HTTP 503, so an uptime monitor reports the app as down during the restore.
+  - `live`: the app keeps writing, and the switch to the restored database discards those writes.
 
-**Response (200):** The channel's updated Postgres status:
+  In every mode, a write made while the restore still waits to start is discarded at the switch.
+- `maintenance_channel_id` (string, optional) — `maintenance` only: a deployed channel of a `static` app of the same owner, whose site the app's addresses serve in place of xhostd's page. Its pages answer with their own status codes. Null for xhostd's page.
+- `request_id` (string, optional) — A retry with the same id answers the recorded restore.
+
+**Response (202):** The restore's status, with `Location: /postgres/restores/{restore_id}`:
 ```json
 {
-  "db_name": "ch_...",
-  "role_name": "r_...",
-  "status": "ready",
-  "last_error": null,
-  "connection_count": 0,
-  "connection_limit": 20,
-  "password_set": true,
-  "storage_bytes": 81920,
-  "external_enabled": false,
-  "external_host": "db.xhostd.com",
-  "external_database": "my-app"
+  "restore_id": "uuid",
+  "app_id": "uuid",
+  "channel_id": "uuid",
+  "snapshot_id": "uuid",
+  "during_restore": "read_only",
+  "maintenance_channel_id": null,
+  "status": "queued",
+  "waiting": "starting",
+  "queue_ahead": 0,
+  "activity": "Starting. Your app works as usual until the restore starts, but changes it saves now are lost at the switch.",
+  "progress": null,
+  "error_code": null,
+  "message": null,
+  "notice": "Your app stays online and can read its database while the restore runs, …",
+  "submitted_at": "2025-01-17T09:00:00Z",
+  "started_at": null,
+  "updated_at": "2025-01-17T09:00:00Z",
+  "finished_at": null,
+  "cancelled_deploys": []
 }
 ```
 
+`notice` states what the chosen mode means for the app: relay it. `cancelled_deploys` lists the channel's queued deploys and rewinds that the start cancelled: deploy again once the restore ends. A deploy that already runs finishes first, and the restore waits for it. Until the restore ends, a deploy of the channel answers 409 `restore_in_flight`.
+
 **Errors:**
-- `bad_request` (400) — `invalid_confirmation` (`db_name` mismatch)
+- `bad_request` (400) — `invalid_confirmation` (`db_name` mismatch); `maintenance_channel_needs_maintenance` (a page channel with another mode); `maintenance_channel_not_found`, `maintenance_channel_not_static`, or `maintenance_channel_not_deployed` (the page channel)
 - `protected_action` (403) — restoring the `prod` channel is a protected action: an agent credential gets 403 `protected_action` until the app owner turns agent access on in the console
-- `not_found` (404) — snapshot not found, or its file is missing
-- `conflict` (409) — `channel_busy` (a deploy is queued/running), or the app is undergoing scheduled maintenance
+- `not_found` (404) — `snapshot_not_found`; `snapshot_host_gone` (permanent)
+- `snapshot_out_of_window` (409) — the snapshot is older than the backups xhostd keeps; pick a newer one
+- `restore_in_flight` (409) — a restore of the channel is already active; the message names it
+- `conflict` (409) — the database is not ready, or the app is undergoing scheduled maintenance
+- `conflict` (409) — "the project changed owner; try the restore again": an ownership transfer of the project committed while the request ran; try the restore again
 - `service_unavailable` (503) — `postgres_unavailable`
-- `restore_unavailable` (503) — every call, while database restore is temporarily unavailable
+
+---
+
+## GET /postgres/restores/{restore_id}
+
+Read one restore's status. A member of the restore's channel reads it; any other caller gets 404 `restore_not_found`. Poll it about every 10 seconds.
+
+**Response (200):** The same shape as the 202 above, without `cancelled_deploys`.
+
+- `status` — `queued`, `extracting`, `loading`, `swapping`, `succeeded`, or `failed`. `queued` also covers the first moments after the restore starts, while it makes the app's database read-only, so show `activity` rather than `status`.
+- `activity` — One plain sentence on what the restore does now. Null once it ends.
+- `waiting` — Why an active restore waits: `deploy_running`, `host_queue`, `starting`, `extraction_busy`, or `snapshot_not_yet_archived`. Null while it works.
+- `queue_ahead` — For a restore that has not started, the restores before it on its database server.
+- `progress` — `phase` (`fetch`, `refetch`, `replay`, or `dump`), `bytes`, and `segments` while extracting; `items_done` of `items_total` while loading. A field the step does not report is null.
+- `error_code` and `message` — Set on a failed restore. `message` says why in plain words.
 
 ---
 
@@ -1637,6 +1687,7 @@ All user-facing names (app names, usernames, channel names) must be valid **DNS 
 - `success` — Deploy completed successfully
 - `failed` — Deploy failed (check logs for details)
 - `superseded` — A newer deploy request for this channel replaced this one; `superseded_by` names it
+- `cancelled` — A database restore of the channel started before this deploy ran, so it never ran; deploy again once the restore ends
 
 ---
 
@@ -1666,7 +1717,8 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 | `bad_request` | 400 | Validation failure (see message for details) |
 | `channel_unbound` | 400 | A deploy named neither `sha` nor `ref`, and the channel has no branch yet. Deploy with `ref`, or bind it with `PATCH /apps/{app_id}/channels/{channel_id}` |
 | `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: a GitHub-connected app that never synced. Pass `ref` |
-| `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy`, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
+| `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy` on a file-storage restore while a deploy of the channel is queued or running, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
+| `restore_in_flight` | 409 | A database restore of the channel is active. A deploy, a rewind, a channel or app delete, an ownership transfer accept, and a second restore are refused until it ends. Read its progress with `GET /postgres/restores/{restore_id}`, then retry once it ends |
 | `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: the retired `POST /me/email-verifications/complete` route. Read `GET /me/email-verifications` instead |
 | `too_many_requests` | 429 | A budget or a window refused the call: the registration budget, a second verification request inside 60 seconds, or an address past its confirmation-link caps |
 | *(no code)* | 422 | A body that fails validation — a missing field on any route, or an unknown field on `POST /ssh-keys`, `POST /registrations`, `POST /auth/ssh-key`, and the two email verification routes, which refuse one. This answer carries FastAPI's `{"detail": [...]}` shape, not the `{"error": {...}}` envelope, so an MCP client shows it as a pydantic report. Read the field name in `detail`, correct it, and call again. Do not retry the same body: it fails again |

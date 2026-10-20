@@ -398,7 +398,7 @@ file existed:
 [2026-10-04T06:21:39+00:00] [container] ValueError: TICK_SECONDS must be positive, not 0.0
 [2026-10-04T06:21:42+00:00] boot failed — removing new container b75c0894f4c55fcdd1dac4250842063acbdecae42730b8809cc5fae1be18eacc; previous container keeps serving its own image — this failed deploy did not change its content
 [2026-10-04T06:21:43+00:00] deploy failed (host agent): remote agent error (health_check_error): container xhost-6aa59e3b-98a26f59-00000002 exited during boot (exit code 1)
-[2026-10-04T06:21:43+00:00] pre-deploy DB snapshot 394f07cf-23b6-4183-b3cf-ed702bfa1fdb was taken before this failure; if the failed deploy changed the database, contact support for help with a restore (database restore is temporarily unavailable)
+[2026-10-04T06:21:43+00:00] pre-deploy DB snapshot 394f07cf-23b6-4183-b3cf-ed702bfa1fdb was taken before this failure; if the failed deploy changed the database, restore it with restore_channel_snapshot (part="database") or the Restore action on the project's Database page in the console
 ```
 
 The real log carries that traceback four times, because the platform started
@@ -424,10 +424,9 @@ left behind must not certify that process.
 
 **`pre-deploy DB snapshot ... was taken before this failure`.** Every non-static
 channel gets a database, and the platform takes a snapshot of it before each
-deploy. This worker uses no database, so the line changes nothing here.
-Database restore is temporarily unavailable, so `restore_channel_snapshot`
-with `part="database"` refuses with `restore_unavailable`. For a worker that uses a database,
-contact support for help with a restore.
+deploy. This worker uses no database, so the line changes nothing here. For a
+worker that uses a database, `restore_channel_snapshot` with `part="database"`
+rolls the database back to that snapshot.
 
 ### The crashed container is readable, and the old one still runs
 
