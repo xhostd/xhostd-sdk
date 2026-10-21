@@ -89,14 +89,16 @@ can revoke any of them there.
 - **A verification email** goes only to an address that you give.
 - **Commands** the agent runs on your machine:
   - `git`, to push code.
-  - `ssh-keygen`, which creates `~/.ssh/xhost_ed25519` once, when that file
-    is absent.
+  - `ssh-keygen`, which reads the fingerprints of the `~/.ssh/xhost_ed25519*`
+    keys, and creates `~/.ssh/xhost_ed25519` once, when the file is absent. It creates
+    `~/.ssh/xhost_ed25519_<username>` when the first key belongs to another
+    xhostd account.
   - `curl`, to `api.xhostd.com`, and to your deployed app's own URL to
     check a deploy.
   - `psql`, to `db.xhostd.com`, only when you ask for it and the app's
     external database access is on.
   - `python3`, to parse JSON.
-- **Files** the agent writes, beyond your project: the SSH key, and, only
+- **Files** the agent writes, beyond your project: the SSH keys, and, only
   when you ask for object-storage credentials, a file with mode 0600 under
   `~/.xhostd/`.
 - **Pages** the agent fetches: `docs.xhostd.com` pages, when it follows a

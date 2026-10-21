@@ -249,8 +249,9 @@ The full example is
 ## Put code onto the app
 
 Every app owns a git repo. **`git push`, then `deploy`, is the standard path**
-onto that repo. Use `commit_files` in one situation only: git is not available
-on the machine that you work on.
+onto that repo. Use `commit_files` in two situations only: git is not available
+on the machine that you work on, or neither git transport can push, because
+there is no usable SSH key and no `XHOSTD_TOKEN`.
 
 The reason is the quantity of data that each path moves. A push sends only the
 diff. Git and the server agree on what the remote already holds, and only the

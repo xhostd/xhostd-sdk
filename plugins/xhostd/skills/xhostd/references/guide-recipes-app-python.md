@@ -97,8 +97,9 @@ stop signals directly. A shell in front of uvicorn ignores those signals.
 
 Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
 A push sends only the diff. Thus each edit after the first one costs a few
-lines, not the content of every file through a tool call. Use `commit_files` in
-one situation only: git is not available on your machine. **A push stores your
+lines, not the content of every file through a tool call. Use `commit_files`
+only where git is not available on your machine, or where neither git
+transport can push. **A push stores your
 code, but it does not deploy the code.** `deploy` is a separate call, so you
 name the commit that goes live.
 

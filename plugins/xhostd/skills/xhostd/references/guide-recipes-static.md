@@ -80,8 +80,8 @@ Every app owns a git repo. **`git push`, then `deploy`, is the standard
 path.** A push sends only the diff, which makes the second edit, the tenth
 edit and the hundredth edit cheap. git transfers the few lines that changed.
 It does not send the full contents of every file through a tool call. Use
-`commit_files` in one situation only: git is not available on the machine that
-you work on.
+`commit_files` only where git is not available on the machine that you work
+on, or where neither git transport can push.
 
 With both methods, you store the code in one step and you ship it in another
 step. **A push stores your code; it does not deploy the code.** `deploy` is a

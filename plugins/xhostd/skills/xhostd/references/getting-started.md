@@ -17,7 +17,7 @@ This walks through what an agent does, end-to-end, when a non-technical user say
 
 ## 0. Prerequisites
 
-The xhostd plugin is installed (Claude Code) or the connector named `xhostd` is enabled (claude.ai). The xhostd tools are available. This page names each tool by its bare name, such as `deploy`; your client might add a prefix of its own. The user has authenticated once through the browser — if not, point them to `/mcp` → xhostd → Authenticate (Claude Code) or the connector's Connect button (claude.ai). The sign-in page accepts an xhostd username or email address and password, or Google sign-in. A preprovisioned account signs in directly and requires no signup, username selection, email verification, multifactor authentication (MFA), or SMS. A person who uses Google with an email address that has no xhostd account must choose a **username** on first sign-in (lowercase letters, digits, hyphens; 1–40 chars; cannot start or end with a hyphen). That username becomes part of every public URL. With no person present, the agent registers its own account with an SSH key — [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
+The xhostd connector is connected (claude.ai, the Claude desktop app, or Claude Code through claude.ai), or the xhostd plugin is installed (Claude Code). The xhostd tools are available. This page names each tool by its bare name, such as `deploy`; your client might add a prefix of its own. The user has authenticated once through the browser. If not, in Claude Code, point them to `/mcp` → **claude.ai xhostd** (or **xhostd** when the plugin provides it) → **Authenticate**. In claude.ai or the Claude desktop app, point them to **Settings → Connectors** → **xhostd**, or, if it isn't listed, to the Connectors directory, where they search for xhostd and choose **Connect to Claude**. The sign-in page accepts an xhostd username or email address and password, or Google sign-in. A preprovisioned account signs in directly and requires no signup, username selection, email verification, multifactor authentication (MFA), or SMS. A person who uses Google with an email address that has no xhostd account must choose a **username** on first sign-in (lowercase letters, digits, hyphens; 1–40 chars; cannot start or end with a hyphen). That username becomes part of every public URL. With no person present, the agent registers its own account with an SSH key — [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
 
 ## 1. Decide on a name
 
@@ -59,9 +59,10 @@ Every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a ch
 
 Write the files into a working directory, then push them to the app's own repo. **`git push` → `deploy` is the standard path**, for the first commit and every one after it: a push sends only the diff, so each later edit stays incremental instead of round-tripping whole file contents through a tool call.
 
-The full step list is in **Pushing code with git** in SKILL.md. Pick the path from what the machine can do, before you push — never after a failure. With a shell, **SSH is the first transport**: the private half of the key never enters a tool call, and one registration covers every app on the machine. Reuse `~/.ssh/xhost_ed25519` if it exists; otherwise make a keypair in a subprocess and register the public half once:
+The full step list is in **Pushing code with git** in SKILL.md. Pick the path from what the machine can do, before you push — never after a failure. With a shell, **SSH is the first transport**: the private half of the key never enters a tool call, and one registration covers every app on the machine. First compare the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub` with `list_ssh_keys`, and push with the key whose `.pub` file the account lists. If none is listed, make the default keypair in a subprocess if the file is absent, and register the public half once:
 
 ```
+for f in ~/.ssh/xhost_ed25519*.pub; do ssh-keygen -lf "$f"; done   # compare with list_ssh_keys; if one is listed, push with it
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/xhost_ed25519   # only if the file is absent
 # then: register_ssh_key(public_key=<content of ~/.ssh/xhost_ed25519.pub>, label="this machine")
 git init && git add -A && git commit -m "initial site"
@@ -71,9 +72,11 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519 -o IdentitiesOnly=yes" git push xho
 
 An SSH push needs no token — the `repo_url` from step 2 gives the username and the app name. `-o IdentitiesOnly=yes` stops ssh from offering another key it finds first.
 
-Always use exactly the path `~/.ssh/xhost_ed25519` — never the project directory, and never a per-project, per-app or per-tool suffix. It sits in `$HOME`, so every Claude Code session, IDE window and project on the machine reuses the one key instead of registering another.
+If `register_ssh_key` answers `409`, the default key belongs to a different xhostd account on this machine. Make `~/.ssh/xhost_ed25519_alice` the same way if it is absent, register it, and push with `GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519_alice -o IdentitiesOnly=yes"`. If that registration also answers `409`, this machine holds no usable SSH key for this account: push over HTTPS when `XHOSTD_TOKEN` is set, else use `commit_files`, and never make a key under any other name. A file name proves nothing about the account; only a match in `list_ssh_keys` does.
 
-**HTTPS fallback:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, ask the user to create a token on the console /tokens page and export it; never ask for the value itself. No tool result carries a token. Send it as a header (`repo_url` came back in step 2), and push:
+Use only those two key paths — never the project directory, and never a per-project, per-app or per-tool suffix. They sit in `$HOME`, so every Claude Code session, IDE window and project on the machine reuses one key per account instead of registering another.
+
+**HTTPS fallback:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, neither transport can push: use `commit_files`, as the fallback paragraph below describes, and never ask the user to paste a token. No tool result carries a token. Send it as a header (`repo_url` came back in step 2), and push:
 
 ```
 git remote add xhostd "https://git.xhostd.com/alice/lisbon-coffee.git"
@@ -84,7 +87,7 @@ You can also mint a scoped, short-lived token with the request that `get_credent
 
 `HEAD:master` on either transport: push under the branch name you then deploy with `ref`, because a fresh `git init` can name the local branch `main`. `deploy(..., ref="master")` in step 4 binds `prod` to `master`. Never write the token value into a command or into a file the user might commit. **Pushing stores the code; it does not deploy** — that is step 4.
 
-**Fallback, one case only:** when git is not available on the machine you are working on — a client with no shell, such as claude.ai or ChatGPT — use `commit_files(app_name, message, files)` instead; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
+**Fallback:** when git is not available on the machine you are working on — a client with no shell, such as claude.ai or ChatGPT — or when neither git transport can push, use `commit_files(app_name, message, files)` instead; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
 
 For an `app`-template project the push is the same; the repo needs `install.sh` (optional) and `launch.sh` (required) at its root. The deploy only succeeds if the app signals readiness within 120s, and there are **two ways to do that** — whichever comes first. So the process must:
 
@@ -157,7 +160,7 @@ The preview is live at `https://draft-lisbon-coffee-alice.xhostd.app`.
 
 ## Troubleshooting
 
-**Tool reports unauthenticated.** Tell the user to run `/mcp` → xhostd → Authenticate (Claude Code) or reconnect the connector (claude.ai). On the OAuth path there is no token to set. A registered agent instead renews its token with its key when the token expired, as [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) describes.
+**Tool reports unauthenticated.** In Claude Code, tell the user to run `/mcp`, select the xhostd entry whose tool reported unauthenticated (**claude.ai xhostd**, **xhostd**, or the plugin's xhostd entry), and choose **Authenticate**. In claude.ai or the Claude desktop app, tell the user to open **Settings → Connectors**, select **xhostd**, and reconnect. If it isn't listed, they search for xhostd in the Connectors directory and choose **Connect to Claude**. On the OAuth path there is no token to set. A registered agent instead renews its token with its key when the token expired, as [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) describes.
 
 **"app name is already taken"** — they already own one with that name. Pick a different name or delete the old app with `delete_app`.
 

@@ -443,8 +443,8 @@ migrations. **`git push` and then `deploy` is the standard path.** A push
 sends only the diff, and needs no anchor to place it. The next schema change
 thus costs a one-file commit and a push, not a tool call carrying anchors or
 whole files. `commit_files` is
-the fallback for one situation only: git is not available on the machine
-where you work.
+the fallback where git is not available on the machine where you work, or
+where neither git transport can push.
 
 Both paths keep the same rule. **A push stores your code, but it does not
 deploy your code.** `deploy` is a separate and explicit call.

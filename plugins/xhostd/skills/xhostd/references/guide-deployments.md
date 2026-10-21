@@ -7,7 +7,7 @@ Sending source to the repository and making it live are separate operations.
 
 Use [git](https://docs.xhostd.com/guides/git) to send code to the project's
 repository. A push stores the commit; it does not deploy it. Use `commit_files`
-only when git is unavailable, as described in
+only when git is unavailable or neither git transport can push, as described in
 [Ship without git](https://docs.xhostd.com/guides/recipes-commit-files).
 
 Call the [deploy tool](https://docs.xhostd.com/mcp-tools#deploy) with the app,

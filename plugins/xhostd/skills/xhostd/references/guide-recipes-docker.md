@@ -253,8 +253,9 @@ Every app owns a git repo, and **`git push` and then `deploy` is the standard
 path**. A push sends only the diff, which keeps the second, tenth and
 hundredth edit cheap. Git transfers the few lines that changed, and needs no
 anchor to place them. A tool call carries an anchor and the new text at best,
-and a whole file when you send one. Use `commit_files` in one
-situation only: git is not available on the machine where you work.
+and a whole file when you send one. Use `commit_files` only where
+git is not available on the machine where you work, or where neither git
+transport can push.
 
 Both paths keep two acts separate. **A push stores your code, but it does not
 deploy your code.** `deploy` is its own explicit call, and that is the point:
