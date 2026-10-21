@@ -195,7 +195,8 @@ explains them.
 ### Step 2 — push the files
 
 Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
-Use `commit_files` only when the machine has no git. A deploy reads a commit
+Use `commit_files` only when the machine has no git, or when neither git
+transport can push. A deploy reads a commit
 from the repo, and it does not know the source of that commit.
 
 **This recipe shows the HTTPS steps.** Where a shell is available, SSH is the

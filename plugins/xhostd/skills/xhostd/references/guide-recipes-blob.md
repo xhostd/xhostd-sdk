@@ -332,8 +332,9 @@ exec uvicorn app:app --host 0.0.0.0 --port "$XHOSTD_HTTP_PORT"
 Every app owns a git repo. **`git push`, then `deploy`, is the standard
 path.** A push sends only the diff. Thus each edit after the first one costs a
 few lines, not the full contents of every file through a tool call. Use
-`commit_files` in one situation only: git is not available on the machine that
-you work on. **A push stores your code; it does not deploy the code.**
+`commit_files` only where git is not available on the machine that you work
+on, or where neither git transport can push. **A push stores your code; it
+does not deploy the code.**
 `deploy` is a separate call, so you name the commit that goes live.
 
 There are five steps: the four steps that every app takes, and the write

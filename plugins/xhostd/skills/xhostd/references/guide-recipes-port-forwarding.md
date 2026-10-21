@@ -263,7 +263,8 @@ app id and the `prod` channel id, because the deploy calls take both.
 ### Step 2 — push the files
 
 Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
-Use `commit_files` only when the machine has no git. The rest of the recipe is
+Use `commit_files` only when the machine has no git, or when neither git
+transport can push. The rest of the recipe is
 the same for both methods. A deploy reads a commit from the repo, and it does
 not know the source of that commit.
 

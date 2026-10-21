@@ -19,10 +19,11 @@ ordinary commit on the app's own repo. There is no shell, no clone and no
 push.
 
 **`git push` and then `deploy` is the standard path, and this recipe is not
-that path.** Use this recipe in one case only: git is not available. That
-case is a client with no shell: claude.ai, ChatGPT, a Custom GPT, or an MCP
-client that cannot run a command. If you can run `git` on the
-machine where you work, obey
+that path.** Use this recipe in two cases only. The first is a client with
+no shell: claude.ai, ChatGPT, a Custom GPT, or an MCP client that cannot run
+a command. The second is a machine where neither git transport can push:
+there is no usable SSH key, and `XHOSTD_TOKEN` is not set. If git can push
+from the machine where you work, obey
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static) instead.
 Its four steps are the same on every template.
 
@@ -405,7 +406,7 @@ a file that you send again with no change does no damage. But it costs you
 that text every time. Two rules keep the cost down. Name only the paths that
 change, because the platform leaves every other path as it is. Then reach for
 `edits` or `patches` instead of `files` on a file that already exists.
-If git is available on the machine where you work, stop with `commit_files`.
+If git can push from the machine where you work, stop with `commit_files`.
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static) gives
 the four steps, and a push sends the diff, not the file.
 

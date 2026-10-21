@@ -27,22 +27,26 @@ wait for a failure.
 
 1. **The machine runs no command.** A client with no shell, such as
    claude.ai or ChatGPT, cannot run git. Use the `commit_files` MCP tool.
-2. **The machine runs commands.** Push over SSH. Read **Push over SSH**
-   below. Reuse `~/.ssh/xhost_ed25519` if that file exists. If the file
-   is absent, make a keypair and call `register_ssh_key` once.
+2. **The machine runs commands.** Push over SSH with a key of the
+   account you are connected as. Read **Push over SSH** below. Check
+   every `~/.ssh/xhost_ed25519*` key against `list_ssh_keys` first, and
+   push with the key that the account lists.
 3. **The network blocks outbound port 22, or an SSH push fails.** Push
    over HTTPS with a token: your own token from the `XHOSTD_TOKEN`
    environment variable, or a scoped, short-lived token that you mint
    from it. Read **The clone / push URL** below.
+4. **Neither transport can push.** There is no usable SSH key, and
+   `XHOSTD_TOKEN` is not set. Use the `commit_files` MCP tool, as on a
+   machine with no shell. Never ask the user to paste a token.
 
 SSH is the first transport because a private key never enters a tool
 call, and an SSH push needs no token. HTTPS needs a token in the
 environment, and that token expires.
 
 The SSH path costs no extra step in the steady state. Your tool makes a
-keypair only when the key file is absent. A key belongs to the account
-and not to one app, so one `register_ssh_key` call serves every app on
-that machine.
+keypair only when the machine holds no key for the account. A key
+belongs to the account and not to one app, so one `register_ssh_key`
+call serves every app on that machine.
 
 ## Mint credentials
 
@@ -107,40 +111,67 @@ never enters a tool call, so a content filter has nothing to refuse.
 only. `get_app` and `GET /apps/{app_id}` return the `repo_url` of each
 app, and that URL holds both values.
 
-Read `~/.ssh/xhost_ed25519` first. If that file exists, the machine
-holds a key already, and you go straight to the push step below.
+A machine can hold keys for more than one xhostd account, so first
+check that the key belongs to the account you are connected as:
 
-**Always use the path `~/.ssh/xhost_ed25519`.** Do not put the key in
-the project directory. Do not add a suffix for a project, an app, or a
-tool. The path is in your home directory, so every tool and every
-project on the machine reads the same key.
+1. Get the `repo_url` and `<username>` of the app from `get_app`.
+2. Read the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub`
+   with `ssh-keygen -lf <file>`: the default `~/.ssh/xhost_ed25519.pub`
+   and every `~/.ssh/xhost_ed25519_*.pub`. Compare each with the
+   `fingerprint` values that `list_ssh_keys` returns. That tool lists
+   the keys of the connected account, so a match proves that the key
+   pushes for this account. Push with the key whose `.pub` file
+   `list_ssh_keys` lists.
+3. If none is listed, register the default key. Make
+   `~/.ssh/xhost_ed25519` if it is absent, then call `register_ssh_key`
+   with it, and push with it.
+4. A `409` means that the default key belongs to a different xhostd
+   account on this machine. Make `~/.ssh/xhost_ed25519_<username>` if it
+   is absent, register it, and push with it.
+5. If that registration also answers `409`, this machine holds no
+   usable SSH key for this account. Push over HTTPS when `XHOSTD_TOKEN`
+   is set, or else use the `commit_files` tool. Never make a key under
+   any other name.
 
-A different path makes a second keypair. Each new keypair adds a key to
-your account, and the platform sends you a notification. Your account
-then collects keys that no tool uses.
+A file name proves nothing about the account. A match in
+`list_ssh_keys` is what proves which account a key belongs to.
 
-If the file is absent, make a keypair on the machine that pushes:
+To make a key, run `ssh-keygen` on the machine that pushes:
 
 ```sh
 ssh-keygen -t ed25519 -N "" -f ~/.ssh/xhost_ed25519
 ```
 
-That command writes the private half straight to the disk. Send the
-**public** half only — the content of `~/.ssh/xhost_ed25519.pub`. Call
-the `register_ssh_key` MCP tool with that content. Add a `label` that
-identifies the machine. You can also paste that content on
-[console.xhostd.com/ssh-keys](https://console.xhostd.com/ssh-keys), which
-lists the keys of your account and deletes one.
+For an account-specific key, replace the path with
+`~/.ssh/xhost_ed25519_<username>`. That command writes the private half
+straight to the disk. Send the **public** half only — the content of the
+`.pub` file. Call the `register_ssh_key` MCP tool with that content. Add
+a `label` that identifies the machine. You can also paste that content
+on [console.xhostd.com/ssh-keys](https://console.xhostd.com/ssh-keys),
+which lists the keys of your account and deletes one.
+
+**Keep every key at `~/.ssh/xhost_ed25519` or
+`~/.ssh/xhost_ed25519_<username>`.** Do not put a key in the project
+directory. Do not add a suffix for a project, an app, or a tool. Those
+paths are in your home directory, so every tool and every project on the
+machine reads one key per account.
+
+Never make a second key for the same account. A different path makes a
+second keypair. Each new keypair adds a key to your account, and the
+platform sends you a notification. Your account then collects keys that
+no tool uses.
 
 **A key belongs to the account, not to one app.** Thus one
 `register_ssh_key` call serves every app that you push to from that
-machine. Repeat this step on a new machine only.
+machine. Repeat this step on a new machine, or for a new account, only.
 
-Then set the SSH remote and push:
+Then set the SSH remote and push. Replace `<key>` with the private key
+that the steps chose, `~/.ssh/xhost_ed25519` or a
+`~/.ssh/xhost_ed25519_<username>` key:
 
 ```sh
 git remote add xhostd-ssh "git@git.xhostd.com:<username>/<app>.git"
-GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519 -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master
+GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master
 ```
 
 The `HEAD:master` refspec is deliberate. Push under the name you will
@@ -159,20 +190,23 @@ returns metadata only: `id`, `label`, `algo`, `fingerprint`,
 then fails at once.
 
 A fingerprint is unique over the whole platform. Thus a key that the
-platform holds already answers `409`. For the key at
-`~/.ssh/xhost_ed25519`, a `409` means an earlier session registered that
-same key. The key works, so push with it. Never make a second keypair to
-clear a `409`.
+platform holds already answers `409`. You register only a key that
+`list_ssh_keys` does not list, so a `409` means that another xhostd
+account holds the key. Never make a key to clear a `409` for a key that
+`list_ssh_keys` lists for this account.
 
 An SSH push needs outbound port 22. Some company networks and CI runners
 block that port. Two conditions send you to a different path: the
 network blocks port 22, or an SSH push fails. Push over HTTPS then, as
-the next section describes, or use the `commit_files` tool.
+the next section describes. If `XHOSTD_TOKEN` is not set, use the
+`commit_files` tool.
 
 ## The clone / push URL
 
 This is the HTTPS transport. Push over HTTPS where the network blocks
-outbound port 22, or where an SSH push fails.
+outbound port 22, or where an SSH push fails. It needs a token in
+`XHOSTD_TOKEN`. Without one, use the `commit_files` tool, and never ask
+the user to paste a token.
 
 An agent sends its own token from `XHOSTD_TOKEN` as a header, so the
 token value never appears in a command or in `.git/config`:

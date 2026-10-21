@@ -106,7 +106,8 @@ root. The boot then only runs `exec`.
 Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
 A push sends only the diff. Each edit after the first therefore costs a few
 lines, and not the full content of every file through a tool call. Use
-`commit_files` in one situation only: the machine has no git. **A push stores
+`commit_files` only where the machine has no git, or where neither git
+transport can push. **A push stores
 your code, but it does not deploy it.** `deploy` is a separate call, so the
 commit that goes live is the commit that you name.
 
