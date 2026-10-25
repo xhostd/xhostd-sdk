@@ -1,6 +1,6 @@
 {
   "name": "xhostd",
-  "version": "0.72.0",
+  "version": "0.73.0",
   "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create apps, push code, deploy previews or production, inspect status, and manage channels, environment, storage, and domains.",
   "author": {
     "name": "xhostd",
@@ -64,7 +64,7 @@
             {
               "description": "The user edits a page of an existing app and redeploys it.",
               "prompt": "On xhostd, change the heading on review-site to 'Updated by the reviewer' and redeploy it.",
-              "tools_triggered": "read_file, commit_files, deploy, get_logs",
+              "tools_triggered": "read_source_file, commit_files, deploy, get_logs",
               "expected_behavior": "Reads the page, changes the heading with commit_files edits, deploys the commit, and confirms that the deploy succeeded."
             },
             {

@@ -18,24 +18,19 @@ call with a `{path: contents}` map. The platform turns that map into one
 ordinary commit on the app's own repo. There is no shell, no clone and no
 push.
 
-**`git push` and then `deploy` is the standard path, and this recipe is not
-that path.** Use this recipe in two cases only. The first is a client with
-no shell: claude.ai, ChatGPT, a Custom GPT, or an MCP client that cannot run
-a command. The second is a machine where neither git transport can push:
-there is no usable SSH key, and `XHOSTD_TOKEN` is not set. If git can push
-from the machine where you work, obey
-[Recipe: static site](https://docs.xhostd.com/guides/recipes-static) instead.
+**Use this recipe in two cases.** The first is a client with no shell
+access, such as an MCP client that cannot run a command. The second is a
+machine where neither git transport can push: there is no usable SSH key, and
+`XHOSTD_TOKEN` is not set. If git can push from the machine where you work,
+follow [Recipe: static site](https://docs.xhostd.com/guides/recipes-static).
 Its four steps are the same on every template.
 
-`commit_files` is not a lesser mode: it writes real commits with your name on
-them. They go into the same repo that a push goes to, and a later
-`git clone` shows them like any other commits. The cost is per edit. A
-changeset sends the text you give it through the model's context each time,
-so what you send decides the price. `files` sends a whole file. `edits` and
-`patches` send only the region that changes, which is what you want for any
-file that already exists — a one-line fix in a 78 KB file then costs the
-anchor, not the file. A push still sends less, because it sends a diff and
-needs no anchor, so git stays the first choice.
+`commit_files` writes real commits with your name on them. They go into the
+same repo that a push goes to, and a later `git clone` shows them like any
+other commits. A changeset sends the text you give it through the model's
+context each time. `files` sends a whole file. `edits` and `patches` send only
+the region that changes, so for a file that already exists, a one-line fix in
+a 78 KB file sends the anchor and not the file.
 
 The worked example is live at
 [recipe-commit-files-docs.xhostd.app](https://recipe-commit-files-docs.xhostd.app/).
@@ -68,9 +63,8 @@ leaves the stylesheet as it is.
     platform turns into one ordinary commit on the app's own repo.
   </p>
   <p>
-    That is the fallback path. When git is available, <code>git push</code>
-    is the one to use: it sends only what changed, so the tenth edit costs a
-    few lines instead of the whole project.
+    With a shell, <code>git push</code> sends only what changed. Without
+    one, <code>commit_files</code> writes each change as one commit.
   </p>
   <p><a href="https://docs.xhostd.com/guides">xhostd recipes</a></p>
 </main>
@@ -131,8 +125,7 @@ create_app(name="recipe-commit-files", template="static")
 Keep two ids: the app's `id`, and the `id` of the new `prod` channel. Every
 later call needs one or both. This recipe has no credential step.
 `commit_files` uses the same authenticated tool session as every other call.
-You thus make no token, store no token and paste no token. That is the one
-advantage of the fallback path over the standard path.
+You thus make no token, store no token and paste no token.
 
 **2. Commit the whole site in one changeset.** The `files` map is
 `{path: contents}`. A string value writes the file at that path, and it
@@ -151,11 +144,11 @@ the full text of its file from the section above, with all the newlines.
 That is the cost:
 both files went through the model's context in full, for one commit.
 
-`list_files` reads the branch back. Call it after every changeset until this
+`list_source_files` reads the branch back. Call it after every changeset until this
 path is familiar to you:
 
 ```text
-list_files(app_name="recipe-commit-files")
+list_source_files(app_name="recipe-commit-files")
 → {"ref": "master", "sha": "0bf2770b0ab04b119bc4138faf2d9b1a270ab095",
    "files": [{"path": "index.html", "kind": "blob", "size": 815},
              {"path": "style.css", "kind": "blob", "size": 563}]}
@@ -192,7 +185,7 @@ commit_files(app_name="recipe-commit-files",
 ```
 
 ```text
-list_files(app_name="recipe-commit-files")
+list_source_files(app_name="recipe-commit-files")
 → {"ref": "master", "sha": "9664363b9339eec27087c819f49c14c977799134",
    "files": [{"path": "index.html", "kind": "blob", "size": 815},
              {"path": "robots.txt", "kind": "blob", "size": 24},
@@ -216,7 +209,7 @@ commit_files(app_name="recipe-commit-files",
 ```
 
 ```text
-list_files(app_name="recipe-commit-files")
+list_source_files(app_name="recipe-commit-files")
 → {"ref": "master", "sha": "c16fdc6adcc7b64b72603a674c05aef8ca708972",
    "files": [{"path": "index.html", "kind": "blob", "size": 815},
              {"path": "style.css", "kind": "blob", "size": 563}]}
@@ -244,8 +237,8 @@ it gives the same result.
 
 ## Change a file without resending it
 
-`files` sends whole content, which is what you want for a new file. For a file
-that already exists, send the region that changes instead. Two fields do that,
+`files` sends whole content, for a new file. For a file that already exists,
+send the region that changes. Two fields do that,
 and one changeset takes any mix of `files`, `edits`, and `patches`. A path
 belongs to exactly one of them.
 
@@ -281,8 +274,7 @@ miscounted header cannot happen. Each hunk needs at least one context or `-`
 line, because those lines are what locate it.
 
 Both fields match byte for byte. Whitespace, indentation, and line endings all
-count. Copy anchors from `read_file` output rather than retyping them, and the
-match is far more likely to land the first time.
+count. Copy anchors from `read_source_file` output, and do not retype them.
 
 ## Verify it
 
@@ -378,15 +370,15 @@ you clone that repo and continue your work.
 `commit_files` is refused outright, with
 
 ```text
-this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — each push syncs once the repo pings xhostd (sync_git shows the setup), and each deploy fetches from GitHub first.
+this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — each push syncs once the repo pings xhostd (sync_git_from_remote shows the setup), and each deploy fetches from GitHub first.
 ```
 
 There is no way around this refusal. On a connected app, GitHub is the
 source, and the xhostd repo is a read-only mirror of GitHub. Send the code to
 GitHub, and xhostd syncs it from there. This guide describes the message and
 does not capture it. The demo app has no GitHub source, and a connection to
-GitHub would stay in place. `sync_git` is not the answer either. It refreshes
-that mirror, and it does not put code onto an app.
+GitHub would stay in place. `sync_git_from_remote` does not put code onto an
+app either: it refreshes that mirror.
 
 ### The commit succeeded but the site did not change
 
@@ -394,21 +386,21 @@ that mirror, and it does not put code onto an app.
 not deploy code. Call `deploy` with that `sha`. A push to git with no deploy
 gives the same result, so this failure occurs on both paths. If you do not
 know which commit is live, call `get_app` for the channel's `current_sha`.
-Call `list_files` for the content of the repo. If the two disagree, the repo
+Call `list_source_files` for the content of the repo. If the two disagree, the repo
 is ahead and a deploy is absent. A non-null `pending_deploy` on the channel
 means the deploy is in flight and `current_sha` has not caught up yet — poll
-`get_logs` with `source="deploy"` rather than starting another deploy.
+`get_logs` with `source="deploy"`, and do not start another deploy.
 
 ### You send the whole file on every edit
 
 It works. The platform applies every changeset on top of the branch head, so
 a file that you send again with no change does no damage. But it costs you
 that text every time. Two rules keep the cost down. Name only the paths that
-change, because the platform leaves every other path as it is. Then reach for
-`edits` or `patches` instead of `files` on a file that already exists.
-If git can push from the machine where you work, stop with `commit_files`.
+change, because the platform leaves every other path as it is. Then send a
+file that already exists with `edits` or `patches`, not with `files`.
+If git can push from the machine where you work,
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static) gives
-the four steps, and a push sends the diff, not the file.
+the four steps, and a push sends the diff.
 
 ### The file you need to commit is not text
 

@@ -4,8 +4,7 @@ These are complete deployments that you can follow from start to end. Each
 recipe takes one shape of project: a static site, an API, or a background
 worker. It then shows the full path. You create the app, write the files, set
 the environment, deploy, and check that the app is live. A coding agent can
-follow a recipe for you. The fastest method is to give your agent the recipe
-and say "do this".
+follow a recipe for you: give your agent the recipe and say "do this".
 
 If your agent has no connection to xhostd, start with
 [Connect your agent](https://xhostd.com/integrations). Then come back
@@ -14,12 +13,6 @@ here. An agent that works with no person at a browser opens its own account:
 
 [Push code with git](https://docs.xhostd.com/guides/git) tells you about the
 credential, the remote URL and the `git push` command.
-
-## Contents
-
-- Operate your projects
-- The recipes
-- The parts of a recipe
 
 ## Operate your projects
 

@@ -248,35 +248,31 @@ The full example is
 
 ## Put code onto the app
 
-Every app owns a git repo. **`git push`, then `deploy`, is the standard path**
-onto that repo. Use `commit_files` in two situations only: git is not available
-on the machine that you work on, or neither git transport can push, because
-there is no usable SSH key and no `XHOSTD_TOKEN`.
+Every app owns a git repo. **With git, push the code onto that repo, then call
+`deploy`.** Use `commit_files` in two situations: git is not available on the
+machine that you work on, or neither git transport can push, because there is
+no usable SSH key and no `XHOSTD_TOKEN`.
 
-The reason is the quantity of data that each path moves. A push sends only the
-diff. Git and the server agree on what the remote already holds, and only the
-difference goes over the network. A tool call cannot do this. A changeset
-carries what you give it through the model's context, every time. `edits` and
-`patches` narrow that to the region you change, and `files` sends a whole file.
-
-The first commit of one file costs approximately the same on both paths. At the
-tenth edit, the push is a few lines, and the tool call is an anchor plus the
-new text — still more, because a push needs no anchor at all. Git also gives
-you what a changeset cannot: branches, a history that you can read back, and a
-local copy that you edit in place.
+A push sends only the diff. Git and the server agree on what the remote
+already holds, and only the difference goes over the network. Git also keeps
+branches, a history that you can read back, and a local copy that you edit in
+place. A changeset carries what you give it through the model's context, every
+time. `edits` and `patches` carry the region you change, and `files` carries a
+whole file.
 
 **A push stores your code; it does not deploy the code.** These are two
 separate operations, and the separation lets you name the commit that goes
 live. After a push, call `deploy(app_name, channel, ref="master")`. The `ref`
 value is a branch name, and xhostd finds the current head of that branch. Thus
-you never need to know the sha. The ref binds the channel. Pass `sha` instead
-when you want an exact commit; a `sha` binds nothing. If you pass both, `sha`
-wins.
+you never need to know the sha. The ref binds the channel. Pass `sha` when you
+want an exact commit; a `sha` binds nothing. If you pass both, `sha` takes
+precedence.
 
-**`sync_git` has no part in this path.** It refreshes an app's mirror of a
-*connected GitHub repo*. It has no relation to a push to the app's own repo. If
-an app has a connected GitHub source, the platform refuses `commit_files`, and
-you put the code in GitHub.
+**`sync_git_from_remote` has no part in this path.** It refreshes an app's
+mirror of a *connected source repository*. It has no relation to a push to the
+app's own repo. If
+an app has a connected source repository, the platform refuses `commit_files`,
+and you put the code in that repository.
 
 Your credential is your own token in the `XHOSTD_TOKEN` environment variable:
 a person mints it on the console [/tokens](https://console.xhostd.com/tokens)
@@ -285,7 +281,7 @@ Send it as a header,
 `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push ...`, and
 never write the token value into a command or a file that you commit. No tool
 result carries a token. You can also mint a scoped, short-lived token with the
-request that `get_credentials` describes, and send it the same way from a
+request that `get_credential_request` describes, and send it the same way from a
 variable of its own; the [Git guide](https://docs.xhostd.com/guides/git) shows
 the commands.
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static) shows the
@@ -569,18 +565,19 @@ cancels the deploys still queued on the channel and lists them as
 `cancelled_deploys`: deploy again once the restore ends. A deploy that already
 runs finishes first, and the restore waits for it.
 
-**To roll the code back:** call `rewind(app_name, channel)`. It moves the
-channel to the image of the last successful deploy with a commit that is
-different from the live commit. It is fast, because it boots an image that the
-platform keeps. There is no new build and no git sync. `rewind` is not
-available on a channel that deployed one commit only. To go back more than one
-step, `deploy` the older sha instead.
+**To roll the code back:** call `rewind_channel(app_name, channel)`. It moves
+the channel to the image of the last successful deploy with a commit that is
+different from the live commit. It boots an image that the platform keeps, with
+no new build and no git sync. `rewind_channel` is not available on a channel
+that deployed one commit only. To go back more than one step, `deploy` the
+older sha.
 
-**The two operations are separate, and the difference is important.** `rewind`
-changes the live image and nothing more. It does not reverse a migration. If
-the bad deploy changed the schema, a rewind leaves the old code with a new
-schema. Restore the database as well, or deploy a correction. `rewind` is not
-available on the `static` template, because that template keeps no image.
+**The two operations are separate, and the difference is important.**
+`rewind_channel` changes the live image and nothing more. It does not reverse
+a migration. If the bad deploy changed the schema, a rewind leaves the old code
+with a new schema. Restore the database as well, or deploy a correction.
+`rewind_channel` is not available on the `static` template, because that
+template keeps no image.
 
 **Restore the blob storage with `restore_channel_snapshot` and
 `part="files"`.** The tool rolls a channel's object storage back to a

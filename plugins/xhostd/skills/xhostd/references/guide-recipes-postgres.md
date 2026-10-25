@@ -439,12 +439,10 @@ leaves the schema in a state that `downgrade()` cannot reverse.
 ## The deploy
 
 The whole app ships in one commit and one deploy: all eight files and both
-migrations. **`git push` and then `deploy` is the standard path.** A push
-sends only the diff, and needs no anchor to place it. The next schema change
-thus costs a one-file commit and a push, not a tool call carrying anchors or
-whole files. `commit_files` is
-the fallback where git is not available on the machine where you work, or
-where neither git transport can push.
+migrations. **With git, push the code, then call `deploy`.** A push sends
+only the diff, and needs no anchor to place it, so the next schema change is
+a one-file commit and a push. Use `commit_files` where git is not available
+on the machine where you work, or where neither git transport can push.
 
 Both paths keep the same rule. **A push stores your code, but it does not
 deploy your code.** `deploy` is a separate and explicit call.
