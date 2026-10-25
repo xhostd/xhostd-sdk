@@ -2,7 +2,7 @@
   "name": "xhostd",
   "displayName": "xhostd",
   "description": "Deploy applications, sites, and services with xhostd. Push code, get HTTPS URLs.",
-  "version": "0.71.1",
+  "version": "0.72.0",
   "author": {
     "name": "xhostd",
     "url": "https://xhostd.com",

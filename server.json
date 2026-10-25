@@ -3,7 +3,7 @@
   "name": "com.xhostd/mcp",
   "title": "xhostd",
   "description": "Agent-first hosting: create apps, push code, and deploy to HTTPS URLs from your coding agent.",
-  "version": "0.71.1",
+  "version": "0.72.0",
   "websiteUrl": "https://xhostd.com",
   "repository": {
     "url": "https://github.com/xhostd/xhostd-sdk",

@@ -355,7 +355,7 @@ If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged
 }
 ```
 
-`joined` is true when a deploy of the same commit was already queued for this channel. `deploy_id` names that deploy, and no second deploy was queued. It reads the current env when it starts, so poll it as usual. A request for another commit replaces a deploy still queued for the channel, and the replaced deploy turns `superseded`.
+`joined` is true when a deploy of the same commit, queued by a deploy request or a GitHub push, is already waiting for this channel. `deploy_id` names that deploy, and no second deploy was queued. It reads the current env when it starts, so poll it as usual. Any other deploy request replaces a deploy still queued for the channel, and the replaced deploy turns `superseded`.
 
 **Note:** This endpoint must be called explicitly after `git push` to trigger a deploy. Pushing code does not automatically deploy.
 
