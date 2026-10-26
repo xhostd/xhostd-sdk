@@ -249,13 +249,10 @@ the file that `$XHOSTD_READY_FILE` names, which the probe also accepts.
 
 ## The deploy
 
-Every app owns a git repo, and **`git push` and then `deploy` is the standard
-path**. A push sends only the diff, which keeps the second, tenth and
-hundredth edit cheap. Git transfers the few lines that changed, and needs no
-anchor to place them. A tool call carries an anchor and the new text at best,
-and a whole file when you send one. Use `commit_files` only where
-git is not available on the machine where you work, or where neither git
-transport can push.
+Every app owns a git repo. **With git, push the code, then call `deploy`.** A
+push sends only the diff: git transfers the few lines that changed, and needs
+no anchor to place them. Use `commit_files` where git is not available on the
+machine where you work, or where neither git transport can push.
 
 Both paths keep two acts separate. **A push stores your code, but it does not
 deploy your code.** `deploy` is its own explicit call, and that is the point:
@@ -288,12 +285,12 @@ platform API. Use your own token from the
 [/tokens](https://console.xhostd.com/tokens) page and exports it; a registered
 agent exports the token that registration returned. No tool result carries a
 token. You can also mint a scoped, short-lived token with the request that
-`get_credentials` describes, and send it the same way from a variable of its
+`get_credential_request` describes, and send it the same way from a variable of its
 own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
-**This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
-first git transport, because the private half of the key never enters a tool
-call. One registration then covers every app on that machine. The
+**This recipe shows the HTTPS steps.** With a shell, push over SSH: the
+private half of the key never enters a tool call, and one registration covers
+every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -458,8 +455,8 @@ get_logs(app_name="recipe-docker-pg", channel="prod", source="runtime")
 Without a `command`, the call starts no container on the host. It returns the
 status header alone. The header gives the process state, the exit code if the
 process stopped, and whether the kernel OOM-killed it. It also gives the
-restart count and the container indices that you can still read. This call is
-the fastest check for a crash.
+restart count and the container indices that you can still read. Use it to
+check whether the app crashed.
 
 Those indices are useful after a redeploy. The platform archives the previous
 container's log, so you can still read the output of the version that

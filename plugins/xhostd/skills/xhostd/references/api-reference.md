@@ -1,10 +1,10 @@
 # xhostd API Reference
 
-This is the underlying HTTP API that the MCP tools wrap. For normal agent usage, prefer the xhostd MCP tools — an OAuth session or a registered agent's token authenticates them. This reference is here for deep dives, debugging, or direct programmatic access.
+This is the underlying HTTP API that the MCP tools wrap. An agent's day-to-day work goes through the xhostd MCP tools, which an OAuth session or a registered agent's token authenticates. This reference is for deep dives, debugging, or direct programmatic access.
 
 Base URL: `https://api.xhostd.com`
 
-All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send `-H "Authorization: Bearer $XHOSTD_TOKEN"`; never write the value into a command. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credentials` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
+All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send `-H "Authorization: Bearer $XHOSTD_TOKEN"`; never write the value into a command. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credential_request` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
 
 All error responses use the envelope: `{"error": {"code": "<code>", "message": "<message>"}}`
 
@@ -50,7 +50,7 @@ All error responses use the envelope: `{"error": {"code": "<code>", "message": "
 - POST /apps/{app_id}/channels/{channel_id}/forward
 - GET /apps/{app_id}/forwards
 - DELETE /apps/{app_id}/channels/{channel_id}/forward
-- POST /apps/{app_id}/github/sync
+- POST /apps/{app_id}/source/sync
 - GET /apps/{app_id}/events
 - POST /exports
 - GET /exports
@@ -300,7 +300,7 @@ Change the branch a channel is bound to, whether it follows that branch, or both
 ```
 
 - `git_ref_binding` (string, optional) — `branch:<name>`, following "git_ref_binding Format". `null` answers 400: a channel cannot be unbound.
-- `follows_branch` (boolean, optional) — `true` makes each push to the channel's branch on the connected GitHub repo deploy the new head, once the repo pings xhostd (see "Deploy on push" under `POST /apps/{app_id}/github/sync`). It needs a connected repo and a bound branch. `false` is always accepted. A body with both fields applies the binding first; send at least one.
+- `follows_branch` (boolean, optional) — `true` makes each push to the channel's branch on the connected source repository deploy the new head. A `deploy_key` source needs its ping set up first, and an `installation` source needs no setup (see "Deploy on push" under `POST /apps/{app_id}/source/sync`). It needs a connected source repository and a bound branch. `false` is always accepted. A body with both fields applies the binding first; send at least one.
 
 **Response (200):** The channel, in the `GET /apps/{app_id}/channels/{channel_id}` shape, with `follows_branch`.
 
@@ -309,7 +309,7 @@ Change the branch a channel is bound to, whether it follows that branch, or both
 - `branch_wildcard_deprecated` (400) — `branch:*`
 - `scope_denied` (403) — the credential lacks `channel:*`, or lacks `deploy:*` for `follows_branch: true`
 - `not_found` (404) — app or channel not found
-- `conflict` (409) — `follows_branch: true` on an app with no GitHub repo connected, or on a channel with no branch
+- `conflict` (409) — `follows_branch: true` on an app with no connected source repository ("connect a source repository first (console → project → Git); a channel follows its branch on each push to that repository"), or on a channel with no branch ("bind a branch first; a channel with no branch has nothing to follow")
 
 ---
 
@@ -343,7 +343,7 @@ Enqueue a deploy of a branch or a commit to a channel.
 - `ref` (string, optional) — A branch name (`main` or `refs/heads/main`). xhostd deploys its current HEAD and **binds the channel to that branch**, in the same transaction as the enqueue. A later build or boot failure keeps the new binding.
 - `sha` (string, optional) — A 40-character hex SHA, or a branch name matching `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. It deploys once and never changes the binding.
 
-If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither, xhostd deploys the current HEAD of the channel's bound branch. On a GitHub-connected app the deploy fetches from GitHub first.
+If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither, xhostd deploys the current HEAD of the channel's bound branch. On an app with a connected source repository, the deploy fetches from it first.
 
 **Response (200):**
 ```json
@@ -355,22 +355,22 @@ If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged
 }
 ```
 
-`joined` is true when a deploy of the same commit, queued by a deploy request or a GitHub push, is already waiting for this channel. `deploy_id` names that deploy, and no second deploy was queued. It reads the current env when it starts, so poll it as usual. Any other deploy request replaces a deploy still queued for the channel, and the replaced deploy turns `superseded`.
+`joined` is true when a deploy of the same commit, queued by a deploy request or by a push to the connected source repository, is already waiting for this channel. `deploy_id` names that deploy, and no second deploy was queued. It reads the current env when it starts, so poll it as usual. Any other deploy request replaces a deploy still queued for the channel, and the replaced deploy turns `superseded`.
 
 **Note:** This endpoint must be called explicitly after `git push` to trigger a deploy. Pushing code does not automatically deploy.
 
 **Errors:**
 - `bad_request` (400) — invalid SHA format, or a `ref` outside the branch rule (`HEAD` and names under `xhost/` included)
-- `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message names both fixes and, for a GitHub-connected app, GitHub's default branch
-- `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the bound branch, the message names the fix and GitHub's default branch
-- `conflict` (409) — the GitHub sync failed (the message carries the error), the channel is under maintenance, or the app is undergoing scheduled maintenance
+- `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message names both fixes and, for an app with a connected source repository, that repository's default branch
+- `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the bound branch, the message names the fix and the source repository's default branch
+- `conflict` (409) — the source repository sync failed (the message carries the error), the channel is under maintenance, or the app is undergoing scheduled maintenance
 - `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the app is under scheduled maintenance; retry in a minute
 
 ---
 
 ## POST /apps/{app_id}/channels/{channel_id}/rewind
 
-Instantly rewind a channel to its previous deploy's image — a one-step cutover with no rebuild, no git sync, and no snapshot (it boots the retained image directly, so it is fast). "Previous" is the last successful deploy whose commit differs from the one live now.
+Rewind a channel to its previous successful deploy's image, with no rebuild, no git sync, and no snapshot. It starts the retained image directly. "Previous" is the last successful deploy whose commit differs from the one live now.
 
 **Required scope:** `deploy:*`
 
@@ -385,7 +385,7 @@ Instantly rewind a channel to its previous deploy's image — a one-step cutover
 }
 ```
 
-**Note:** To go back to an OLDER commit, or to force a fresh rebuild, use the deploy endpoint with an explicit `sha` instead. Rewind is not available for `static` apps (they bind-mount the live worktree and have no built image).
+**Note:** To deploy an OLDER commit, or to rebuild one, use the deploy endpoint with an explicit `sha`. Rewind is not available for `static` apps (they bind-mount the live worktree and have no built image).
 
 **Errors:**
 - `bad_request` (400) — the app is `static`, or the channel has only ever deployed one commit (nothing to rewind to)
@@ -539,7 +539,7 @@ List all files in the repo at the given ref. Lets a stateless agent see the curr
 
 **Query parameters:**
 
-- `ref` (string, optional) — Branch name or 40-char SHA. Omit it to read the branch `prod` deploys; if `prod` has no branch yet, the repo's own default branch (`master` for a repo xhostd created, GitHub's default for a connected app).
+- `ref` (string, optional) — Branch name or 40-char SHA. Omit it to read the branch `prod` deploys; if `prod` has no branch yet, the repo's own default branch (`master` for a repo xhostd created, the source repository's default for an app with a connected source repository).
 
 **Response (200):**
 ```json
@@ -554,7 +554,7 @@ List all files in the repo at the given ref. Lets a stateless agent see the curr
 ```
 
 **Errors:**
-- `ref_required` (400) — no `ref`, and a GitHub-connected app that never synced has no branch to default to
+- `ref_required` (400) — no `ref`, and an app with a connected source repository that never synced has no branch to default to
 - `not_found` (404) — app not found, or ref does not exist (e.g. empty repo with no commits yet)
 
 ---
@@ -622,7 +622,7 @@ Send at least one of `changes`, `edits`, or `patches`. A path belongs to exactly
 **Errors:**
 - `bad_request` (400) — invalid path, invalid branch name, empty message, malformed changeset, a path in more than one field, or an edit or hunk whose anchor is absent or ambiguous (the message names the path and the count)
 - `not_found` (404) — app not found
-- `conflict` (409) — the app is GitHub-connected; push to GitHub instead
+- `conflict` (409) — the app has a connected source repository; push to that repository
 - `service_unavailable` (503) — the repo is busy, or the app is under scheduled maintenance; nothing was committed, so retry in a minute
 
 ---
@@ -928,7 +928,7 @@ Read one restore's status. A member of the restore's channel reads it; any other
 
 **Response (200):** The same shape as the 202 above, without `cancelled_deploys`.
 
-- `status` — `queued`, `extracting`, `loading`, `swapping`, `succeeded`, or `failed`. `queued` also covers the first moments after the restore starts, while it makes the app's database read-only, so show `activity` rather than `status`.
+- `status` — `queued`, `extracting`, `loading`, `swapping`, `succeeded`, or `failed`. `queued` also covers the first moments after the restore starts, while it makes the app's database read-only. During that time, `activity` states what the restore does: show it to the user.
 - `activity` — One plain sentence on what the restore does now. Null once it ends.
 - `waiting` — Why an active restore waits: `deploy_running`, `host_queue`, `starting`, `extraction_busy`, or `snapshot_not_yet_archived`. Null while it works.
 - `queue_ahead` — For a restore that has not started, the restores before it on its database server.
@@ -1145,16 +1145,19 @@ Release the channel's public endpoint. New connections are refused immediately a
 
 ---
 
-## POST /apps/{app_id}/github/sync
+## POST /apps/{app_id}/source/sync
 
-For apps connected to a GitHub source: fetch the latest GitHub commits into the app's internal xhostd mirror without deploying. Each deploy fetches first anyway; use this to refresh the mirror or surface sync errors on their own. Requires the admin role (or higher) on the app, and a credential holding `repo:*`. Not a protected action — it pulls the remote the owner already chose, so it never answers `protected_action`. Connecting and disconnecting a GitHub repo ARE protected actions, and neither has an MCP tool.
+For an app with a connected source repository: fetch the latest commits of that repository into the app's internal xhostd mirror without deploying. The MCP tool is `sync_git_from_remote`. Each deploy fetches first anyway; use this to refresh the mirror or surface sync errors on their own. Requires the admin role (or higher) on the app, and a credential holding `repo:*`. Not a protected action — it pulls the remote the owner already chose, so it never answers `protected_action`. Connecting and disconnecting a source repository ARE protected actions, and neither has an MCP tool. `POST /apps/{app_id}/github/sync` runs the same sync for a `deploy_key` source, and answers the GitHub status fields only.
 
 **Request body:** None
 
-**Response (200):**
+**Response (200):** the source status. This example is a `deploy_key` source:
 ```json
 {
   "connected": true,
+  "kind": "deploy_key",
+  "host": "github",
+  "label": "GitHub",
   "remote_url": "git@github.com:alice/my-app.git",
   "public_key": "ssh-ed25519 ...",
   "connected_at": "2025-01-16T10:30:00Z",
@@ -1164,14 +1167,17 @@ For apps connected to a GitHub source: fetch the latest GitHub commits into the 
   "last_sync_refs": {"main": "abc1234..."},
   "default_branch": "main",
   "notify_url": "https://api.xhostd.com/webhooks/github/f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "last_ping_at": "2025-01-16T10:34:58Z"
+  "last_ping_at": "2025-01-16T10:34:58Z",
+  "installation": null
 }
 ```
 
-- `default_branch` — GitHub's default branch, `null` until a sync reads it. A hint only: it binds no channel. Deploy it with `ref` to bind `prod` to it.
-- `notify_url` — the app's push ping URL, `POST /webhooks/github/{app_id}`. `last_ping_at` — when the last ping arrived, or `null`.
+- `kind` — `deploy_key`, a repository connected with a read-only deploy key, or `installation`, a repository connected through an app installation on its git host. `host` and `label` name the git host.
+- `default_branch` — the source repository's default branch, `null` until a sync reads it. A hint only: it binds no channel. Deploy it with `ref` to bind `prod` to it.
+- `public_key` and `notify_url` — set for a `deploy_key` source only. `notify_url` is the app's push ping URL, `POST /webhooks/github/{app_id}`. `last_ping_at` — when the last push request arrived, or `null`.
+- `installation` — set for an `installation` source only: `{id, host, label, account_slug, status}`, where `status` is `active`, `suspended`, `removed`, or `disabled`.
 
-**Deploy on push.** A `POST` to `notify_url` needs no auth and always answers 202; xhostd reads no body, fetches the repo from GitHub itself, and deploys the new branch head of each channel with `follows_branch` (see `PATCH /apps/{app_id}/channels/{channel_id}`). The first choice is a GitHub Action: commit `.github/workflows/notify-xhostd.yml` to every branch that should ping. It holds no secret; over HTTPS, the push of a workflow file needs a GitHub token with the `workflow` scope.
+**Deploy on push.** Each push request syncs the mirror and deploys the new branch head of each channel with `follows_branch` (see `PATCH /apps/{app_id}/channels/{channel_id}`). For an `installation` source, the git host sends each push to xhostd, and no setup is needed. For a `deploy_key` source, a `POST` to `notify_url` is the push request: it needs no auth and always answers 202, and xhostd reads no body and fetches the repo from GitHub itself. Set the ping up in one of two ways. **A GitHub Action:** commit `.github/workflows/notify-xhostd.yml` to every branch that should ping. It holds no secret; over HTTPS, the push of a workflow file needs a GitHub token with the `workflow` scope.
 
 ```yaml
 name: Notify xhostd
@@ -1183,11 +1189,11 @@ jobs:
       - run: curl -fsS --retry 5 --retry-all-errors -X POST https://api.xhostd.com/webhooks/github/<app-id>
 ```
 
-The second choice is a repo webhook: in GitHub, Settings → Webhooks, the same URL, no secret, push events only. It needs repo admin and uses no Actions minutes. A branch whose files lack the workflow does not ping, and a repo that feeds two apps needs two `curl` lines or two webhooks. More than 300 pings in 60 seconds from one address answer 429 for 60 seconds.
+**A repo webhook:** in GitHub, Settings → Webhooks, the same URL, no secret, push events only. It needs repo admin and uses no Actions minutes. A branch whose files lack the workflow does not ping, and a repo that feeds two apps needs two `curl` lines or two webhooks. More than 300 pings in 60 seconds from one address answer 429 for 60 seconds.
 
 **Errors:**
 - `scope_denied` (403) — the credential lacks `repo:*`
-- `not_found` (404) — app not found, or no GitHub mirror connected
+- `not_found` (404) — app not found, or no source repository connected ("no repository source is connected")
 - `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the app is under scheduled maintenance; nothing changed, so retry in a minute
 
 ---
@@ -1318,7 +1324,7 @@ Mint a unified credential for the authenticated user. The returned token serves 
   "expires_in": 3600
 }
 ```
-`scopes`, when supplied, must be a non-empty subset of the default scopes your calling token holds, and mints a least-privilege credential. `expires_in` is a lifetime in seconds, at most `2592000` (30 days) and at most what your calling token has left; omit it for the shorter of those two. The two compose, so a credential for one job can be both least-privilege and short-lived — `{"scopes": ["repo:*"], "expires_in": 3600}` is an hour of git access and nothing else. Prefer that over a full-scope credential whenever you know the job.
+`scopes`, when supplied, must be a non-empty subset of the default scopes your calling token holds, and mints a least-privilege credential. `expires_in` is a lifetime in seconds, at most `2592000` (30 days) and at most what your calling token has left; omit it for the shorter of those two. The two compose, so a credential for one job can be both least-privilege and short-lived — `{"scopes": ["repo:*"], "expires_in": 3600}` is an hour of git access and nothing else. When you know the job, mint only the scopes it needs.
 
 **Response (200):**
 ```json
@@ -1333,9 +1339,9 @@ Mint a unified credential for the authenticated user. The returned token serves 
 **Errors:**
 - `bad_request` (400) — `scopes` empty, unknown, or naming a scope your calling token does not hold; `expires_in` not positive or above the ceiling. The message names the scopes you can ask for
 
-**SSH is the first git transport wherever a shell is available, and it needs no token** — see `POST /ssh-keys` below. This token stays required for the HTTPS push, for Postgres and for the platform API.
+**With a shell, push over SSH, which needs no token** — see `POST /ssh-keys` below. This token stays required for the HTTPS push, for Postgres and for the platform API.
 
-To push over HTTPS, send the token as a header from a variable, never in the remote URL: `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push https://git.xhostd.com/<username>/<app>.git <branch>` (the per-app `repo_url` from `GET /apps/{app_id}` is that URL). A minted token works the same way from a variable of its own. The git guide also documents a remote with the token in its URL, as a fallback it warns against, because that remote writes the token to `.git/config`. The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
+To push over HTTPS, send the token as a header from a variable, never in the remote URL: `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push https://git.xhostd.com/<username>/<app>.git <branch>` (the per-app `repo_url` from `GET /apps/{app_id}` is that URL). A minted token works the same way from a variable of its own. The git guide also documents a remote with the token in its URL, and warns against it, because that remote writes the token to `.git/config`. The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
 
 ---
 
@@ -1343,7 +1349,7 @@ To push over HTTPS, send the token as a header from a variable, never in the rem
 
 Register one OpenSSH public key on the authenticated user's account, for git over SSH. A key belongs to the account, not to one app. Send the PUBLIC half only — the content of a `.pub` file; the platform stores no private key. A key reaches every repository on the account, so your calling token must carry `repo:*`; `api_login` asks for all nine default scopes, because that is what the key goes on to mint, and it asks for one more thing: the account holds a verified address, or your own token carries `email:bind`. A token from `POST /registrations` or `POST /auth/ssh-key` carries that scope, so an agent registers a replacement key for itself.
 
-**SSH is the first git transport wherever a shell is available.** The private half never enters a tool call, and one registration covers every app on the machine. Before you call this route, compare the fingerprint (`ssh-keygen -lf`) of every existing `~/.ssh/xhost_ed25519*.pub` — the default key and every `~/.ssh/xhost_ed25519_*` key — with `GET /ssh-keys`, which lists the calling account's keys, and push with the key whose `.pub` file it lists. A file name proves nothing about the account; only a match does. If none is listed, make `~/.ssh/xhost_ed25519` if it is absent, and register it. If the route answers 409 for that key, make `~/.ssh/xhost_ed25519_<username>` if it is absent, and register it. If that also answers 409, the machine holds no usable SSH key for this account; make no key under any other name. Never put a key in the project directory, and never add a per-project, per-app or per-tool suffix, which would only mint a second key on the account. HTTPS with the token sent as a header is the fallback: take it where the network blocks outbound port 22, or after an SSH push fails. Run `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push <repo_url> <branch>`. With no usable SSH key and no `$XHOSTD_TOKEN`, use `commit_files`.
+**With a shell, push over SSH.** The private half never enters a tool call, and one registration covers every app on the machine. Before you call this route, compare the fingerprint (`ssh-keygen -lf`) of every existing `~/.ssh/xhost_ed25519*.pub` — the default key and every `~/.ssh/xhost_ed25519_*` key — with `GET /ssh-keys`, which lists the calling account's keys, and push with the key whose `.pub` file it lists. A file name proves nothing about the account; only a match does. If none is listed, make `~/.ssh/xhost_ed25519` if it is absent, and register it. If the route answers 409 for that key, make `~/.ssh/xhost_ed25519_<username>` if it is absent, and register it. If that also answers 409, the machine holds no usable SSH key for this account; make no key under any other name. Never put a key in the project directory, and never add a per-project, per-app or per-tool suffix, which would only mint a second key on the account. Where the network blocks outbound port 22, or after an SSH push fails, push over HTTPS with the token sent as a header: run `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push <repo_url> <branch>`. With no usable SSH key and no `$XHOSTD_TOKEN`, use `commit_files`.
 
 **Request body:**
 ```json
@@ -1780,7 +1786,7 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 | `not_found` | 404 | Resource does not exist or is not owned by caller |
 | `bad_request` | 400 | Validation failure (see message for details) |
 | `channel_unbound` | 400 | A deploy named neither `sha` nor `ref`, and the channel has no branch yet. Deploy with `ref`, or bind it with `PATCH /apps/{app_id}/channels/{channel_id}` |
-| `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: a GitHub-connected app that never synced. Pass `ref` |
+| `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: an app with a connected source repository that never synced. Pass `ref` |
 | `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy` on a file-storage restore while a deploy of the channel is queued or running, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
 | `restore_in_flight` | 409 | A database restore of the channel is active. A deploy, a rewind, a channel or app delete, an ownership transfer accept, and a second restore are refused until it ends. Read its progress with `GET /postgres/restores/{restore_id}`, then retry once it ends |
 | `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: the retired `POST /me/email-verifications/complete` route. Read `GET /me/email-verifications` instead |
@@ -1801,8 +1807,8 @@ GitHub connect, the GitHub disconnect, and
 object-storage restores, which need a person on the `prod` channel only. Reads stay open:
 `GET /apps/{app_id}/members`, `GET /invites`, `GET /transfers`,
 `GET /apps/{app_id}/github`,
-`GET /apps/{app_id}/env` and `POST /apps/{app_id}/github/sync` never answer
-this error.
+`GET /apps/{app_id}/env`, `POST /apps/{app_id}/github/sync`, and
+`POST /apps/{app_id}/source/sync` never answer this error.
 
 An agent credential gets `protected_action` on all seventeen routes. The **agent
 access** switch opens thirteen of them. The switch never opens any of the four
@@ -1843,7 +1849,7 @@ Tokens from `POST /registrations` and `POST /auth/ssh-key` carry the same defaul
 
 | Scope | Grants |
 |-------|--------|
-| `repo:*` | Create apps (POST /apps), push to git repos, sync a GitHub-connected app (POST /apps/{id}/github/sync) |
+| `repo:*` | Create apps (POST /apps), push to git repos, sync an app with a connected source repository (POST /apps/{id}/source/sync) |
 | `channel:*` | Create and rebind channels (POST and PATCH /apps/{id}/channels) |
 | `deploy:*` | Deploy (POST /apps/{id}/channels/{id}/deploy), manage env vars |
 | `db:*` | Connect to Postgres through the database gateway (external DB access) |

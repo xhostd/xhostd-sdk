@@ -103,11 +103,9 @@ root. The boot then only runs `exec`.
 
 ## The deploy
 
-Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
-A push sends only the diff. Each edit after the first therefore costs a few
-lines, and not the full content of every file through a tool call. Use
-`commit_files` only where the machine has no git, or where neither git
-transport can push. **A push stores
+Every app owns a git repo. **With git, push the code, then call `deploy`.**
+A push sends only the diff. Use `commit_files` where the machine has no
+git, or where neither git transport can push. **A push stores
 your code, but it does not deploy it.** `deploy` is a separate call, so the
 commit that goes live is the commit that you name.
 
@@ -139,13 +137,13 @@ token from the `XHOSTD_TOKEN` environment variable. A person mints it on the
 console [/tokens](https://console.xhostd.com/tokens) page and exports it; a
 registered agent exports the token that registration returned. No tool result
 carries a token. You can also mint a scoped, short-lived token with the request
-that `get_credentials` describes, and send it the same way from a variable of
+that `get_credential_request` describes, and send it the same way from a variable of
 its own; the [Git guide](https://docs.xhostd.com/guides/git) shows the
 commands.
 
-**This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
-first git transport, because the private half of the key never enters a tool
-call. One registration then covers every app on that machine. The
+**This recipe shows the HTTPS steps.** With a shell, push over SSH: the
+private half of the key never enters a tool call, and one registration covers
+every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 

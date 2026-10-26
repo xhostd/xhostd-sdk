@@ -57,9 +57,9 @@ Every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a ch
 
 ## 3. Write the site
 
-Write the files into a working directory, then push them to the app's own repo. **`git push` → `deploy` is the standard path**, for the first commit and every one after it: a push sends only the diff, so each later edit stays incremental instead of round-tripping whole file contents through a tool call.
+Write the files into a working directory, then push them to the app's own repo. **With a shell, `git push`, then `deploy`**, for the first commit and every one after it: a push sends only the diff, so each later edit stays incremental.
 
-The full step list is in **Pushing code with git** in SKILL.md. Pick the path from what the machine can do, before you push — never after a failure. With a shell, **SSH is the first transport**: the private half of the key never enters a tool call, and one registration covers every app on the machine. First compare the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub` with `list_ssh_keys`, and push with the key whose `.pub` file the account lists. If none is listed, make the default keypair in a subprocess if the file is absent, and register the public half once:
+The full step list is in **Pushing code with git** in SKILL.md. Pick the path from what the machine can do, before you push — never after a failure. With a shell, **push over SSH**: the private half of the key never enters a tool call, and one registration covers every app on the machine. First compare the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub` with `list_ssh_keys`, and push with the key whose `.pub` file the account lists. If none is listed, make the default keypair in a subprocess if the file is absent, and register the public half once:
 
 ```
 for f in ~/.ssh/xhost_ed25519*.pub; do ssh-keygen -lf "$f"; done   # compare with list_ssh_keys; if one is listed, push with it
@@ -74,20 +74,20 @@ An SSH push needs no token — the `repo_url` from step 2 gives the username and
 
 If `register_ssh_key` answers `409`, the default key belongs to a different xhostd account on this machine. Make `~/.ssh/xhost_ed25519_alice` the same way if it is absent, register it, and push with `GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519_alice -o IdentitiesOnly=yes"`. If that registration also answers `409`, this machine holds no usable SSH key for this account: push over HTTPS when `XHOSTD_TOKEN` is set, else use `commit_files`, and never make a key under any other name. A file name proves nothing about the account; only a match in `list_ssh_keys` does.
 
-Use only those two key paths — never the project directory, and never a per-project, per-app or per-tool suffix. They sit in `$HOME`, so every Claude Code session, IDE window and project on the machine reuses one key per account instead of registering another.
+Use only those two key paths — never the project directory, and never a per-project, per-app or per-tool suffix. They sit in `$HOME`, so every Claude Code session, IDE window and project on the machine reuses one key per account and registers no other.
 
-**HTTPS fallback:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, neither transport can push: use `commit_files`, as the fallback paragraph below describes, and never ask the user to paste a token. No tool result carries a token. Send it as a header (`repo_url` came back in step 2), and push:
+**HTTPS:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, neither transport can push: use `commit_files`, as the **Without git** paragraph below describes, and never ask the user to paste a token. No tool result carries a token. Send it as a header (`repo_url` came back in step 2), and push:
 
 ```
 git remote add xhostd "https://git.xhostd.com/alice/lisbon-coffee.git"
 git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push xhostd HEAD:master
 ```
 
-You can also mint a scoped, short-lived token with the request that `get_credentials` describes, and send it the same way from a variable of its own; `references/guide-git.md` shows the commands.
+You can also mint a scoped, short-lived token with the request that `get_credential_request` describes, and send it the same way from a variable of its own; `references/guide-git.md` shows the commands.
 
 `HEAD:master` on either transport: push under the branch name you then deploy with `ref`, because a fresh `git init` can name the local branch `main`. `deploy(..., ref="master")` in step 4 binds `prod` to `master`. Never write the token value into a command or into a file the user might commit. **Pushing stores the code; it does not deploy** — that is step 4.
 
-**Fallback:** when git is not available on the machine you are working on — a client with no shell, such as claude.ai or ChatGPT — or when neither git transport can push, use `commit_files(app_name, message, files)` instead; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. On GitHub-connected apps it is refused — push to GitHub instead. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
+**Without git:** in a client with no shell access, or when neither git transport can push, use `commit_files(app_name, message, files)`; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. An app with a connected source repository refuses it, because its code comes from that repository: push to that repository. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
 
 For an `app`-template project the push is the same; the repo needs `install.sh` (optional) and `launch.sh` (required) at its root. The deploy only succeeds if the app signals readiness within 120s, and there are **two ways to do that** — whichever comes first. So the process must:
 
@@ -102,7 +102,7 @@ Example minimal pair (`install.sh` bakes deps into the image at build time, then
 # install.sh
 #!/bin/sh
 set -e
-# Prefer uv over pip — same packages, dramatically faster.
+# uv installs the same packages as pip.
 uv pip install --system --no-cache flask gunicorn
 ```
 ```sh
@@ -140,7 +140,7 @@ Read `hostname` from the prod channel (it was in step 2's response, and `get_app
 
 ## 7. Iterate
 
-For each follow-up change — "add a section for tea shops", "fix the broken link" — edit the files in the checkout, `git commit`, `git push xhostd HEAD:master`, then `deploy` with `ref="master"`. The same `prod` channel is targeted, and the remote is already configured, so a follow-up is a couple of shell commands and one tool call. This is where the standard path pays: the push carries only the lines that changed, so the tenth edit costs about what the first one did — where a `commit_files` changeset carries an anchor and the new text on every edit, and a whole file whenever you send one. On the fallback path (no shell), that is still the loop: `commit_files` — `edits` or `patches` for a file that already exists, `files` for a new one — then `deploy` with the sha it returns.
+For each follow-up change — "add a section for tea shops", "fix the broken link" — edit the files in the checkout, `git commit`, `git push xhostd HEAD:master`, then `deploy` with `ref="master"`. The same `prod` channel is targeted, and the remote is already configured, so a follow-up is a couple of shell commands and one tool call. The push carries only the lines that changed. In a client with no shell access, the loop is: `commit_files` — `edits` or `patches` for a file that already exists, `files` for a new one — then `deploy` with the sha it returns.
 
 To preview a change without touching production:
 

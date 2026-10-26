@@ -338,11 +338,9 @@ The identity gateway is already in front of every app on every channel
 hostname. Thus you enable no per-app toggle, and you register no client id and
 no secret. Every step in this sequence is also in the other recipes.
 
-Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
-A push sends only the diff. Thus each edit after the first one costs a few
-lines, not the content of every file through a tool call. Use `commit_files`
-only where git is not available on your machine, or where neither git
-transport can push. **A push stores your
+Every app owns a git repo. **With git, push the code, then call `deploy`.**
+A push sends only the diff. Use `commit_files` where git is not available
+on your machine, or where neither git transport can push. **A push stores your
 code, but it does not deploy the code.** `deploy` is a separate call, so you
 name the commit that goes live.
 
@@ -375,13 +373,13 @@ token from the `XHOSTD_TOKEN` environment variable. A person mints it on the
 console [/tokens](https://console.xhostd.com/tokens) page and exports it; a
 registered agent exports the token that registration returned. No tool result
 carries a token. You can also mint a scoped, short-lived token with the request
-that `get_credentials` describes, and send it the same way from a variable of
+that `get_credential_request` describes, and send it the same way from a variable of
 its own; the [Git guide](https://docs.xhostd.com/guides/git) shows the
 commands.
 
-**This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
-first git transport, because the private half of the key never enters a tool
-call. One registration then covers every app on that machine. The
+**This recipe shows the HTTPS steps.** With a shell, push over SSH: the
+private half of the key never enters a tool call, and one registration covers
+every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 

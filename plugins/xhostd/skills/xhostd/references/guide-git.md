@@ -3,8 +3,7 @@
 Every app on xhostd owns a git repo at
 `https://git.xhostd.com/<username>/<app>.git`. A push to that repo puts
 code onto an app. This applies to the first commit, and to every commit
-after it. A push sends only the diff. Thus each edit stays small, and it
-costs much less than a full file through an MCP tool call. A push stores
+after it. A push sends only the diff, so each edit stays small. A push stores
 your code; it does not deploy the code. Start a build separately with
 `deploy`, or with the console.
 
@@ -16,6 +15,7 @@ your code; it does not deploy the code. Start a build separately with
 - The clone / push URL
 - Renew an expired token
 - A push fails again and again: clear a stale cached credential
+- Connect a GitHub repository with the xhostd GitHub app
 - Deploy on each GitHub push
 - Notes
 
@@ -25,8 +25,8 @@ The repo answers two transports, and one MCP tool writes to it directly.
 Test the machine first, and pick one of the three paths below. Do not
 wait for a failure.
 
-1. **The machine runs no command.** A client with no shell, such as
-   claude.ai or ChatGPT, cannot run git. Use the `commit_files` MCP tool.
+1. **The machine runs no command.** A client with no shell access cannot
+   run git. Use the `commit_files` MCP tool.
 2. **The machine runs commands.** Push over SSH with a key of the
    account you are connected as. Read **Push over SSH** below. Check
    every `~/.ssh/xhost_ed25519*` key against `list_ssh_keys` first, and
@@ -39,9 +39,8 @@ wait for a failure.
    `XHOSTD_TOKEN` is not set. Use the `commit_files` MCP tool, as on a
    machine with no shell. Never ask the user to paste a token.
 
-SSH is the first transport because a private key never enters a tool
-call, and an SSH push needs no token. HTTPS needs a token in the
-environment, and that token expires.
+With SSH, a private key never enters a tool call, and the push needs no
+token. HTTPS needs a token in the environment, and that token expires.
 
 The SSH path costs no extra step in the steady state. Your tool makes a
 keypair only when the machine holds no key for the account. A key
@@ -71,7 +70,7 @@ write its value into a command. It comes from one of two places:
 You can use that token directly, or mint a scoped, short-lived token
 from it, and both work the same way. A scoped token suits an unattended
 job, or a token that you hand to another process. No MCP tool result
-carries a token: the `get_credentials` MCP tool describes the
+carries a token: the `get_credential_request` MCP tool describes the
 `POST /credentials` request, and you run that request with your own
 token. Keep the minted token in a variable of its own, so its value
 stays out of every command and out of the output:
@@ -243,7 +242,7 @@ git push xhostd HEAD:master
 > **Security:** `git remote add` with the token in the URL writes it to
 > `.git/config` in plaintext. That one line is a full-scope credential —
 > repo write, every channel's database, and the platform API — good until
-> the token expires or you revoke it. Prefer a form that keeps the token
+> the token expires or you revoke it. Use a form that keeps the token
 > out of the file: the interactive form or the Bearer header covered in
 > the following sections, or a git credential helper
 > (`git config --global credential.helper osxkeychain` on macOS,
@@ -333,12 +332,99 @@ Then clear the stale entry for `git.xhostd.com`:
 The next push then asks you for a new token, or reads the token from the
 URL.
 
+## Connect a GitHub repository with the xhostd GitHub app
+
+The xhostd GitHub app connects a GitHub repository to a project. The app
+reads the repositories that you choose on GitHub, and GitHub tells
+xhostd about each push. A project that is connected through the app
+needs no deploy key and no ping.
+
+### Who can connect
+
+An installation of the app belongs to one GitHub account, a personal
+account or an organization:
+
+- On a personal account, the user of that account connects it.
+- On an organization, an active owner of the organization connects it.
+  A member can only request the install. GitHub sends the request to
+  the owners. Until an owner installs the app, the member can connect
+  the repository with a deploy key.
+
+### Connect in the console
+
+A person connects the app in the console. No MCP tool and no token can
+do it, because the connection needs that person's approval on GitHub.
+
+1. Select **Connect a GitHub repository** on the project's Git page, or
+   **Connect GitHub** on the account page under **Git host accounts**.
+2. On GitHub, choose the account and the repositories that the app can
+   read, and install the app.
+3. On GitHub, authorize xhostd to confirm your GitHub account.
+4. In the console, choose the repository.
+5. Select **Connect** to connect the repository to a project, or
+   **Create a project from this repository**.
+6. Turn following on for each channel that deploys on push, as
+   [Follow the branch](#follow-the-branch) shows.
+
+While the project is connected, you push to the GitHub repository.
+`commit_files` and `git push` to xhostd are turned off.
+
+### What an agent sees
+
+`sync_git_from_remote` returns `kind: "installation"` and
+`host: "github"` for a repository connected through the app. The
+repository needs no setup. Turn following on for each channel that
+deploys on push:
+
+```text
+update_channel(app_name="shop", channel="prod", follows_branch=True)
+```
+
+### Add repositories later
+
+The app reads only the repositories that you chose. To add a
+repository, open the repository list in the console and select
+**Choose the repositories the xhostd app can read on GitHub**, or select
+**Connect GitHub** again. Both open the app's page on GitHub, where you
+change the choice.
+
+A repository that is renamed or transferred on GitHub stays connected.
+xhostd follows it at the next sync.
+
+### Remove the GitHub account
+
+**Remove** on the account page disconnects the GitHub account from your
+xhostd account. Disconnect the account's projects first. When no other
+xhostd account uses the GitHub account, xhostd also uninstalls the app
+from it. For an organization, that uninstalls the app from the whole
+organization.
+
+### Switch a project from a deploy key
+
+1. On the project's Git page, select **Disconnect GitHub**.
+2. Connect the repository with the xhostd GitHub app.
+3. Turn following on again for each channel, because the disconnect
+   turns it off.
+4. On GitHub, delete the project's deploy key, and delete the ping: the
+   workflow file or the repo webhook.
+
+### Limits
+
+- The app cannot connect a repository whose name starts with `.`, `_`,
+  or `-`. For such a repository, **Create a project from this
+  repository** creates the project, and the project stays without a
+  source.
+- The repository filter reads 1,000 repositories at each step. When a
+  page shows no match, select **Keep searching** to read the next 1,000.
+
 ## Deploy on each GitHub push
 
-This section applies to an app whose source is a GitHub repo, connected
-in the console under **Git → GitHub source**. On such an app you push to
-GitHub, not to xhostd. A push to GitHub can deploy on its own, with two
-steps:
+This section applies to an app whose source is a GitHub repo connected
+with a deploy key, on the Repository source card of the console's Git
+page. A repo connected with the xhostd GitHub app needs no ping; read
+[Connect a GitHub repository with the xhostd GitHub app](#connect-a-github-repository-with-the-xhostd-github-app).
+On such an app you push to GitHub, not to xhostd. A push to GitHub can
+deploy on its own, with two steps:
 
 1. The repo tells xhostd that it changed. This is a **ping**: one
    `POST` to the app's notify URL. The ping carries no secret, because
@@ -348,11 +434,11 @@ steps:
    channel that follows its branch then deploys the branch's new head.
    A channel that does not follow keeps its deploys as its own call.
 
-Find the notify URL with `sync_git`, which returns it as `notify_url`, or
+Find the notify URL with `sync_git_from_remote`, which returns it as `notify_url`, or
 on the console's Git page. It has the form
 `https://api.xhostd.com/webhooks/github/<app-id>`.
 
-### Send the ping with a GitHub Action (recommended)
+### Send the ping with a GitHub Action
 
 Commit this file as `.github/workflows/notify-xhostd.yml`, with your
 app's id in the URL:
@@ -395,7 +481,7 @@ update_channel(app_name="shop", channel="prod", follows_branch=True)
 
 The console has the same switch, **Deploy each GitHub push**, under each
 channel on the project's Overview page. Turning it on needs a connected
-GitHub repo and a channel bound to a branch. A token that turns it on
+source repository and a channel bound to a branch. A token that turns it on
 needs the `deploy:*` scope too. Turning it off is always allowed.
 
 How a following channel behaves:
@@ -413,7 +499,7 @@ How a following channel behaves:
 - A commit you force-push away before its deploy fetched it does not
   deploy, and sends no notice.
 
-`sync_git` returns `last_ping_at`, the time the last ping arrived. If a
+`sync_git_from_remote` returns `last_ping_at`, the time the last ping arrived. If a
 push did not deploy, check that time first: a ping that never arrived
 means the workflow file is missing from that branch, or the webhook is
 missing.

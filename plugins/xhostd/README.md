@@ -115,8 +115,8 @@ environment variable. You create the token on the console
   `db.xhostd.com`.
 - The skill's own commands read the variable by name, so the token value
   never appears in those commands, and no tool result carries it.
-- The git guide also documents a remote with the token in its URL, as a
-  fallback it warns against: that remote writes the token to `.git/config`.
+- The git guide also documents a remote with the token in its URL, and
+  warns against it: that remote writes the token to `.git/config`.
 - A push over SSH needs no token, so on that path you can leave the variable
   unset.
 

@@ -76,12 +76,10 @@ that you commit beside it at the same path.
 
 ## The deploy
 
-Every app owns a git repo. **`git push`, then `deploy`, is the standard
-path.** A push sends only the diff, which makes the second edit, the tenth
-edit and the hundredth edit cheap. git transfers the few lines that changed.
-It does not send the full contents of every file through a tool call. Use
-`commit_files` only where git is not available on the machine that you work
-on, or where neither git transport can push.
+Every app owns a git repo. With a shell, push with git, then call `deploy`.
+Without a shell, or where neither git transport can push, write the files
+with `commit_files`, then call `deploy`. A git push sends only the lines that
+changed.
 
 With both methods, you store the code in one step and you ship it in another
 step. **A push stores your code; it does not deploy the code.** `deploy` is a
@@ -115,12 +113,12 @@ platform API. Use your own token from the
 [/tokens](https://console.xhostd.com/tokens) page and exports it; a registered
 agent exports the token that registration returned. No tool result carries a
 token. You can also mint a scoped, short-lived token with the request that
-`get_credentials` describes, and send it the same way from a variable of its
+`get_credential_request` describes, and send it the same way from a variable of its
 own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
-**This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
-first git transport, because the private half of the key never enters a tool
-call. One registration then covers every app on that machine. The
+**This recipe shows the HTTPS steps.** With a shell, push over SSH: the
+private half of the key never enters a tool call, and one registration covers
+every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 

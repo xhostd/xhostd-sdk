@@ -11,7 +11,7 @@ only when git is unavailable or neither git transport can push, as described in
 [Ship without git](https://docs.xhostd.com/guides/recipes-commit-files).
 
 Call the [deploy tool](https://docs.xhostd.com/mcp-tools#deploy) with the app,
-channel, and commit. Prefer a full SHA when you need the same immutable target
+channel, and commit. Pass a full SHA when you need the same immutable target
 across review and execution. A branch reference resolves at deploy time.
 
 ## Follow the operation
@@ -38,9 +38,9 @@ execution; an old review does not retain access you no longer have.
 
 ## Recover code without confusing it with data
 
-The [rewind tool](https://docs.xhostd.com/mcp-tools#rewind) uses a retained
-previous successful image where supported. Deploying an older SHA rebuilds that
-revision instead. Neither operation is a database or file restore.
+The [rewind_channel tool](https://docs.xhostd.com/mcp-tools#rewind_channel)
+uses a retained previous successful image where supported. Deploying an older
+SHA rebuilds that revision. Neither operation is a database or file restore.
 
 > Check the application's schema expectations before running older code against
 > current data. A deployment review does not freeze environment values or undo

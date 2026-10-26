@@ -194,14 +194,14 @@ explains them.
 
 ### Step 2 — push the files
 
-Every app owns a git repo, and **`git push` → `deploy` is the standard path**.
-Use `commit_files` only when the machine has no git, or when neither git
+Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Use `commit_files` when the machine has no git, or when neither git
 transport can push. A deploy reads a commit
 from the repo, and it does not know the source of that commit.
 
-**This recipe shows the HTTPS steps.** Where a shell is available, SSH is the
-first git transport, because the private half of the key never enters a tool
-call. One registration then covers every app on that machine. The
+**This recipe shows the HTTPS steps.** With a shell, push over SSH: the
+private half of the key never enters a tool call, and one registration covers
+every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -216,7 +216,7 @@ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
 ```
 
 You can also mint a scoped, short-lived token with the request that
-`get_credentials` describes, and send it the same way from a variable of its
+`get_credential_request` describes, and send it the same way from a variable of its
 own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 A new xhostd repo is empty, and git reports this. The warning is correct, and it
