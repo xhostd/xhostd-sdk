@@ -167,7 +167,7 @@ refuses every connection.
 outside it, exactly as the HTTP probe does. It cannot reach a socket on
 `127.0.0.1`.
 
-**The server limits the line, and the handler writes a log line instead of a
+**The server limits the line, and the handler writes a log line, not a
 traceback.** The endpoint is public, and xhostd authenticates nothing on a
 forward port. Your app is therefore the only control on the connection.
 `readline(MAX_LINE)` limits the buffer when a client sends bytes and no newline.
@@ -190,9 +190,9 @@ exec python3 server.py
 ```
 
 `exec` makes the Python process PID 1. The process then gets the stop signals
-directly, and not through a shell that discards them. This is more important
-here than in an HTTP recipe. A container that uses the full stop timeout keeps
-every relayed session open for that time.
+directly, and not through a shell that discards them. On a forward port, a
+container that uses the full stop timeout keeps every relayed session open for
+that time.
 
 ## The deploy
 
@@ -634,9 +634,8 @@ The current account entitlement does not include public TCP endpoints. Explain
 that the feature is unavailable, do not retry, and continue without a public
 raw-TCP endpoint when possible.
 
-The concurrent-connection cap is 10 per endpoint, and sessions have no time
-cap. One forward port into one container is not more useful with more
-concurrent connections. A plan change that removes the capability deletes
+The concurrent-connection cap is 10 per endpoint on every plan that includes
+public TCP endpoints, and sessions have no time cap. A plan change that removes the capability deletes
 nothing: the rows stay, and `active` becomes false. The platform then refuses
 new connections while the capability is unavailable. The same address works
 again if the capability returns, with no new allocation. The condition is the
@@ -796,7 +795,7 @@ quiet connection is normal on a port with no protocol.
 
 ## See also
 
-- [Best known methods](https://docs.xhostd.com/guides/bkm) — the health-check
+- [Working methods](https://docs.xhostd.com/guides/bkm) — the health-check
   checklist, plan budgets, and how to read a quota error.
 - [Recipe: Python API on the app template](https://docs.xhostd.com/guides/recipes-app-python)
   — the same template with HTTP, `install.sh` and dependencies.

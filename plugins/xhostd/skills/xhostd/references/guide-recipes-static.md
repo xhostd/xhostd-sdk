@@ -248,8 +248,8 @@ $ curl -sS -o /dev/null -w '%{http_code}\n' https://recipe-static-docs.xhostd.ap
 The 200 carries `text/html` and 1297 bytes from `nginx/1.31.3`. That is the
 same 1297 as the probe's access line, because it is the same file. The 404
 comes from nginx. This template maps a URL path to a committed file and does
-nothing else. Thus a path with no file behind it gives a 404; nginx does not
-serve `index.html` instead.
+nothing else. Thus a path with no file behind it gives a 404, and nginx serves
+no `index.html` for it.
 
 ## When it goes wrong
 
@@ -265,14 +265,14 @@ an `index.html` at the **repo root**. Do not put it in a `public/`, `dist/` or
 `https://recipe-static-docs.xhostd.app/nope` gives the nginx 404 above. A path
 such as `/dashboard` gives the same 404 in a single-page app, although the
 app's router expects to handle it. This template has no rewrite rule, and no
-`try_files` fallback to `index.html`. nginx serves a path only if a committed
+`try_files` rule that serves `index.html`. nginx serves a path only if a committed
 file is at that path, and answers 404 for all other paths. Write a real file
 at each path that you link to. Or put the app on the `app` template, where
 your own server decides what `/dashboard` means. Your server must then serve
-`index.html` for those paths itself — the section "Single-page apps: the
-fallback is yours" in
+`index.html` for those paths itself — the section "Single-page apps: your
+server serves every route" in
 [the Docker recipe](https://docs.xhostd.com/guides/recipes-docker) shows the
-fallback.
+catch-all route.
 
 ### You expected compressed responses
 
@@ -282,10 +282,11 @@ switched off, and the template gives you no place to put an nginx config. The
 platform does not compress the responses for you either.
 
 For a page of text this costs little. If your site ships a large CSS or
-JavaScript bundle, where compression saves the most, move it to the `docker`
+JavaScript bundle and you want it compressed, move it to the `docker`
 template and run a server you configure. See
 [Docker recipe: your own Dockerfile](https://docs.xhostd.com/guides/recipes-docker).
-Keeping the bundle small helps more than compression does, so try that first.
+On the `static` template, each visitor downloads the bundle at its committed
+size, so a smaller committed bundle transfers fewer bytes.
 
 ### You expected a build step
 

@@ -487,7 +487,8 @@ It is a POST, not a GET, so the command never lands in an access log.
 - `timed_out` / `truncated` — the command hit the 30 s limit (partial output is still returned), or its output was cut at ~256 KiB.
 
 Only stdout/stderr is captured. An app that writes its logs to a file inside
-the container has nothing here — log to stdout/stderr instead.
+the container has nothing here. A line reaches this log when the app writes it
+to stdout or stderr.
 
 **Errors:**
 - `not_found` (404) — no runtime log available for this channel (or that `container_index`) yet
@@ -768,7 +769,7 @@ Reveal one env value — the only read path for `kind: "secret"`. Every call rec
 **Required scope:** `deploy:*`
 
 **Query parameters:**
-- `channel_id` (optional) — With it, resolved semantics: that channel's override wins, falling back to the app-level row when the channel has no override. Without it, the app-level row only.
+- `channel_id` (optional) — With it, resolved semantics: that channel's override wins, and the app-level row applies when the channel has no override. Without it, the app-level row only.
 
 **Response (200):**
 ```json
@@ -1293,7 +1294,7 @@ Poll an export's progress. Statuses: `queued`, `running`, `ready`, `failed`.
 
 ## POST /exports/{export_id}/download-token
 
-Mint a short-lived `exports:read` token for a ready, owned export. Your calling token must carry `exports:read` itself, because a mint never grants more scope, and never a longer life, than the caller holds. The token expires with the export, or with your calling token if that comes first. A unified credential already reaches the download routes, because `exports:read` is default-granted; use this route when you want a single-purpose token instead — for example one you paste into a `curl` command, where a full credential would expose your git and Postgres passwords.
+Mint a short-lived `exports:read` token for a ready, owned export. Your calling token must carry `exports:read` itself, because a mint never grants more scope, and never a longer life, than the caller holds. The token expires with the export, or with your calling token if that comes first. A unified credential already reaches the download routes, because `exports:read` is default-granted; use this route when you want a single-purpose token — for example one you paste into a `curl` command, where a full credential would expose your git and Postgres passwords.
 
 **Response (200):**
 ```json
@@ -1315,7 +1316,7 @@ Mint a short-lived `exports:read` token for a ready, owned export. Your calling 
 
 ## POST /credentials
 
-Mint a unified credential for the authenticated user. The returned token serves as your git password, Postgres password, and platform API bearer, and carries the default scopes your calling token holds — all nine of `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`, `snapshots:read` and `blobs:read` for a general credential. A mint never grants more scope, and never a longer life, than the caller holds, so a narrowed token renews itself here rather than widening, and a short-lived one cannot outlive itself. It lives 30 days, or until your calling token expires if that comes first, and less when you ask for less.
+Mint a unified credential for the authenticated user. The returned token serves as your git password, Postgres password, and platform API bearer, and carries the default scopes your calling token holds — all nine of `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`, `snapshots:read` and `blobs:read` for a general credential. A mint never grants more scope, and never a longer life, than the caller holds, so a narrowed token renews itself here and keeps its narrowed scopes, and a short-lived one cannot outlive itself. It lives 30 days, or until your calling token expires if that comes first, and less when you ask for less.
 
 **Request body (optional):**
 ```json
@@ -1627,7 +1628,7 @@ List the authenticated user's feedback reports, newest first, each with the xhos
 ```
 
 - `subject` — the title the reporter wrote. It is null only on a report filed before the subject became required.
-- `title` — the line that names the report: its `subject`, or the opening of its `message` when it has no subject. Never null and never empty, so render it without a fallback.
+- `title` — the line that names the report: its `subject`, or the opening of its `message` when it has no subject. Never null and never empty, so render it as it is.
 - `status` — one of `Received` (not acted on yet), `Resolved` (the team did the work), `Closed` (the team will not act on it).
 - `source` — `agent` or `console`, the surface the report came from.
 - `app_name` — null when the report carries no app context.
@@ -1789,7 +1790,7 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 | `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: an app with a connected source repository that never synced. Pass `ref` |
 | `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy` on a file-storage restore while a deploy of the channel is queued or running, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
 | `restore_in_flight` | 409 | A database restore of the channel is active. A deploy, a rewind, a channel or app delete, an ownership transfer accept, and a second restore are refused until it ends. Read its progress with `GET /postgres/restores/{restore_id}`, then retry once it ends |
-| `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: the retired `POST /me/email-verifications/complete` route. Read `GET /me/email-verifications` instead |
+| `gone` | 410 | The thing the call acts on no longer exists, and a retry cannot bring it back: the retired `POST /me/email-verifications/complete` route. `GET /me/email-verifications` reads where the verification stands |
 | `too_many_requests` | 429 | A budget or a window refused the call: the registration budget, a second verification request inside 60 seconds, or an address past its confirmation-link caps |
 | *(no code)* | 422 | A body that fails validation — a missing field on any route, or an unknown field on `POST /ssh-keys`, `POST /registrations`, `POST /auth/ssh-key`, and the two email verification routes, which refuse one. This answer carries FastAPI's `{"detail": [...]}` shape, not the `{"error": {...}}` envelope, so an MCP client shows it as a pydantic report. Read the field name in `detail`, correct it, and call again. Do not retry the same body: it fails again |
 | `bad_gateway` | 502 | Upstream service error |
@@ -1845,7 +1846,7 @@ Unified credentials minted via `POST /credentials` carry the default scopes your
 
 Tokens from `POST /registrations` and `POST /auth/ssh-key` carry the same default set and expire after 30 days.
 
-**A mint never grants more scope, and never a longer life, than the caller holds.** A narrowed credential can renew itself, and cannot widen itself back. A short-lived one can renew itself, and cannot outlive itself: every token you mint expires with the token you minted it from, or earlier. `POST /tokens` grants a fixed nine scopes, so a token short of that set answers `scope_denied` (403) there; call `POST /credentials` instead. Each download-token route needs the one scope it mints, so a narrow download token cannot rotate into another artifact. `POST /ssh-keys` needs `repo:*`, the access a key carries by construction, and `api_login` needs all nine plus a verified address on the account or an `email:bind` token, because the key it registers mints one scope more than you hold.
+**A mint never grants more scope, and never a longer life, than the caller holds.** A narrowed credential can renew itself, and cannot widen itself back. A short-lived one can renew itself, and cannot outlive itself: every token you mint expires with the token you minted it from, or earlier. `POST /tokens` grants a fixed nine scopes, so a token short of that set answers `scope_denied` (403) there. Such a token mints the scopes it holds through `POST /credentials`. Each download-token route needs the one scope it mints, so a narrow download token cannot rotate into another artifact. `POST /ssh-keys` needs `repo:*`, the access a key carries by construction, and `api_login` needs all nine plus a verified address on the account or an `email:bind` token, because the key it registers mints one scope more than you hold.
 
 | Scope | Grants |
 |-------|--------|

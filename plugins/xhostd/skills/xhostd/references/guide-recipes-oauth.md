@@ -33,7 +33,7 @@ This guide adds only the identity layer.
 
 ## The platform gates no route for you
 
-This section states the most important fact in this guide: **every request
+Read this section before you write a gated route: **every request
 reaches your app, signed in or not.** The platform does no enforcement at the
 edge. The proxy in front of your container removes the platform identity
 headers that a caller can spoof. The proxy then sets its own attribution
@@ -67,17 +67,17 @@ platform mounts them in front of your app.
 
 The `login`, `finalize` and `logout` endpoints accept `return_to`. The value
 must be a single local absolute path. If the value can redirect the visitor off
-the channel, the gateway uses `/` instead. Send a visitor to
+the channel, the gateway uses `/`. Send a visitor to
 `/xhost-auth/login?return_to=/private`. The gateway then returns the visitor to
 the gated page after the sign-in.
 
 The return is a real HTTP navigation: `/finalize` answers a 302, and the
 browser requests `return_to` as a full page load. A single-page app must
 therefore serve `index.html` on every client-side route, or the return 404s
-at the moment the sign-in succeeds. The section "Single-page apps: the
-fallback is yours" in
+at the moment the sign-in succeeds. The section "Single-page apps: your
+server serves every route" in
 [the Docker recipe](https://docs.xhostd.com/guides/recipes-docker) shows the
-fallback.
+catch-all route.
 
 You configure nothing. The platform owns the Google project, the consent screen
 and the signing key. When you created the app, you completed all the necessary
@@ -158,7 +158,7 @@ COOKIE_NAME = "__Host-xhost_id"
 ISSUER = "https://auth.xhostd.com"
 LOGIN_URL = "/xhost-auth/login?return_to=/private"
 
-# One JWKS fetch per process instead of one per request: PyJWKClient keeps the
+# One JWKS fetch per process, not one per request: PyJWKClient keeps the
 # key set in memory and re-fetches it when a token turns up with a `kid` it
 # has not seen, which is how a platform key rotation is picked up.
 _jwks = jwt.PyJWKClient(f"{ISSUER}/xhost-auth/jwks", timeout=5)
@@ -227,7 +227,7 @@ def current_user(request: Request) -> dict[str, Any] | None:
 @app.get("/")
 def home(request: Request):
     # Both pages are fixed HTML. Profile fields are attacker-influenced, so
-    # they go out as JSON below rather than interpolated into markup.
+    # they go out as JSON below and are never interpolated into markup.
     return HTMLResponse(
         _SIGNED_IN if current_user(request) is not None else _SIGNED_OUT
     )
@@ -268,8 +268,8 @@ key set in memory.** The client fetches the key set again when the cache
 lifetime expires, 300 s by default. The client also fetches again immediately
 when a token carries a `kid` that it has not seen. A key rotation on the
 platform appears as an unseen `kid`, so your app gets the new key with no
-redeploy. Your app can fetch the JWKS on each request instead. That method also
-works, but it is slower and it fails more often.
+redeploy. Your app can also fetch the JWKS on each request. Each request then
+waits for that fetch, and fails when the fetch fails.
 
 **`audience=request.url.hostname`, with `strict_aud`.** The audience comes from
 the request, for the reason above. `strict_aud` refuses the loose match that a
@@ -345,8 +345,8 @@ code, but it does not deploy the code.** `deploy` is a separate call, so you
 name the commit that goes live.
 
 The deploy has four steps. If this is your first app, the
-[static site recipe](https://docs.xhostd.com/guides/recipes-static) gives more
-detail on the same four steps.
+[static site recipe](https://docs.xhostd.com/guides/recipes-static) covers the
+same four steps in detail.
 
 **1. Create the app.** This call creates the `prod` channel, its hostname and
 its git repo.
@@ -498,8 +498,8 @@ response tells the caller only to sign in.
 This guide has no transcript of an authenticated request. A Google sign-in
 needs a browser: a consent screen, a sequence of redirects, and a cookie that
 the browser stores. `curl` cannot do that. Thus the comparison above shows only
-one half. An invented cookie or a made-up response body would be worse than
-this admission.
+one half. This guide does not invent a cookie or a response body to fill the
+other half.
 
 The handlers of the example decide the result of a signed-in request, and you
 can read that result in `app.py` above. `current_user` returns the verified
@@ -517,8 +517,7 @@ in the next section, and it needs one command.
 
 ### The route is open, and nobody noticed
 
-This failure has no error message, and that makes it the worst failure in this
-list. The symptom is a `/private` route that answers 200 to a `curl` call with
+This failure has no error message, so nothing reports it. The symptom is a `/private` route that answers 200 to a `curl` call with
 no cookie. Test each route that you think is gated in that way, every time:
 
 ```console

@@ -39,7 +39,7 @@ not need to read the other guides first.
 | [Raw TCP](https://docs.xhostd.com/guides/recipes-port-forwarding) | A public `host:port` for a service that is not HTTP | Ready |
 | [Background worker](https://docs.xhostd.com/guides/recipes-worker) | A long-running process, not a web server | Ready |
 | [Ship without git](https://docs.xhostd.com/guides/recipes-commit-files) | A site put onto the app by tool call, where there is no shell to run `git` in | Ready |
-| [Best practices](https://docs.xhostd.com/guides/bkm) | The habits that keep a deploy free of surprises | Ready |
+| [Working methods](https://docs.xhostd.com/guides/bkm) | The habits that keep a deploy free of surprises | Ready |
 | [Diagnose a slow app](https://docs.xhostd.com/guides/diagnose-slowness) | The cause of a slow or unhealthy channel, and the action for it | Ready |
 | [Client blocks a deploy](https://docs.xhostd.com/guides/client-blocked-deploy) | The way to clear a `deploy` call your own client refused before it reached xhostd | Ready |
 | Custom domain | Your own domain, with HTTPS | Coming soon |
@@ -62,8 +62,8 @@ whose apps stay up. Thus a hostname such as `recipe-static-docs.xhostd.app` is
 a live address that you can visit. It is not a form for you to complete. If you
 follow the recipe yourself, you get the same app under your own account name.
 
-Where a recipe shortens a value, hides a value, or gives prose instead of a
-capture, it says so at that place. The credentials are always placeholders. One
+Where a recipe shortens a value, hides a value, or describes a result in prose
+with no capture, it says so at that place. The credentials are always placeholders. One
 or two failure paths are in prose, because a real failure on a public demo
 leaves the demo in a bad configuration.
 

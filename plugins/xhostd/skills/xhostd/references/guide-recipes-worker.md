@@ -307,13 +307,13 @@ an image cost near zero.
 **`start_container template=app`.** The line names the template the platform
 used to start the container. Check it first when a deploy behaves like
 the wrong shape of app: the `app` template runs your `launch.sh`, and the
-`static` template serves the committed files through nginx instead.
+`static` template serves the committed files through nginx.
 
 **`health_check ... port=3000 timeout=120.0s`, and `health_check ok` in the
 same second.** The platform publishes the HTTP health port on every template,
 and it probes that port. No process in this container binds port 3000, so the
 HTTP arm can never answer. With the HTTP arm alone, the 120-second window
-expires. The ready file gave the signal instead. `health_check ok` and the
+expires. The ready file gave the signal. `health_check ok` and the
 worker's `ready` line share the second `06:16:26`.
 
 **The `ready` line and the first `tick` line.** These two lines are the worker's
@@ -327,8 +327,7 @@ that route, so the hostname answers 502.
 ### The status header
 
 `get_logs` with `source="runtime"` and no `command` reports what you can read,
-and it reads nothing. It is the cheapest call available, because the platform starts no
-container to answer it:
+and it reads nothing. The platform starts no container to answer it:
 
 ```text
 get_logs(app_name="recipe-worker", channel="prod", source="runtime")
@@ -371,8 +370,8 @@ of `flush=True`.
 
 ### The proof of progress
 
-An HTTP recipe proves itself with `curl`. A worker has no URL, so count its
-work instead:
+An HTTP recipe proves itself with `curl`. A worker has no URL. To prove its
+progress, count its work:
 
 ```text
 get_logs(..., channel="prod", source="runtime", command="grep -c '\"event\": \"tick\"' app.log")
@@ -579,7 +578,7 @@ health check then passes too.
 
 ## See also
 
-- [Best known methods](https://docs.xhostd.com/guides/bkm) — how to read a
+- [Working methods](https://docs.xhostd.com/guides/bkm) — how to read a
   runtime log, the health-check checklist, plan budgets, and quota errors.
 - [Recipe: Python API on the app template](https://docs.xhostd.com/guides/recipes-app-python)
   — the same template with HTTP, `install.sh` and dependencies.

@@ -3,6 +3,16 @@
 Start with the exact project, channel, and time of the problem. Separate a
 failed deployment attempt from the revision that is currently serving traffic.
 
+## Contents
+
+- A deployment failed
+- The client blocked the action
+- The app is slow or unavailable
+- The address returns 404 or 502
+- The runtime log is unavailable or its status is unknown
+- Data or files are missing
+- Escalate with useful context
+
 ## A deployment failed
 
 Open the project's Activity page in the
@@ -50,7 +60,7 @@ and the app has no page at that path.
 are these:
 
 - The app crashed after it went live.
-- The app listens on the wrong port, or on `localhost` instead of `0.0.0.0`.
+- The app listens on the wrong port, or on `localhost`, not `0.0.0.0`.
   An app that signals readiness with the `$XHOSTD_READY_FILE` file goes live
   without a test of its port. Listen on `0.0.0.0` and on the port in
   `XHOSTD_HTTP_PORT`.
@@ -65,6 +75,28 @@ or open the Runtime status card on the project's Activity page. A background
 worker that serves no HTTP returns 502 by design. The
 [worker recipe](https://docs.xhostd.com/guides/recipes-worker#the-https-hostname-returns-502)
 explains why.
+
+## The runtime log is unavailable or its status is unknown
+
+**The status reads `unknown`.** The reply came from the central log store, and
+the platform has no record of how that container ended. This happens when the
+host that ran it stopped before it removed the container, or when the container
+ran before the platform kept that record. Its output can still be readable:
+call `get_logs` with `source="runtime"` and a `command`, such as `tail -n 200 app.log`.
+
+**The runtime log is unavailable.** A runtime log read can answer with one of
+these messages:
+
+- `central log reader busy, retry shortly`: other reads from the central log
+  store are running. Retry in a few seconds.
+- `runtime log and central store unavailable`: neither the host nor the central
+  log store answered. Retry in a minute.
+- `runtime log is not available on this host yet`: the host could not serve the
+  read. Retry in a minute.
+
+If a message stays for more than a few minutes,
+[contact support](mailto:support@xhostd.com) with the project, channel, and
+time.
 
 ## Data or files are missing
 

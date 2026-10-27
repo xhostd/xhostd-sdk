@@ -175,7 +175,7 @@ The health tool names the cause. Three other tools give you the detail.
   `container_restart_loop`, read the error text that the app itself wrote.
   Call it with no `command` for the status header, then with
   `command="tail -n 200 app.log"` for the lines. The
-  [Best practices](https://docs.xhostd.com/guides/bkm) guide covers this tool
+  [Working methods](https://docs.xhostd.com/guides/bkm) guide covers this tool
   in full.
 - **`get_logs` with `source="deploy"`** — on a `build_oom_killed` finding, read the build that
   the kernel stopped, and find the step that used the memory.

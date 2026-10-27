@@ -70,7 +70,7 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# uv resolves and installs far faster than pip. Pinned to an exact
+# uv resolves and installs the Python dependencies. Pinned to an exact
 # version tag — append @sha256:<digest> if you need it immutable.
 COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
 
@@ -165,8 +165,8 @@ psycopg[binary]==3.2.3
 ```
 
 `psycopg[binary]` is psycopg 3. It is not a replacement for `psycopg2`, which
-is the driver name that SQLAlchemy selects by default. That mismatch is the
-most frequent failure on this platform.
+is the driver name that SQLAlchemy selects by default. A Python app on this
+platform often fails on that mismatch.
 [The Postgres recipe](https://docs.xhostd.com/guides/recipes-postgres) tells
 you how to correct it.
 
@@ -184,7 +184,7 @@ def database_url() -> str:
     """xhostd injects DATABASE_URL with the bare ``postgresql://`` scheme.
 
     SQLAlchemy maps that scheme to psycopg2, which we do not ship. Name
-    the driver explicitly so it loads psycopg 3 instead.
+    the driver explicitly so it loads psycopg 3.
     """
     return os.environ["DATABASE_URL"].replace(
         "postgresql://", "postgresql+psycopg://", 1
@@ -203,7 +203,7 @@ class NoteIn(BaseModel):
 
 
 # The health check probes GET / and needs a 2xx or 3xx, so / must not 404 —
-# unless the app creates the file named by $XHOSTD_READY_FILE instead.
+# unless the app creates the file named by $XHOSTD_READY_FILE.
 @app.get("/")
 def root():
     with engine.connect() as conn:
@@ -294,8 +294,8 @@ every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Send the token as a header on each git command. That detail is the important
-one:
+Send the token as a header on each git command. That detail is
+important:
 
 ```text
 git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
@@ -395,7 +395,7 @@ A deploy that changes the source runs that one step, and it still costs a few
 seconds.
 
 **`image 273.28 MB total, 94.64 MB charged — base python:3.13-slim exempt`.**
-This is the most useful line for a `docker` user. *Total* is the size of the
+This line gives a `docker` user the image size figures. *Total* is the size of the
 image on disk. *Charged* is the size that counts against your plan's image
 size cap. The platform subtracts the layers of the largest warm base under
 your image. Here that base is the ~179 MB difference, and the platform
@@ -508,7 +508,7 @@ verified domain.
 
 The platform does not compress your app's responses for you. Your image runs
 your server, so compression is a setting in that server, and turning it on
-compresses the whole path rather than one hop of it. Visitors wait less and you
+compresses every hop from your server to the visitor. Visitors wait less and you
 spend less bandwidth.
 
 The app in "The files" is FastAPI, which ships the middleware, so this needs no
@@ -583,7 +583,7 @@ failed build too, where a cold base is one more thing to rule out.
 The form `CMD ["sh", "-c", "alembic upgrade head && uvicorn ..."]` has no
 `exec`. The shell then stays alive as PID 1, and uvicorn is its child. The
 stop signals go to the shell, and the shell does not send them to uvicorn.
-The platform thus kills the server instead of a clean stop, and every
+The server thus gets no clean stop: the platform kills it, and every
 redeploy waits for the full stop timeout. Put `exec` before the last command
 in the chain.
 
@@ -621,27 +621,29 @@ variable in your own code.
 A 404 means the channel has no route yet, and a 502 means the container does not answer.
 [The address returns 404 or 502](https://docs.xhostd.com/guides/troubleshooting#the-address-returns-404-or-502) explains each cause.
 
-### Single-page apps: the fallback is yours
+### Single-page apps: your server serves every route
 
 A single-page app serves one `index.html`, and a client-side router
 interprets paths such as `/dashboard`. The hosts that such an app migrates
 from often supply a rewrite — nginx with `try_files`, or a platform's
-automatic SPA fallback — that serves `index.html` for every unknown path.
+automatic SPA rewrite — that serves `index.html` for every unknown path.
 xhostd has no such rewrite. The edge proxies every path of your hostname
 straight to your container, and it rewrites nothing. Your server decides
-what every path means, so your server must implement the fallback.
+what every path means, so your server must serve `index.html` for every
+client-side route.
 
 The symptom is precise. The app works while the visitor navigates inside it,
 because the router changes the path without a request. A refresh, a deep
 link, or a direct navigation to `/dashboard` then sends a real request for
 that path, and your server answers its own 404 — from FastAPI, a raw
 `{"detail":"Not Found"}`. That response looks like a routing bug in the app.
-It is a missing fallback in the server.
+Its cause is a server that does not serve `index.html` for that path.
 
-The platform sign-in flow depends on the same fallback. After the sign-in,
-the gateway returns the visitor with a real HTTP navigation to the path the
-visitor was on. If that path exists only in the client-side router, the
-return itself 404s, so a missing fallback also breaks login on those routes.
+The platform sign-in flow depends on the same catch-all route. After the
+sign-in, the gateway returns the visitor with a real HTTP navigation to the
+path the visitor was on. If that path exists only in the client-side router,
+the return itself 404s, so a server without the catch-all also breaks login
+on those routes.
 
 In FastAPI, register the API routes first, mount the built assets, and end
 with a catch-all that serves `index.html` for every other GET path:
@@ -651,12 +653,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # The API routes are registered before this point. Starlette matches in
-# registration order, so they win over the catch-all.
+# registration order, so they match before the catch-all.
 app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 
 
 @app.get("/{path:path}")
-def spa_fallback(path: str):
+def spa_index(path: str):
     return FileResponse("dist/index.html")
 ```
 
