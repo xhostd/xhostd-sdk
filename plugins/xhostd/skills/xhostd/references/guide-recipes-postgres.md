@@ -16,7 +16,7 @@ guides describe the same app, and they divide the subject between them.
   `requirements.txt` and `app.py`.
 
 Nothing here is specific to the `docker` template. The same rules apply to
-the `app` template, where the start command is `launch.sh` instead of `CMD`.
+the `app` template, where `launch.sh` holds the start command.
 
 ## Contents
 
@@ -100,7 +100,7 @@ def database_url() -> str:
     """xhostd injects DATABASE_URL with the bare ``postgresql://`` scheme.
 
     SQLAlchemy maps that scheme to psycopg2, which we do not ship. Name
-    the driver explicitly so it loads psycopg 3 instead.
+    the driver explicitly so it loads psycopg 3.
     """
     return os.environ["DATABASE_URL"].replace(
         "postgresql://", "postgresql+psycopg://", 1
@@ -128,7 +128,7 @@ a time. Anything that lives in a session and outlives a transaction
 therefore breaks over `DATABASE_URL`:
 
 - **A session `SET` of a setting the pooler does not track**, such as
-  `statement_timeout`. Use `SET LOCAL` inside the transaction instead.
+  `statement_timeout`. `SET LOCAL` inside the transaction works.
   The pooler keeps a session `SET` of a setting it tracks, such as
   `search_path`, `TimeZone`, or `application_name`.
 - **A session advisory lock**, `pg_advisory_lock`. The transaction form,
@@ -150,17 +150,17 @@ therefore breaks over `DATABASE_URL`:
   It also accepts `extra_float_digits` and ignores it. It refuses any
   other parameter at connect with `unsupported startup parameter`, for
   example `?options=-c statement_timeout=5000` in the URL, or
-  `server_settings={"jit": "off"}` in asyncpg. Use `SET LOCAL` in the
-  transaction instead.
+  `server_settings={"jit": "off"}` in asyncpg. `SET LOCAL` in the
+  transaction works.
 
 Run each of these over `DATABASE_URL_DIRECT`, or use the
 transaction-scoped form. A migration tool and a job queue that listens
 both read `DATABASE_URL_DIRECT`. This app's `migrations/env.py` does.
 
-#### Prefer `DATABASE_URL` for your app's traffic
+#### Send your app's traffic through `DATABASE_URL`
 
-On every plan, send your app's queries through `DATABASE_URL`, because
-the pooler gives it the higher limits. Through the pooler, many client
+On every plan, send your app's queries through `DATABASE_URL`, where the
+pooler accepts at least 100 connections per role. Through the pooler, many client
 connections share a few real database connections, called **server
 sessions**, and a server session is in use only while a transaction
 runs. An idle connection in your app's pool holds nothing on the server.
@@ -209,8 +209,8 @@ When your databases run on a database server of your own, all of your
 apps and channels share about 180 server sessions on it:
 its `max_connections` of 200, less the sessions Postgres and the
 platform keep for themselves. A direct pool in each of many channels
-adds up toward that total, which is one more reason to send your app's
-traffic through `DATABASE_URL`.
+adds up toward that total. A pooled connection through `DATABASE_URL` holds
+no server session while it is idle.
 
 ### alembic.ini
 
@@ -219,7 +219,7 @@ traffic through `DATABASE_URL`.
 script_location = migrations
 
 # sqlalchemy.url is deliberately absent: migrations/env.py reads
-# DATABASE_URL from the environment instead, so no connection string is
+# DATABASE_URL from the environment, so no connection string is
 # ever committed to the repo.
 
 [loggers]
@@ -302,7 +302,7 @@ run_migrations_online()
 This `env.py` is minimal on purpose: no offline mode, no `target_metadata`,
 and no autogenerate. Autogenerate compares your models to the live database,
 so it needs both of them. A migration that you write by hand needs neither.
-A smaller file has fewer failure modes.
+A step that the file leaves out cannot fail.
 
 Do not remove the `fileConfig` call. No other line reads the log
 configuration blocks in `alembic.ini`. Without the call, the configuration
@@ -623,10 +623,10 @@ The call returns at once with a `restore_id`, the restore's `status`, and a
 `activity` sentence until `status` is `succeeded` or `failed`.
 
 By default the restore runs in `read_only` mode: the app stays online and
-reads its notes, and a `POST /notes` fails until the restore ends. Pass
-`during_restore="maintenance"` to show a maintenance page instead, or
-`during_restore="live"` to keep the app writing; the restore then discards
-those writes. In every mode, a note added while the restore still waits to
+reads its notes, and a `POST /notes` fails until the restore ends. To show a
+maintenance page, pass `during_restore="maintenance"`. To keep the app
+writing, pass `during_restore="live"`; the restore then discards those
+writes. In every mode, a note added while the restore still waits to
 start is discarded too. xhostd's maintenance page answers HTTP 503, so an
 uptime monitor reports the app as down during the restore. To show your own
 page, deploy a static app first and pass its app and channel as
@@ -693,10 +693,10 @@ restore, scheduled maintenance, and an export all carry a PostGIS database.
 
 ### `ModuleNotFoundError: No module named 'psycopg2'`
 
-This is the most frequent failure for a Python app on this platform, and it
-has one cause. `DATABASE_URL` arrives with the bare `postgresql://` scheme,
-and SQLAlchemy maps that scheme to psycopg2. Most projects do not install
-psycopg2, because psycopg 3 is the driver that Python projects ship.
+A Python app on this platform often fails this way, and the failure has one
+cause. `DATABASE_URL` arrives with the bare `postgresql://` scheme,
+and SQLAlchemy maps that scheme to psycopg2. A project that ships psycopg 3
+often has no psycopg2 installed.
 
 The container starts and then stops immediately, so the deploy fails on the
 health check. No line in the deploy log mentions the database. Read the
@@ -714,12 +714,12 @@ os.environ["DATABASE_URL"].replace("postgresql://", "postgresql+psycopg://", 1)
 ```
 
 Do this in `migrations/env.py` and in your application code. If you do it in
-one place only, the failure is harder to find: the app serves requests, and
-the migration step is the part that stops.
+one place only, the app serves requests and the migration step stops, so the
+app looks healthy while its migration fails.
 
-You can instead install `psycopg2-binary` and keep the URL as it is. That
-also works, but your dependency tree then holds two Postgres drivers as soon
-as another package needs psycopg 3.
+Another option is to install `psycopg2-binary` and keep the URL as it is. Your
+dependency tree then holds two Postgres drivers as soon as another package
+needs psycopg 3.
 
 ### The migration ran at build time, or not at all
 
@@ -888,7 +888,7 @@ A migration tool runs only the migrations that have not run yet, so a deploy
 whose migrations have all run starts as usual. A tool that syncs the schema
 at every boot, such as Sequelize's `sync({ alter: true })`, issues schema
 changes at each start, and so it fails each deploy during the maintenance.
-Use migrations instead.
+A migration tool avoids this failure.
 
 ### A grant to another role is refused
 

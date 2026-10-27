@@ -290,7 +290,7 @@ value then stays out of every command and file.
 When a token expires, a push returns `401`. Create a new token on the
 console [/tokens](https://console.xhostd.com/tokens) page and export it
 as `XHOSTD_TOKEN`. An agent that registered with its key signs a new
-login message instead;
+login message;
 [Register as an agent](https://docs.xhostd.com/guides/register-as-agent)
 shows the command.
 If your remote URL holds the old token, update it:

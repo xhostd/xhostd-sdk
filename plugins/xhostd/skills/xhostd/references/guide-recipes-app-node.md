@@ -54,7 +54,7 @@ const app = express();
 
 // The health check probes GET / and needs a 2xx or 3xx. An API whose routes all
 // live under /api will fail the deploy even though the process is running,
-// unless it creates the file named by $XHOSTD_READY_FILE instead.
+// unless it creates the file named by $XHOSTD_READY_FILE.
 app.get("/", (req, res) => {
   res.json({ ok: true, service: "recipe-node-express", uptime: process.uptime() });
 });
@@ -110,8 +110,8 @@ your code, but it does not deploy it.** `deploy` is a separate call, so the
 commit that goes live is the commit that you name.
 
 Four steps. The
-[static site recipe](https://docs.xhostd.com/guides/recipes-static) gives more
-detail on the same four steps, for your first app.
+[static site recipe](https://docs.xhostd.com/guides/recipes-static) covers the
+same four steps in detail, for your first app.
 
 **1. Create the app.** This call makes the `prod` channel, its hostname and its
 git repo.
@@ -298,8 +298,8 @@ container is the same one, and the difference is not a fault.
 
 The platform does not compress your app's responses for you, so turn
 compression on in the app. A compressed page reaches your visitors sooner and
-costs you less bandwidth, and doing it in the app compresses the whole path
-rather than one hop of it.
+costs you less bandwidth, and doing it in the app compresses every hop from
+your server to the visitor.
 
 Add the dependency to `package.json`, pinned like every other:
 
@@ -334,7 +334,7 @@ app.use(compression({
 ```
 
 Call `compression.filter` in your own filter, as the example does. A `filter`
-option REPLACES the default content-type check rather than adding to it, so a
+option REPLACES the default content-type check and does not add to it, so a
 filter that only tests the path turns the PNG and JPEG skipping back off.
 `compression.filter` is that default, exported so you can keep it.
 
@@ -343,7 +343,7 @@ reflect nothing from the URL. Both halves have to be present for it to matter.
 
 ## When it goes wrong
 
-### It listens on localhost instead of 0.0.0.0
+### It listens on `localhost`, not `0.0.0.0`
 
 `app.listen(port)` with no host, or with `"localhost"` or `"127.0.0.1"`, binds
 only in the container. The health check then gets no answer. The probe waits its
@@ -352,7 +352,7 @@ that the server started. **Bind `"0.0.0.0"`.**
 
 ### There is no route at GET /
 
-This is the most common failure on the first deploy of an `app` template. The
+A first deploy of an `app` template often fails for this reason. The
 health check asks for `/` on the health port, and it needs a 2xx or a 3xx. An
 API with all its routes under `/api` answers 404 there. The deploy then fails,
 although the process operates correctly. The app can also create the file with
@@ -384,10 +384,10 @@ variable.
 
 A single-page app serves one `index.html`, and a client-side router
 interprets paths such as `/dashboard`. On the host that such an app migrates
-from, a rewrite — nginx `try_files`, or a platform's automatic SPA fallback —
+from, a rewrite — nginx `try_files`, or a platform's automatic SPA rewrite —
 serves `index.html` for every unknown path. xhostd has no such rewrite. The
 edge proxies every path straight to your server, so Express must serve
-`index.html` for those paths itself. Without the fallback, a refresh or a
+`index.html` for those paths itself. Without it, a refresh or a
 deep link on a client-side route answers Express's own 404. The platform
 sign-in return — a real HTTP navigation back to the path the visitor was on —
 404s for the same reason. Register the API routes first, then end with a
@@ -396,7 +396,7 @@ catch-all:
 ```js
 import path from "node:path";
 
-// The API routes are registered before this point, so they win over the
+// The API routes are registered before this point, so they match before the
 // catch-all.
 app.use(express.static("dist"));
 
@@ -405,11 +405,12 @@ app.get(/.*/, (req, res) => {
 });
 ```
 
-The section "Single-page apps: the fallback is yours" in
+The section "Single-page apps: your server serves every route" in
 [the Docker recipe](https://docs.xhostd.com/guides/recipes-docker) explains
 the failure in full.
 
 The Python equivalent of this recipe is
 [Recipe: Python API on the app template](https://docs.xhostd.com/guides/recipes-app-python).
 If your app has no server-side code, the
-[static site recipe](https://docs.xhostd.com/guides/recipes-static) is simpler.
+[static site recipe](https://docs.xhostd.com/guides/recipes-static) deploys it
+as committed files, with no server to write.

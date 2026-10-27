@@ -64,8 +64,8 @@ Read these five facts before you write code.
 your own cell's gateway on a private overlay network. Thus the URL is plain
 `http`, and you configure nothing about TLS, the `addressing_style` or the
 signature version. Pass `endpoint_url`, the key pair and the region to
-`boto3.client("s3", ...)`. Pass nothing more. A `Config(...)` is the most
-common unnecessary edit here. A wrong `Config(...)` — an old
+`boto3.client("s3", ...)`. Pass nothing else. The client needs no
+`Config(...)`. A wrong `Config(...)` — an old
 `signature_version`, or a forced `addressing_style` — makes a correct client
 fail with a signature error. One named exception is optional:
 `botocore.config.Config(request_checksum_calculation="when_required")`.
@@ -142,8 +142,8 @@ s3 = boto3.client(
 app = FastAPI()
 
 # Object names arrive from upload filenames and URL paths, so they are
-# untrusted. The gateway rejects traversal too, but a 400 here is a clearer
-# answer than its 403.
+# untrusted. The gateway rejects traversal too, with a 403; this check answers
+# 400 with the reason.
 _BAD_SEGMENTS = frozenset({"", ".", ".."})
 
 
@@ -169,7 +169,7 @@ def require_write_token(authorization: str = Header(default="")) -> None:
 
 
 # boto3 blocks, so every route below is a sync `def` — FastAPI runs those in a
-# threadpool instead of on the event loop.
+# threadpool, off the event loop.
 
 
 # The health check probes GET / and needs a 2xx or 3xx.
@@ -224,7 +224,7 @@ def download(key: str):
     try:
         obj = s3.get_object(Bucket=BUCKET, Key=checked)
     except ClientError as exc:
-        # A missing object can come back as AccessDenied instead of NoSuchKey:
+        # A missing object can come back as AccessDenied, not NoSuchKey:
         # the store will not confirm a key is absent to a caller scoped to one
         # prefix. Every key this app can name is inside its own channel's
         # prefix, so both codes mean the same thing here — no such file.
@@ -263,8 +263,9 @@ Five details in that file are important.
 trade-off, and it has a good result and a bad result. A channel whose blob
 store is not `ready` has no `S3_*` variable in its environment. Then this line
 raises `KeyError`, and the process does not start. The deploy fails on the
-health check. That result is better than an app that answers `/` with a 200
-and fails every `POST /files` with a 500. But the deploy still fails. If you
+health check. The missing storage thus shows at deploy time. It does not show
+later, as an app that answers `/` with a 200 and fails every `POST /files`
+with a 500. But the deploy still fails. If you
 want a channel that starts without storage, read the variable in the handler,
 and answer 503 when the variable is absent.
 
@@ -276,8 +277,11 @@ one slow upload stops every other request in the process. FastAPI runs a plain
 **`_checked_key` rejects the name before the SDK sees it.** An object name
 comes from the `filename` of an upload, or from the URL path. An attacker
 controls both. The gateway also rejects a path traversal, so this check is a
-second defence, not the only one. But a 400 with `Invalid object name.` is a
-better answer than a 502 that hides the gateway's refusal.
+second defence, not the only one. Without the check, the gateway answers the
+SDK call with a bare 403 and no error body. boto3 then reports the error code
+as `403`, not `AccessDenied`, so every route, `download` included, answers 502
+and does not name the cause. With the check, the client gets a 400 with
+`Invalid object name.` in the body.
 
 **The `AccessDenied` branch in `download`.** This branch is unexpected. A
 section below explains it.
@@ -338,7 +342,7 @@ does not deploy the code.**
 There are five steps: the four steps that every app takes, and the write
 token. If this is your first app, the
 [static site recipe](https://docs.xhostd.com/guides/recipes-static) explains
-the four common steps in more detail.
+the four common steps in detail.
 
 **1. Create the app.** This call provisions the `prod` channel, its hostname,
 its git repo and its object store.
@@ -634,7 +638,7 @@ This behaviour is unexpected, and it can cost you hours of work. The example
 handles `NoSuchKey` and `AccessDenied` in the same branch. Both codes are
 necessary there. If your code handles `NoSuchKey` only, a request for a key
 that does not exist — `GET /files/nope.txt` — misses that branch. The request
-then goes to the generic branch, and the app answers **502** instead of 404.
+then goes to the generic branch, and the app answers **502**, not 404.
 
 The cause is the isolation guarantee, and the guarantee is correct. Your
 channel's upstream credential has a scope: your channel's own key prefix. The
@@ -659,7 +663,7 @@ a fault. Thus the correct behaviour writes nothing: a 404, and no line in the
 runtime log. If you remove `AccessDenied` from that tuple, the same request
 goes to the branch below. That branch writes the botocore error to the log and
 answers 502. A 502 where you expect a 404 is the symptom to look for.
-[Best practices](https://docs.xhostd.com/guides/bkm) explains how to read the
+[Working methods](https://docs.xhostd.com/guides/bkm) explains how to read the
 runtime log.
 
 ### An upload returns 507
@@ -694,8 +698,8 @@ log holds the traceback.
 
 The platform provisions a store in a very short time, and it sweeps again for
 a store that stays in `provisioning`. Thus the usual repair is a new deploy.
-If you prefer an app that starts without storage, read the variables in the
-handlers, not at module scope.
+For an app that starts without storage, read the variables in the handlers,
+not at module scope.
 
 ### Every write answers 503 `Writes are not configured.`
 

@@ -1,8 +1,8 @@
-# Best known methods
+# Working methods
 
 Each recipe shows one shape of project from start to end. This guide carries
 the advice that belongs to no recipe in particular. It tells you how to find
-the cause of a fault. It names the stacks that give the least trouble. It shows
+the cause of a fault. It describes stack choices for the `app` and `docker` templates. It shows
 how to write code that stays correct after a redeploy. It also explains what
 each platform error tells you to do.
 
@@ -12,7 +12,7 @@ reason. A rule without a reason is easy to forget when it is not convenient.
 ## Contents
 
 - How to debug: the order to check
-- Recommended stacks
+- Stack choices
 - OAuth: know who the visitor is
 - Put code onto the app
 - Upgrade-safe code
@@ -25,7 +25,8 @@ reason. A rule without a reason is easy to forget when it is not convenient.
 
 ## How to debug: the order to check
 
-Do these checks in the given order. A different order costs you the most time.
+Do these checks in the given order. Each check answers a question that the
+next check depends on.
 
 **1. Did the deploy finish?** `get_logs(app_name, channel, source="deploy", deploy_id)`
 answers in its first line: `deploy <id> — <status> (sha <sha>)`, with a
@@ -33,7 +34,7 @@ status of `queued`, `running`, `success`, `failed`, `superseded`, or
 `cancelled`. Read the status from that header, not from the log text. Poll
 while the status is `queued` or `running`. On `superseded`, a newer deploy
 request for this channel replaced this one, and the header names it: poll that
-id instead. On `cancelled`, a database restore of the channel started before
+id. On `cancelled`, a database restore of the channel started before
 the deploy ran, so it never ran: deploy again once the restore ends. The rest of the reply is the record of the build, the health check
 and the route swap. On `failed`, the reason is in the log tail, and no other
 check helps. The old container still serves the traffic, and the URL that you
@@ -43,8 +44,8 @@ the deploy finishes, so an old `current_sha` next to a non-null
 `pending_deploy` means the deploy has not finished, not that it failed.
 
 **2. Is the container alive now?** Call `get_logs(app_name, channel, source="runtime")`
-with **no** `command`. The platform starts no container to answer this call, so
-it is the cheapest call available. It returns the status header only:
+with **no** `command`. The platform starts no container to answer this call. It
+returns the status header only:
 
 ```
 container #2 (xhost-fbae88c8-41dbea1f-00000002, id 3f9a1c0b7d2e) — running
@@ -73,7 +74,8 @@ deletes the container after the command ends. These tools are available: `sh`,
 `uniq`, `wc`, `find`, `xargs`, `gzip`/`zcat`, `tac`, `nl`, `od`, `strings`,
 `base64`, `perl`, `python3`, `node`.
 
-There is no `jq`, no `rg` and no `less`. Write `grep -c ERROR app.log` instead.
+There is no `jq`, `rg`, or `less`. To count matching lines, run
+`grep -c ERROR app.log`.
 Use `python3` if you must parse JSON. The platform stops the command after 30
 seconds, and limits its output to approximately 256 KiB. Send the output
 through `tail` or `head` to stay below that limit.
@@ -110,7 +112,7 @@ follow:
   stack trace on stderr looks the same as every other line.
 - **Do not buffer the output.** Python buffers stdout in blocks when stdout is
   not a terminal, and the platform does not set `PYTHONUNBUFFERED`. Thus a
-  process that stops with a fault can lose its last and most important lines.
+  process that stops with a fault can lose its last lines, which often name the fault.
   Set the variable yourself:
   `set_env(app_name, key="PYTHONUNBUFFERED", value="1")`. Node does not have this
   problem. `PYTHONUNBUFFERED` is not a reserved key, so the platform accepts
@@ -157,10 +159,10 @@ The `static` template is the one exception. It gets no `XHOSTD_READY_FILE`, so
 the HTTP probe is the only signal for a static site. Its timeout is 10 seconds,
 not 120 seconds.
 
-## Recommended stacks
+## Stack choices
 
-The platform enforces nothing in this section. These combinations need the
-fewest decisions, and they fail least often.
+The platform enforces nothing in this section. It describes combinations that
+run on the platform's base images with no extra setup.
 
 ### On the app template
 
@@ -378,15 +380,15 @@ column, then drop it.
 database that is already correct, `alembic upgrade head` does nothing. That is
 the correct result, because the command runs at every container start, and also
 at every restart. If the migration fails, let the process exit. If your code
-hides a failed migration, you serve new code against an old schema, and that
-result is worse than a failed deploy.
+hides a failed migration, you serve new code against an old schema. A failed
+deploy leaves the old container serving the traffic.
 
 ## Secrets and environment variables
 
 Set a secret with `set_secret(app_name, key)`. It takes no value: it returns
 the request that uploads the value from a file with your own token, and a
 console link where a person pastes it. `set_secret(..., generate=True)` stores
-a random value instead. So a secret never passes through the conversation.
+a generated random value. So a secret never passes through the conversation.
 The MCP tools can never read a secret back, and `list_env` returns the
 metadata only. `set_env` stores a plain variable: its value passes through the
 conversation, and the tools can read it back. Never give `set_env` a
@@ -431,7 +433,7 @@ an S3-compatible client at these values.
 **Use plain keys with no prefix.** Write `avatars/u123.png`, not
 `myapp/prod/avatars/u123.png`. Each channel already has its own private prefix.
 The gateway adds that prefix for you, and removes it for you. Your own
-namespace makes the keys longer and gives no benefit.
+namespace adds characters to each key and no isolation.
 
 **`.xhost/` is reserved.** The keys below it belong to the platform.
 
@@ -471,8 +473,8 @@ adds on top. A deploy log line gives both numbers: `image 966.07 MB total,
 number, not the first.
 
 **The CPU limit is a time limit.** Your plan's CPU figure is a share of CPU
-time, not a count of cores you own. Read the current value from
-`get_stats(view="overview")` rather than assuming a fixed share.
+time, not a count of cores you own. Read the current value for your plan from
+`get_stats(view="overview")`.
 
 **Set the worker count yourself.** `nproc` reports the cores your container can
 run on, but `/proc/cpuinfo` still shows the full topology of the host. Thus a

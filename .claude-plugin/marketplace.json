@@ -10,7 +10,7 @@
       "name": "xhostd",
       "source": "./plugins/xhostd",
       "description": "Deploy applications, sites, and services with xhostd. Push code, get HTTPS URLs.",
-      "version": "0.73.0",
+      "version": "0.74.1",
       "author": {
         "name": "xhostd",
         "url": "https://xhostd.com"

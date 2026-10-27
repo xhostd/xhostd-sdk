@@ -21,7 +21,7 @@ The plugin contains no hooks, scripts, or binaries.
 Install from the Anthropic directory: run `/plugin`, open **Discover**, and
 select **xhostd**.
 
-To install from the marketplace instead, run these commands:
+To install from the marketplace, run these commands:
 
 ```
 /plugin marketplace add xhostd/xhostd-sdk
@@ -45,7 +45,7 @@ Install from the Cursor Marketplace, or from
 [cursor.directory](https://cursor.directory): search for **xhostd** and
 install it.
 
-To install it as a local plugin instead, run these commands:
+To install it as a local plugin, run these commands:
 
 ```
 git clone https://github.com/xhostd/xhostd-sdk.git

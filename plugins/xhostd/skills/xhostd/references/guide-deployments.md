@@ -26,6 +26,21 @@ separates deployment history, build-log windows, runtime metadata, and audit
 events. Use Refresh to read additional build output. The console does not run
 arbitrary shell commands or present runtime metadata as a runtime log stream.
 
+## Read the runtime log after a move or a host failure
+
+[get_logs](https://docs.xhostd.com/mcp-tools#get_logs) with `source="runtime"` reads a
+container's output from the host that ran it. The platform also keeps each
+container's output for one year in a central log store, so the output
+survives when that host fails and when your project moves to another host.
+
+When the host that ran a container does not answer, or no longer holds it, the
+reply comes from the central store, and its header says
+`source: central log store`. A `command` runs on those lines the same way.
+
+A central read keeps the newest 200,000 lines or 64 MiB of a container's
+output. When it leaves out older lines, the header says
+`older lines omitted`. Your command sees only those newest lines.
+
 ## Deploy an existing revision from the console
 
 Open the project Overview and choose its deployment action. Select the channel

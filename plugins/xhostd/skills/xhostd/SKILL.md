@@ -114,16 +114,16 @@ A deploy is only marked **ready** if the app passes a **health check**, and ther
 
 Use (1) for anything that serves HTTP. Use (2) when the app has no web surface at all — a queue consumer, a cron-style daemon, a stream processor — with no dummy HTTP listener. Signal it once the app is genuinely doing its job (the consumer loop is subscribed and running), never as the first line of your start command. Such a channel still gets its hostname and URL; that URL just returns 502, which is expected.
 
-If neither signal arrives in time the deploy fails regardless of whether the app "works." This is the most common reason a first deploy fails — design for it up front.
+If neither signal arrives in time the deploy fails regardless of whether the app "works." A first deploy often fails for this reason, so design for it up front.
 
-**`static`** — the committed files are served directly from the **repo root**. Put `index.html` at the root (it answers `/`). No build runs; commit the final HTML/CSS/JS, not un-built sources. A path with no committed file behind it answers 404 — there is no `index.html` fallback for client-side routes. Health window ~10s.
+**`static`** — the committed files are served directly from the **repo root**. Put `index.html` at the root (it answers `/`). No build runs; commit the final HTML/CSS/JS, not un-built sources. A path with no committed file behind it answers 404, and nginx does not serve `index.html` for client-side routes. Health window ~10s.
 
 **`app`** — your process must:
 - **Signal readiness one of the two ways.** If it serves HTTP: **listen on `0.0.0.0` and the injected `$XHOSTD_HTTP_PORT`** (read `$XHOSTD_HTTP_PORT` from the environment; never hardcode a port — frameworks that default to `localhost`/a fixed port, Flask `app.run()`, `next dev`, Vite preview, etc., will fail the check unless you pass the host and `$XHOSTD_HTTP_PORT` explicitly; `$PORT` holds the same value for apps that read it; new code reads `$XHOSTD_HTTP_PORT`) and **return a 2xx or 3xx at `GET /`** (a pure API whose routes live under `/api` 404s the health check even though it runs — add a minimal `/` handler that returns 200). If it does not serve HTTP: **create `$XHOSTD_READY_FILE`** once it is running, e.g. `open(os.environ["XHOSTD_READY_FILE"], "w").close()` in Python or `fs.closeSync(fs.openSync(process.env.XHOSTD_READY_FILE, "w"))` in Node — or `touch "$XHOSTD_READY_FILE"` from `launch.sh` if the process has no natural hook, placed as late as possible.
 - **Boot within 120s.**
 - **Stay within a small memory budget (~128 MB) at run time.** That cap applies to your running server, not to the build.
 - **Run as a non-root user.** The container runs as `app`; the writable paths are `/app` (your code), `$HOME`, and `/tmp`. Writing anywhere else fails with `Permission denied`.
-- **A single-page app must serve its own `index.html` fallback for client-side routes** — the platform proxies every path straight to your server and rewrites nothing, so a refresh, a deep link, or the sign-in return on such a route 404s without it.
+- **A single-page app must serve its own `index.html` for every client-side route** — the platform proxies every path straight to your server and rewrites nothing, so a refresh, a deep link, or the sign-in return on such a route 404s without it.
 - **Put ALL installation in `install.sh`, never in `launch.sh`.** `install.sh` runs once at **build** time, as root, with a generous memory budget — that is the only place a system-wide install (`uv pip install`, `npm install -g`, `apt-get`) can succeed, and where a heavy build (a full Next.js build, a large `npm install`) belongs. `launch.sh` runs at boot as the non-root `app` user, so installing there fails on permissions and burns your 128 MB.
 
 `install.sh` (optional) bakes dependencies into the image at build time; `launch.sh` (required) execs your long-running server at boot — both from the repo root. Minimal pair (Python):
@@ -156,7 +156,7 @@ exec python worker.py   # worker.py creates $XHOSTD_READY_FILE once its loop is 
 
 - **Signal readiness one of the two ways** — **listen on `0.0.0.0` and the injected `$XHOSTD_HTTP_PORT`** and **return a 2xx or 3xx at `GET /`**, or **create `$XHOSTD_READY_FILE`** if the image has no HTTP surface. Same health check as `app`. The file signal needs no shell in the image: a distroless worker can just `open()` the path from its own code.
 - **Env vars are injected at run time only, NEVER as build args.** Secrets are not available during the build and must never be baked into an image — read all config from the environment at startup.
-- **A single-page app must serve its own `index.html` fallback for client-side routes** — the platform proxies every path straight through and rewrites nothing, exactly as on the `app` template.
+- **A single-page app must serve its own `index.html` for every client-side route** — the platform proxies every path straight through and rewrites nothing, exactly as on the `app` template.
 - **Run migrations in the image's start command**, not at build time (the database is only reachable at run time):
 
 ```dockerfile
@@ -315,5 +315,5 @@ Export (takeout):
 - `references/guide-recipes-port-forwarding.md` — Raw TCP: a public `host:port` on `XHOSTD_FORWARD_PORT`, the app toggle that is a protected action, and signalling readiness without serving HTTP.
 - `references/guide-recipes-worker.md` — Background worker: a long-running loop that serves no HTTP, readiness by `$XHOSTD_READY_FILE`, and how to prove progress from the runtime log.
 - `references/guide-recipes-commit-files.md` — Ship without git: `commit_files` in a client with no shell access, sparse changesets, and `null` deletes.
-- `references/guide-bkm.md` — Best-known methods: debugging with `get_logs`, stack choices, upgrade-safe code, secrets, budgets, quota errors, and the undo path.
+- `references/guide-bkm.md` — Working methods: debugging with `get_logs`, stack choices, upgrade-safe code, secrets, budgets, quota errors, and the undo path.
 - `references/guide-diagnose-slowness.md` — Diagnose a slow app: `get_app_health`, why `findings` comes first, the six `action.do` verbs, and what an unavailable block means.

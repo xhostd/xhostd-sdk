@@ -37,7 +37,7 @@ app = FastAPI()
 
 # The health check probes GET / and needs a 2xx or 3xx. A pure API whose routes
 # all live under /api fails the deploy even though the process is running,
-# unless it creates the file named by $XHOSTD_READY_FILE instead.
+# unless it creates the file named by $XHOSTD_READY_FILE.
 @app.get("/")
 def root():
     return {"ok": True, "service": "recipe-python-fastapi"}
@@ -102,8 +102,8 @@ code, but it does not deploy the code.** `deploy` is a separate call, so you
 name the commit that goes live.
 
 The deploy has four steps. If this is your first app, the
-[static site recipe](https://docs.xhostd.com/guides/recipes-static) gives more
-detail on the same four steps.
+[static site recipe](https://docs.xhostd.com/guides/recipes-static) covers the
+same four steps in detail.
 
 **1. Create the app.** This call creates the `prod` channel, its hostname and
 its git repo.
@@ -275,8 +275,8 @@ bytes.
 
 The platform does not compress your app's responses for you, so turn
 compression on in the app. A compressed page reaches your visitors sooner and
-costs you less bandwidth, and doing it in the app compresses the whole path
-rather than one hop of it.
+costs you less bandwidth, and doing it in the app compresses every hop from
+your server to the visitor.
 
 FastAPI ships the middleware, so this needs no new dependency. Add two lines to
 `app.py`:
@@ -327,7 +327,7 @@ route at `/`, however simple.
 
 ### You used pip in place of uv
 
-`pip` works, but it is much slower on every build. `--system` is a `uv` flag,
+`pip` installs the same packages, with its own flags. `--system` is a `uv` flag,
 and `pip install --system` is not valid. Thus a line that changes the tool but
 keeps the flags fails immediately. Use `uv pip install --system --no-cache`.
 
@@ -341,10 +341,10 @@ then appears on a commit that changed no dependency.
 
 A single-page app serves one `index.html`, and a client-side router
 interprets paths such as `/dashboard`. On the host that such an app migrates
-from, a rewrite — nginx `try_files`, or a platform's automatic SPA fallback —
+from, a rewrite — nginx `try_files`, or a platform's automatic SPA rewrite —
 serves `index.html` for every unknown path. xhostd has no such rewrite. The
 edge proxies every path straight to your server, so your server must serve
-`index.html` for those paths itself. Without the fallback, a refresh or a
+`index.html` for those paths itself. Without it, a refresh or a
 deep link on a client-side route answers FastAPI's own 404, a raw
 `{"detail":"Not Found"}`. The platform sign-in return — a real HTTP
 navigation back to the path the visitor was on — 404s for the same reason.
@@ -355,16 +355,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 # The API routes are registered before this point. Starlette matches in
-# registration order, so they win over the catch-all.
+# registration order, so they match before the catch-all.
 app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
 
 
 @app.get("/{path:path}")
-def spa_fallback(path: str):
+def spa_index(path: str):
     return FileResponse("dist/index.html")
 ```
 
-The section "Single-page apps: the fallback is yours" in
+The section "Single-page apps: your server serves every route" in
 [the Docker recipe](https://docs.xhostd.com/guides/recipes-docker) explains
 the failure in full.
 
@@ -378,4 +378,5 @@ fails on the health check.
 
 [Recipe: Node API on the app template](https://docs.xhostd.com/guides/recipes-app-node)
 is the Node equivalent of this recipe. If your app has no server-side code, the
-[static site recipe](https://docs.xhostd.com/guides/recipes-static) is simpler.
+[static site recipe](https://docs.xhostd.com/guides/recipes-static) deploys it
+as committed files, with no server to write.

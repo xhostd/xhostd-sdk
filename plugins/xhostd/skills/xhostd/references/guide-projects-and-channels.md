@@ -11,8 +11,8 @@ billing plan. CPU, memory, database usage, and file storage are account-scoped
 resources; adding projects does not multiply that budget.
 
 Code-running channels have their own Postgres database. Static channels do not.
-Use the platform-provided environment values instead of deriving credentials or
-hostnames yourself. Platform sites use `xhostd.com`; tenant app addresses use
+Read credentials and hostnames from the platform-provided environment values;
+do not derive them yourself. Platform sites use `xhostd.com`; tenant app addresses use
 `xhostd.app`.
 
 ## Create and inspect a project
