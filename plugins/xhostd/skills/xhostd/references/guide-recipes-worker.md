@@ -168,29 +168,26 @@ Three steps.
 
 ```text
 create_app(name="recipe-worker", template="app")
-→ {"id": "6aa59e3b-05b5-4e4c-9b12-1150a8a84c6c",
-   "name": "recipe-worker",
+→ {"name": "recipe-worker",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-worker.git",
    "template": "app",
-   "port_forwarding_enabled": false,
-   "port_forwarding_available": true,
-   "channels": [{"id": "98a26f59-607f-45f3-b8b2-741ca5054902",
-                 "name": "prod",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-worker-docs.xhostd.app",
                  "git_ref_binding": null,
+                 "follows_branch": false,
                  "current_sha": null,
                  "status": "provisioning",
                  "pending_deploy": null}],
-   "owner_username": "docs",
    ...}
 ```
 
-Keep the app `id` and the `prod` channel `id`, because the deploy call takes
-both. `status: "provisioning"` is the normal state of a new channel, and the
-hostname is already allocated. This recipe needs no public TCP port, so the two
-`port_forwarding_*` fields are not important here. The
+Later calls take the app's name and the channel's name, such as `prod`. `status: "provisioning"` is the normal state of a new channel, and
+the hostname is already allocated. This recipe needs no public TCP port. The
 [Raw TCP recipe](https://docs.xhostd.com/guides/recipes-port-forwarding)
-explains them.
+shows where the plan and the project toggle decide whether a channel can have
+one.
 
 ### Step 2 — push the files
 
@@ -212,8 +209,16 @@ returned. No tool result carries a token. Send it as a header on each git
 command:
 
 ```text
-git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
 ```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 You can also mint a scoped, short-lived token with the request that
 `get_credential_request` describes, and send it the same way from a variable of its
@@ -223,7 +228,10 @@ A new xhostd repo is empty, and git reports this. The warning is correct, and it
 is not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-worker.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-worker.git
 Cloning into 'recipe-worker'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -239,7 +247,10 @@ $ git commit -m "tick worker that signals readiness with a file"
  2 files changed, 75 insertions(+)
  create mode 100755 launch.sh
  create mode 100644 worker.py
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 To https://git.xhostd.com/docs/recipe-worker.git
  * [new branch]      master -> master
 ```

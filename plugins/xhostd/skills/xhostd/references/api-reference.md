@@ -4,7 +4,7 @@ This is the underlying HTTP API that the MCP tools wrap. An agent's day-to-day w
 
 Base URL: `https://api.xhostd.com`
 
-All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send `-H "Authorization: Bearer $XHOSTD_TOKEN"`; never write the value into a command. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credential_request` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
+All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send the header on curl's stdin, `printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl --header @- ...`; never write the value into a command. Any local user can read a process's argv with `ps`, and `printf` is a shell builtin that starts no process, so the token reaches no argv. With the header on stdin, a request body comes from an argument or a file, never from stdin. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credential_request` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
 
 All error responses use the envelope: `{"error": {"code": "<code>", "message": "<message>"}}`
 
@@ -68,7 +68,6 @@ All error responses use the envelope: `{"error": {"code": "<code>", "message": "
 - GET /feedback
 - GET /api/user/stats
 - GET /me/usage
-- GET /plans
 - Hostname Rules
 - Channel Status Values
 - Deploy Status Values
@@ -671,8 +670,8 @@ Store one env value from the raw request body, so a secret goes from a file stra
 **Request body:** the raw value, byte for byte, with `Content-Type: application/octet-stream`, `text/plain` (no charset, or `utf-8`), or none. xhostd stores a trailing newline too, so strip it from a one-line value.
 
 ```bash
-curl -sS --fail-with-body -X PUT \
-  -H "Authorization: Bearer $XHOSTD_TOKEN" \
+printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
+  | curl -sS --fail-with-body -X PUT --header @- \
   -H "Content-Type: application/octet-stream" \
   --data-binary @stripe-key.txt \
   "https://api.xhostd.com/apps/<app_id>/env/STRIPE_KEY?kind=secret"
@@ -1342,7 +1341,7 @@ Mint a unified credential for the authenticated user. The returned token serves 
 
 **With a shell, push over SSH, which needs no token** — see `POST /ssh-keys` below. This token stays required for the HTTPS push, for Postgres and for the platform API.
 
-To push over HTTPS, send the token as a header from a variable, never in the remote URL: `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push https://git.xhostd.com/<username>/<app>.git <branch>` (the per-app `repo_url` from `GET /apps/{app_id}` is that URL). A minted token works the same way from a variable of its own. The git guide also documents a remote with the token in its URL, and warns against it, because that remote writes the token to `.git/config`. The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
+To push over HTTPS, send the token as a header that git reads from its environment, never in the remote URL: `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push https://git.xhostd.com/<username>/<app>.git <branch>` (git 2.31 or later; the per-app `repo_url` from `GET /apps/{app_id}` is that URL). The token then reaches no process's argv, and the URL-scoped key sends it to the git host alone. A minted token works the same way from a variable of its own. The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
 
 ---
 
@@ -1350,7 +1349,7 @@ To push over HTTPS, send the token as a header from a variable, never in the rem
 
 Register one OpenSSH public key on the authenticated user's account, for git over SSH. A key belongs to the account, not to one app. Send the PUBLIC half only — the content of a `.pub` file; the platform stores no private key. A key reaches every repository on the account, so your calling token must carry `repo:*`; `api_login` asks for all nine default scopes, because that is what the key goes on to mint, and it asks for one more thing: the account holds a verified address, or your own token carries `email:bind`. A token from `POST /registrations` or `POST /auth/ssh-key` carries that scope, so an agent registers a replacement key for itself.
 
-**With a shell, push over SSH.** The private half never enters a tool call, and one registration covers every app on the machine. Before you call this route, compare the fingerprint (`ssh-keygen -lf`) of every existing `~/.ssh/xhost_ed25519*.pub` — the default key and every `~/.ssh/xhost_ed25519_*` key — with `GET /ssh-keys`, which lists the calling account's keys, and push with the key whose `.pub` file it lists. A file name proves nothing about the account; only a match does. If none is listed, make `~/.ssh/xhost_ed25519` if it is absent, and register it. If the route answers 409 for that key, make `~/.ssh/xhost_ed25519_<username>` if it is absent, and register it. If that also answers 409, the machine holds no usable SSH key for this account; make no key under any other name. Never put a key in the project directory, and never add a per-project, per-app or per-tool suffix, which would only mint a second key on the account. Where the network blocks outbound port 22, or after an SSH push fails, push over HTTPS with the token sent as a header: run `git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push <repo_url> <branch>`. With no usable SSH key and no `$XHOSTD_TOKEN`, use `commit_files`.
+**With a shell, push over SSH.** The private half never enters a tool call, and one registration covers every app on the machine. Before you call this route, compare the fingerprint (`ssh-keygen -lf`) of every existing `~/.ssh/xhost_ed25519*.pub` — the default key and every `~/.ssh/xhost_ed25519_*` key — with `GET /ssh-keys`, which lists the calling account's keys, and push with the key whose `.pub` file it lists. A file name proves nothing about the account; only a match does. If none is listed, make `~/.ssh/xhost_ed25519` if it is absent, and register it. If the route answers 409 for that key, make `~/.ssh/xhost_ed25519_<username>` if it is absent, and register it. If that also answers 409, the machine holds no usable SSH key for this account; make no key under any other name. Never put a key in the project directory, and never add a per-project, per-app or per-tool suffix, which would only mint a second key on the account. Where the network blocks outbound port 22, or after an SSH push fails, push over HTTPS with the token sent as a header from git's environment: run `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push <repo_url> <branch>`. With no usable SSH key and no `$XHOSTD_TOKEN`, use `commit_files`.
 
 **Request body:**
 ```json
@@ -1510,7 +1509,7 @@ xhostd-login\n<fingerprint_sha256>\n<timestamp>\n
 }
 ```
 
-An account holds at most 20 tokens from this route. After a renewal, remove and re-add the MCP server so its header carries the new token.
+An account holds at most 20 tokens from this route. After a renewal, store the new token in its file. An MCP server registered as the [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) guide shows reads the file at its next connection, so reconnect it or start a new session.
 
 **Errors:**
 - `bad_request` (400) — a bad key line, a stale timestamp, or a block that does not verify, as for `POST /registrations`
@@ -1520,7 +1519,7 @@ An account holds at most 20 tokens from this route. After a renewal, remove and 
 
 ## POST /me/email-verifications
 
-Mail one confirmation link for the caller's account. Bearer required, scope `email:bind`. Only `POST /registrations` and `POST /auth/ssh-key` grant that scope, because the address becomes the account's sign-in email; a credential from `POST /credentials` or `POST /tokens` reads 403. The platform mails the address a link that works once for 60 minutes; the person who reads the mail opens it and presses Confirm in the console. Confirming moves a `starter` account to `basic` and enables person-present account access. A new request replaces the account's previous link. An account whose email nobody confirms may be deleted after 7 days. MCP: `request_email_verification(email)`.
+Mail one confirmation link for the caller's account. Bearer required, scope `email:bind`. Only `POST /registrations` and `POST /auth/ssh-key` grant that scope, because the address becomes the account's sign-in email; a credential from `POST /credentials` or `POST /tokens` reads 403. The platform mails the address a link that works once for 60 minutes; the person who reads the mail opens it and presses Confirm in the console. Confirming enables person-present account access. A new request replaces the account's previous link. An account whose email nobody confirms may be deleted after 7 days. No MCP tool calls this route.
 
 **Request body:**
 ```json
@@ -1547,7 +1546,7 @@ The response repeats no address and carries no link.
 
 ## GET /me/email-verifications
 
-Read where the account's email verification stands. Bearer required, no scope. Call it once, after the person says they pressed Confirm; do not poll. MCP: `get_email_verification()`.
+Read where the account's email verification stands. Bearer required, no scope. Call it once, after the person says they pressed Confirm; do not poll. No MCP tool calls this route.
 
 **Response (200):**
 ```json
@@ -1709,20 +1708,6 @@ The storage cap warns and blocks nothing: no write fails and no deploy fails. Eg
 
 ---
 
-## GET /plans
-
-Return the subscription catalog and the caps each entry grants, lowest rank first.
-
-The route takes **no token**, reads no database, and answers every caller the same body. It carries no price. This endpoint is documented for HTTP API accuracy but is outside plugin workflows: plugins must not display or compare the subscription catalog. Use `get_stats(view="overview")` for the authenticated account's current entitlement, limits, headroom, and feature availability.
-
-**Request body:** None
-
-**Response (200):** an object with a `plans` array. Each row includes the entitlement identifier, rank, resource limits, retention settings, feature flags, and whether agent registration alone can create that entitlement. The catalog is intentionally not reproduced here.
-
-**Plugin workflow:** call `get_stats(view="overview")`. It composes the applicable row with `/me/stats`, `/me/usage/resources`, `/apps`, `/me/usage`, and `/me/blob/storage`, and returns only the authenticated account's current limits beside current usage in `plan_headroom`.
-
----
-
 ## Hostname Rules
 
 All user-facing names (app names, usernames, channel names) must be valid **DNS labels**:
@@ -1799,35 +1784,37 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 
 ### Protected actions
 
-Seventeen routes need a person in the web console. They are the three member
+Twenty-one routes need a person in the web console. They are the three member
 writes, the two invite answers, and the four ownership-transfer acts — the
 start, the cancel, the accept, and the decline. The list also holds
 the two external-access toggles and the port-forwarding project toggle, the
-GitHub connect, the GitHub disconnect, and
-`GET /apps/{app_id}/env/{key}/value`. The list ends with the database and
+connect and the disconnect of a source repository on both the GitHub routes
+and the source routes, `GET /apps/{app_id}/env/{key}/value`, and the bind and
+the unbind of a git host account. The list ends with the database and
 object-storage restores, which need a person on the `prod` channel only. Reads stay open:
 `GET /apps/{app_id}/members`, `GET /invites`, `GET /transfers`,
 `GET /apps/{app_id}/github`,
 `GET /apps/{app_id}/env`, `POST /apps/{app_id}/github/sync`, and
 `POST /apps/{app_id}/source/sync` never answer this error.
 
-An agent credential gets `protected_action` on all seventeen routes. The **agent
-access** switch opens thirteen of them. The switch never opens any of the four
-ownership-transfer acts, so those routes fail again after the user turns the
-switch on.
+An agent credential gets `protected_action` on all twenty-one routes. The **agent
+access** switch opens fifteen of them. The switch never opens any of the four
+ownership-transfer acts, or the bind and the unbind of a git host account, so
+those routes fail again after the user turns the switch on.
 
-Which switch applies depends on the route. The eleven project actions read the
+Which switch applies depends on the route. The thirteen project actions read the
 app owner's switch on the project settings page. The two invite answers read
 the caller's own account default on the account page. The message names the
 correct page, so quote it to the user. Do not retry the call before the user
 answers.
 
 The app field `agent_protected_actions_effective` predicts this error: when it
-is `false`, an agent credential gets `protected_action` on those eleven project
+is `false`, an agent credential gets `protected_action` on those thirteen project
 actions. `agent_protected_actions_enabled` is the raw override, and `null`
 there means the app inherits the account default of the owner. The field does
-not predict the two invite answers or the four transfer acts. The caller's own
-account default opens the invite answers, and no setting opens a transfer.
+not predict the two invite answers, the four transfer acts, or the bind and the
+unbind. The caller's own account default opens the invite answers, and no
+setting opens a transfer, a bind, or an unbind.
 
 **Ownership transfer is a two-party protocol, and no setting opens any part
 of it.** The owner starts a transfer to an existing member; nothing moves until

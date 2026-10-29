@@ -200,13 +200,14 @@ Five steps. The first one is not a tool call.
 
 ### Step 0 — turn the project toggle on, in the console
 
-`create_app` reports two different fields, and each one tells you a different
-thing:
+Two settings decide whether `expose_port` can open an endpoint:
 
-- **`port_forwarding_available`** — the account's **plan** permits port
-  forwarding. `get_stats(view="overview")` reports the same availability.
-- **`port_forwarding_enabled`** — the **project toggle**. Its default is
-  **false**, also when the plan permits port forwarding.
+- **The plan.** `get_stats(view="overview")` reports
+  `plan_headroom.port_forwarding`, which is true when the account's plan
+  includes public TCP endpoints.
+- **The project toggle.** Its default is **false**, also when the plan
+  includes them. No tool reads the toggle: while it is off, `expose_port`
+  answers with the refusal that this step shows.
 
 The toggle is a **protected action**. A project admin sets it under
 **Port forwarding** on the settings page for the project. An agent that calls
@@ -223,7 +224,7 @@ expose_port(app_name="recipe-tcp", channel="prod")
   https://console.xhostd.com/projects/cb2ecd27-a8dd-4882-99de-fb191f0c8a00/settings
 ```
 
-The id in the URL is the app `id` from `create_app`. There is no MCP tool for
+The error carries the whole URL, so you need no id to build it. There is no MCP tool for
 the toggle, by design. A person must make the decision to open a project to the
 public internet. An agent with the power to set the toggle could also report a
 live endpoint that the user did not agree to. If you are an agent, **ask the
@@ -240,25 +241,24 @@ All the steps below work with the toggle off, up to `expose_port`.
 
 ```text
 create_app(name="recipe-tcp", template="app")
-→ {"id": "cb2ecd27-a8dd-4882-99de-fb191f0c8a00",
-   "name": "recipe-tcp",
-   "template": "app",
-   "repo_url": "https://git.xhostd.com/docs/recipe-tcp.git",
+→ {"name": "recipe-tcp",
    "owner_username": "docs",
-   "port_forwarding_enabled": false,
-   "port_forwarding_available": true,
-   "channels": [{"id": "a9832287-7684-4f78-94dc-9795761c60d8",
-                 "name": "prod",
+   "role": "owner",
+   "repo_url": "https://git.xhostd.com/docs/recipe-tcp.git",
+   "template": "app",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-tcp-docs.xhostd.app",
+                 "git_ref_binding": null,
+                 "follows_branch": false,
                  "current_sha": null,
-                 "status": "provisioning"}],
+                 "status": "provisioning",
+                 "pending_deploy": null}],
    ...}
 ```
 
-`port_forwarding_available: true` with `port_forwarding_enabled: false` is the
-normal state of a new app whose current plan includes public TCP endpoints.
-The plan gives the capability, but nobody set the project toggle. Keep the
-app id and the `prod` channel id, because the deploy calls take both.
+A new app's project toggle is off, also when the current plan includes public
+TCP endpoints: the plan gives the capability, but nobody set the toggle.
+Later calls take the app's name and the channel's name, such as `prod`.
 
 ### Step 2 — push the files
 
@@ -281,8 +281,16 @@ returned. No tool result carries a token. Send it as a header on each git
 command:
 
 ```text
-git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
 ```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 You can also mint a scoped, short-lived token with the request that
 `get_credential_request` describes, and send it the same way from a variable of its
@@ -292,7 +300,10 @@ A new xhostd repo is empty, and git reports this. The warning is correct, and it
 is not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-tcp.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-tcp.git
 Cloning into 'recipe-tcp'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -308,7 +319,10 @@ $ git commit -m "tcp line service on the forward port"
  2 files changed, 87 insertions(+)
  create mode 100755 launch.sh
  create mode 100644 server.py
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 To https://git.xhostd.com/docs/recipe-tcp.git
  * [new branch]      master -> master
 ```

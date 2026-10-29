@@ -15,8 +15,9 @@ your code; it does not deploy the code. Start a build separately with
 - The clone / push URL
 - Renew an expired token
 - A push fails again and again: clear a stale cached credential
+- Connect a Cursor Origin repository
 - Connect a GitHub repository with the xhostd GitHub app
-- Deploy on each GitHub push
+- Deploy on each push
 - Notes
 
 ## Pick the path before you push
@@ -76,13 +77,22 @@ token. Keep the minted token in a variable of its own, so its value
 stays out of every command and out of the output:
 
 ```sh
-XHOSTD_GIT_TOKEN="$(curl -sS --fail-with-body -X POST \
-  -H "Authorization: Bearer $XHOSTD_TOKEN" \
+XHOSTD_GIT_TOKEN="$(printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
+  | curl -sS --fail-with-body -X POST --header @- \
   --json '{"scopes":["repo:*"],"expires_in":3600}' \
   https://api.xhostd.com/credentials \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(json.dumps(d)) if "token" not in d else print(d["token"])')" \
-  && git -c http.extraHeader="Authorization: Bearer $XHOSTD_GIT_TOKEN" push https://git.xhostd.com/<username>/<app>.git HEAD:master
+  && GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_GIT_TOKEN" \
+  git push https://git.xhostd.com/<username>/<app>.git HEAD:master
 ```
+
+Neither token appears on a process's command line, where any user of the
+machine can read it with `ps`. `printf` is a shell builtin, so it starts no
+process: it writes the header to curl's standard input, and `--header @-`
+reads it from there. git reads its header from the `GIT_CONFIG_*` variables
+in its environment; read [The clone / push URL](#the-clone-push-url).
 
 Run the mint and the command that uses the token as one shell command. A
 shell variable does not survive into a new shell, and an agent's tool
@@ -207,56 +217,32 @@ outbound port 22, or where an SSH push fails. It needs a token in
 `XHOSTD_TOKEN`. Without one, use the `commit_files` tool, and never ask
 the user to paste a token.
 
-An agent sends its own token from `XHOSTD_TOKEN` as a header, so the
-token value never appears in a command or in `.git/config`:
+An agent sends its own token from `XHOSTD_TOKEN` as a header, from git's
+environment:
 
 ```sh
-git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push https://git.xhostd.com/<username>/<app>.git HEAD:master
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git push https://git.xhostd.com/<username>/<app>.git HEAD:master
 ```
+
+git reads the three variables as one configuration entry. The token value
+then appears in no command line and in no file. Any user of the machine
+can read a process's command line with `ps`, and `.git/config` keeps what
+you write to it. The key names `https://git.xhostd.com/`, so git sends the
+header to that host alone. Put the variables in front of every git command
+that reaches the repo: `clone`, `fetch`, `pull`, and `push`. This form
+needs git 2.31 or later.
 
 A scoped token that you mint works the same way from its own variable,
 as **Mint credentials** shows.
-
-A person at a terminal can also put the token in the **password** field
-of the URL:
-
-```
-https://<username>:<token>@git.xhostd.com/<username>/<app>.git
-```
-
-The git host ignores the username field, and checks the password only.
-Thus any username works. The GitHub form is equivalent, and it makes
-the same point clear:
-
-```
-https://x-access-token:<token>@git.xhostd.com/<username>/<app>.git
-```
-
-Set the remote and push:
-
-```sh
-git remote add xhostd "https://<username>:<token>@git.xhostd.com/<username>/<app>.git"
-git push xhostd HEAD:master
-```
-
-> **Security:** `git remote add` with the token in the URL writes it to
-> `.git/config` in plaintext. That one line is a full-scope credential —
-> repo write, every channel's database, and the platform API — good until
-> the token expires or you revoke it. Use a form that keeps the token
-> out of the file: the interactive form or the Bearer header covered in
-> the following sections, or a git credential helper
-> (`git config --global credential.helper osxkeychain` on macOS,
-> `manager` on Windows, `libsecret` on Linux) that stores it in your OS
-> keychain. If a repo's `.git/config` is ever exposed, revoke the token
-> on the [tokens page](https://console.xhostd.com/tokens) and mint a new
-> one. For CI, mint a dedicated token you can revoke on its own.
 
 The `HEAD:master` refspec is deliberate here too. Push under the name you
 will deploy, because `deploy(..., ref="master")` binds the channel to that
 branch, and a new local repo often uses `main` as its default branch.
 
-Use `git remote set-url xhostd ...` if the remote already exists. `get_app`
-and `GET /apps/{app_id}` return the exact `repo_url` of each app.
+`get_app` and `GET /apps/{app_id}` return the exact `repo_url` of each app.
 
 ### Interactive form (no token in the URL)
 
@@ -270,21 +256,6 @@ git clone https://git.xhostd.com/<username>/<app>.git
 git asks for a username; type any value. git then asks for a password;
 put the token at the **Password** prompt.
 
-### Bearer header (advanced)
-
-git.xhostd.com also accepts the token as a Bearer header. The REST API
-and the MCP tools present the token in the same way. Thus one credential
-is the same on every surface:
-
-```sh
-git config http.extraHeader "Authorization: Bearer <token>"
-```
-
-For a person, the Basic-password form is the usual one, because git's
-credential helpers use it. An agent uses the Bearer header with
-`$XHOSTD_TOKEN`, as the start of this section shows, because the token
-value then stays out of every command and file.
-
 ## Renew an expired token
 
 When a token expires, a push returns `401`. Create a new token on the
@@ -293,11 +264,6 @@ as `XHOSTD_TOKEN`. An agent that registered with its key signs a new
 login message;
 [Register as an agent](https://docs.xhostd.com/guides/register-as-agent)
 shows the command.
-If your remote URL holds the old token, update it:
-
-```sh
-git remote set-url xhostd "https://<username>:<new-token>@git.xhostd.com/<username>/<app>.git"
-```
 
 ## A push fails again and again: clear a stale cached credential
 
@@ -329,15 +295,122 @@ Then clear the stale entry for `git.xhostd.com`:
   printf 'protocol=https\nhost=git.xhostd.com\n\n' | git credential reject
   ```
 
-The next push then asks you for a new token, or reads the token from the
-URL.
+The next push then asks you for a new token.
+
+## Connect a Cursor Origin repository
+
+Cursor Origin hosts git repositories. A Cursor Origin repository can be
+the source of a project. xhostd reads the repository's contents, and
+Cursor Origin tells xhostd about each push. A project that is connected
+to Cursor Origin needs no deploy key and no ping.
+
+### Connect Cursor Origin in the console
+
+A person connects Cursor Origin in the console. No MCP tool and no token
+can do it, because the connection needs that person's approval on Cursor
+Origin. The owner of a project connects its repository.
+
+1. Select **Connect a Cursor Origin repository** on the project's Git
+   page, or **Connect Cursor Origin** on the account page under **Git
+   host accounts**.
+2. On Cursor Origin, choose the owner of the repositories, and all
+   repositories or the ones you select. Then approve the permissions
+   that the xhostd app asks for, as
+   [Cursor Origin permissions](#cursor-origin-permissions) lists.
+3. In the console, open the repository list. On the project's Git page,
+   select **Connect a Cursor Origin repository** again. On the account
+   page, select **Connect a repository** in the row of the Cursor Origin
+   account.
+4. Choose the repository. Select **Connect** to connect it to a project,
+   or **Create a project from this repository**.
+5. Turn following on for each channel that deploys on push, as
+   [Follow the branch](#follow-the-branch) shows.
+
+When your xhostd account already holds an active Cursor Origin account,
+**Connect a Cursor Origin repository** opens the repository list at
+once, and you start at step 4.
+
+An install that starts on Cursor Origin opens the console's **Connect
+Cursor Origin** page. That page names the person who approved and your
+xhostd username. Select **Connect** to connect the account. The console
+then opens the repository list, and you continue at step 4. If the
+approval expires before you confirm it, select **Connect Cursor Origin**
+to approve again.
+
+At the first sync, the repository's branches replace the project's
+branches. While the project is connected, you push to the Cursor Origin
+repository. `commit_files` and `git push` to xhostd are turned off.
+
+### Cursor Origin permissions
+
+The xhostd app asks Cursor Origin for these permissions on the
+repositories that you choose:
+
+- Read the contents of a repository: its commits, branches, and files.
+- Create and update check runs.
+- Read pull requests.
+- Read, create, and update pull request comments and reviews.
+- Read a collaborator's permission on a repository. This permission also
+  shows the email addresses of the people in the pull request, review,
+  and comment data an app reads.
+
+Cursor Origin also grants read access to repository metadata to every
+app. xhostd uses read access to contents to deploy, and does not use the
+other permissions yet. It asks for them to report deploy results on
+commits, to read pull requests, to read a deploy command in a pull
+request comment along with the commenter's role on the repository, and
+to reply on a pull request.
+
+### What an agent sees for Cursor Origin
+
+`sync_git_from_remote` returns `kind: "installation"` and
+`host: "origin"` for a Cursor Origin repository. The repository needs no
+setup. Turn following on for each channel that deploys on push:
+
+```text
+update_channel(app_name="shop", channel="prod", follows_branch=True)
+```
+
+### Disconnect the repository
+
+On the project's Git page, type the project's name and select
+**Disconnect the repository**. The project keeps the last mirrored state,
+and `commit_files` and `git push` to xhostd work again. Every channel of
+the project stops following its branch. The Cursor Origin account stays
+connected to your xhostd account.
+
+To remove the Cursor Origin account, select **Remove** in its row on the
+account page under **Git host accounts**. Disconnect the account's
+projects first. When no other xhostd account uses the Cursor Origin
+account, xhostd also removes its app from that account on Cursor Origin.
 
 ## Connect a GitHub repository with the xhostd GitHub app
+
+When the account page's **Git host accounts** card offers **Connect
+GitHub**, a GitHub repository connects through the xhostd GitHub app, as
+this section shows. Otherwise a GitHub repository connects with a deploy
+key, as [The push ping of a deploy key](#the-push-ping-of-a-deploy-key)
+shows.
 
 The xhostd GitHub app connects a GitHub repository to a project. The app
 reads the repositories that you choose on GitHub, and GitHub tells
 xhostd about each push. A project that is connected through the app
 needs no deploy key and no ping.
+
+The app asks GitHub for these permissions:
+
+- Repository contents and metadata: read-only.
+- Checks: read and write.
+- Pull requests: read and write.
+- Issues: read-only.
+- Organization members: read-only.
+
+xhostd uses read access to contents to deploy, and read access to
+organization members to check that the person who connects an
+organization is an owner of it. It does not use the other permissions
+yet. It asks for them to report deploy results on commits, to read pull
+requests, to read a deploy command in a pull request comment, and to
+reply on a pull request.
 
 ### Who can connect
 
@@ -417,11 +490,20 @@ organization.
 - The repository filter reads 1,000 repositories at each step. When a
   page shows no match, select **Keep searching** to read the next 1,000.
 
-## Deploy on each GitHub push
+## Deploy on each push {#deploy-on-each-github-push}
+
+A channel that follows its branch deploys each push to the app's
+connected source repository. Turn following on as
+[Follow the branch](#follow-the-branch) shows. A Cursor Origin repository
+needs no other step: Cursor Origin tells xhostd about each push. A GitHub
+repo connected with a deploy key also needs a ping, as
+[The push ping of a deploy key](#the-push-ping-of-a-deploy-key) shows.
+
+### The push ping of a deploy key
 
 This section applies to an app whose source is a GitHub repo connected
 with a deploy key, on the Repository source card of the console's Git
-page. A repo connected with the xhostd GitHub app needs no ping; read
+page. A repo connected through the xhostd GitHub app needs no ping; read
 [Connect a GitHub repository with the xhostd GitHub app](#connect-a-github-repository-with-the-xhostd-github-app).
 On such an app you push to GitHub, not to xhostd. A push to GitHub can
 deploy on its own, with two steps:
@@ -438,7 +520,7 @@ Find the notify URL with `sync_git_from_remote`, which returns it as `notify_url
 on the console's Git page. It has the form
 `https://api.xhostd.com/webhooks/github/<app-id>`.
 
-### Send the ping with a GitHub Action
+#### Send the ping with a GitHub Action
 
 Commit this file as `.github/workflows/notify-xhostd.yml`, with your
 app's id in the URL:
@@ -460,7 +542,7 @@ Over HTTPS, a push of a workflow file needs a GitHub token with the
 A branch pings only when its own files carry the workflow. Commit the
 file to every branch that should deploy on push.
 
-### Or send the ping with a repo webhook
+#### Or send the ping with a repo webhook
 
 In GitHub, open the repo's **Settings → Webhooks**, and add a webhook:
 
@@ -479,10 +561,12 @@ Turn following on for each channel that should deploy on push:
 update_channel(app_name="shop", channel="prod", follows_branch=True)
 ```
 
-The console has the same switch, **Deploy each GitHub push**, under each
-channel on the project's Overview page. Turning it on needs a connected
-source repository and a channel bound to a branch. A token that turns it on
-needs the `deploy:*` scope too. Turning it off is always allowed.
+The console has the same switch under each channel on the project's
+Overview page. Its label names the host of the source: **Deploy each
+GitHub push** or **Deploy each Cursor Origin push**. Turning it on needs
+a connected source repository and a channel bound to a branch. A token
+that turns it on needs the `deploy:*` scope too. Turning it off is always
+allowed.
 
 How a following channel behaves:
 
@@ -499,10 +583,10 @@ How a following channel behaves:
 - A commit you force-push away before its deploy fetched it does not
   deploy, and sends no notice.
 
-`sync_git_from_remote` returns `last_ping_at`, the time the last ping arrived. If a
-push did not deploy, check that time first: a ping that never arrived
-means the workflow file is missing from that branch, or the webhook is
-missing.
+`sync_git_from_remote` returns `last_ping_at`, the time the last push
+request arrived. If a push did not deploy, check that time first. For a
+deploy key, a ping that never arrived means the workflow file is missing
+from that branch, or the webhook is missing.
 
 One notify URL names one app. A repo that feeds two apps needs two
 `curl` lines in its workflow, or two webhooks.

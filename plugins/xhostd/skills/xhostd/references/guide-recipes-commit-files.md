@@ -112,18 +112,22 @@ its git repo. You get a repo even if you never push to it.
 
 ```text
 create_app(name="recipe-commit-files", template="static")
-→ {"id": "b882c472-2a7b-414a-994b-d9c7c3bcdcee",
-   "name": "recipe-commit-files",
-   "template": "static",
+→ {"name": "recipe-commit-files",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-commit-files.git",
-   "channels": [{"id": "17a905c3-9365-4c1e-be98-7823f83a2647",
-                 "name": "prod",
+   "template": "static",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-commit-files-docs.xhostd.app",
-                 "current_sha": null}], ...}
+                 "git_ref_binding": null,
+                 "follows_branch": false,
+                 "current_sha": null,
+                 "status": "provisioning",
+                 "pending_deploy": null}],
+   ...}
 ```
 
-Keep two ids: the app's `id`, and the `id` of the new `prod` channel. Every
-later call needs one or both. This recipe has no credential step.
+Later calls take the app's name and the channel's name, such as `prod`. This recipe has no credential step.
 `commit_files` uses the same authenticated tool session as every other call.
 You thus make no token, store no token and paste no token.
 
@@ -365,20 +369,28 @@ you clone that repo and continue your work.
 
 ## When it goes wrong
 
-### The app is connected to GitHub
+### The app has a connected source repository {#the-app-is-connected-to-github}
 
-`commit_files` is refused outright, with
+`commit_files` is refused outright. On an app connected to a GitHub repo
+with a deploy key, the refusal reads:
 
 ```text
-this app is GitHub-connected; xhostd mirrors this repo read-only. Push to GitHub instead — each push syncs once the repo pings xhostd (sync_git_from_remote shows the setup), and each deploy fetches from GitHub first.
+this app's code comes from its connected GitHub repository, and its xhostd repository is a read-only mirror of it, so commit_files writes nothing here. A change reaches this app when someone pushes it to the GitHub repository: each push syncs once the repository pings xhostd (sync_git_from_remote shows the setup), and each deploy fetches from GitHub first.
 ```
 
-There is no way around this refusal. On a connected app, GitHub is the
-source, and the xhostd repo is a read-only mirror of GitHub. Send the code to
-GitHub, and xhostd syncs it from there. This guide describes the message and
-does not capture it. The demo app has no GitHub source, and a connection to
-GitHub would stay in place. `sync_git_from_remote` does not put code onto an
-app either: it refreshes that mirror.
+On an app connected to a Cursor Origin repository, the refusal reads:
+
+```text
+this app's code comes from its connected Cursor Origin repository, and its xhostd repository is a read-only mirror of it, so commit_files writes nothing here. A change reaches this app when someone pushes it to the Cursor Origin repository: each push syncs, and each deploy fetches first.
+```
+
+There is no way around this refusal. On a connected app, the source
+repository is the source, and the xhostd repo is a read-only mirror of it.
+Send the code to the source repository, and xhostd syncs it from there. This
+guide describes the message and does not capture it. The demo app has no
+connected source, and a connection would stay in place.
+`sync_git_from_remote` does not put code onto an app either: it refreshes
+that mirror.
 
 ### The commit succeeded but the site did not change
 

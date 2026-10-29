@@ -92,18 +92,22 @@ and its git repo.
 
 ```text
 create_app(name="recipe-static", template="static")
-→ {"id": "aea6786c-52ff-4ed3-bf07-ab3050a42069",
-   "name": "recipe-static",
-   "template": "static",
+→ {"name": "recipe-static",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-static.git",
-   "channels": [{"id": "4e8973a5-2a78-4326-bd7b-f95506d84b9f",
-                 "name": "prod",
+   "template": "static",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-static-docs.xhostd.app",
-                 "current_sha": null}], ...}
+                 "git_ref_binding": null,
+                 "follows_branch": false,
+                 "current_sha": null,
+                 "status": "provisioning",
+                 "pending_deploy": null}],
+   ...}
 ```
 
-Keep two ids: the app's `id`, and the `id` of the new `prod` channel. Every
-later call takes one or both. A new app is not online: the hostname serves
+Later calls take the app's name and the channel's name, such as `prod`. A new app is not online: the hostname serves
 nothing until a deploy completes. `repo_url` is the repo that you push to. If
 you lose it, `get_app` returns it again.
 
@@ -125,14 +129,25 @@ the SSH commands.
 Send the token as a header on each git command. This detail is important:
 
 ```text
-git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
 ```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 **3. Clone, commit, push.** A new xhostd repo is empty, and git tells you so.
 The warning is correct; it is not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-static.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-static.git
 Cloning into 'recipe-static'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -143,7 +158,10 @@ Write `index.html` into that directory. Then commit and push it:
 $ cd recipe-static
 $ git add -A
 $ git commit -m "add landing page"
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 ```
 
 Never write the token value itself into a command, a file that you commit, or

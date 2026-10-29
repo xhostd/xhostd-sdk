@@ -110,18 +110,22 @@ its git repo.
 
 ```text
 create_app(name="recipe-python", template="app")
-→ {"id": "9e8f7bd3-a30d-45dc-9d01-7ef82c44e8a9",
-   "name": "recipe-python",
-   "template": "app",
+→ {"name": "recipe-python",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-python.git",
-   "channels": [{"id": "44788022-ee4d-458d-802f-277cfda9116c",
-                 "name": "prod",
+   "template": "app",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-python-docs.xhostd.app",
-                 "current_sha": null}], ...}
+                 "git_ref_binding": null,
+                 "follows_branch": false,
+                 "current_sha": null,
+                 "status": "provisioning",
+                 "pending_deploy": null}],
+   ...}
 ```
 
-Keep the app `id` and the `prod` channel `id`, because every later call takes
-one or both.
+Later calls take the app's name and the channel's name, such as `prod`.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
 platform API. Use your own
@@ -139,14 +143,28 @@ every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Send the token as a header on each git command:
-`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>`.
+Send the token as a header on each git command, from git's environment:
+
+```text
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
+```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 **3. Clone, commit and push.** A new xhostd repo is empty, and git tells you so.
 The `warning:` line below is correct, and it is not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-python.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-python.git
 Cloning into 'recipe-python'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -157,7 +175,10 @@ Write the four files into that directory. Then commit and push them:
 $ cd recipe-python
 $ git add -A
 $ git commit -m "fastapi service on the app template"
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 ```
 
 Never write the token value itself into a command, a file that you commit, or

@@ -353,18 +353,22 @@ its git repo.
 
 ```text
 create_app(name="recipe-oauth", template="app")
-→ {"id": "4d06ab64-0e2e-4ed9-96b0-51450fd673c8",
-   "name": "recipe-oauth",
-   "template": "app",
+→ {"name": "recipe-oauth",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-oauth.git",
-   "channels": [{"id": "2997a56a-b7a4-4f9a-992c-2a83ff40578e",
-                 "name": "prod",
+   "template": "app",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-oauth-docs.xhostd.app",
-                 "current_sha": null}], ...}
+                 "git_ref_binding": null,
+                 "follows_branch": false,
+                 "current_sha": null,
+                 "status": "provisioning",
+                 "pending_deploy": null}],
+   ...}
 ```
 
-Keep the app `id` and the `prod` channel `id`, because every later call takes
-one or both. Also record the hostname in the response. That hostname is the
+Later calls take the app's name and the channel's name, such as `prod`. Record the hostname in the response. That hostname is the
 `aud` claim in your tokens.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
@@ -383,14 +387,28 @@ every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Send the token as a header on each git command:
-`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>`.
+Send the token as a header on each git command, from git's environment:
+
+```text
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
+```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 **3. Clone, commit and push.** A new xhostd repo is empty, and git tells you so.
 The `warning:` line below is correct, and it is not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-oauth.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-oauth.git
 Cloning into 'recipe-oauth'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -401,7 +419,10 @@ Write the four files into that directory. Then commit and push them:
 $ cd recipe-oauth
 $ git add -A
 $ git commit -m "oauth-gated recipe"
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 ```
 
 Never write the token value itself into a command, a file that you commit, or

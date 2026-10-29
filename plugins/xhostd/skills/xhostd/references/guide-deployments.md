@@ -22,16 +22,20 @@ status until it is terminal. Build output and runtime output answer different
 questions. A missing build log does not establish that the running app is healthy.
 
 The project's Activity page in the [console](https://console.xhostd.com/projects)
-separates deployment history, build-log windows, runtime metadata, and audit
-events. Use Refresh to read additional build output. The console does not run
-arbitrary shell commands or present runtime metadata as a runtime log stream.
+separates deployment history, build-log windows, runtime metadata, log lines, and
+audit events. Use Refresh to read additional build output. The Logs view shows
+the lines a channel's containers wrote, newest first, from the central log store.
+Filter them by container, time range, and text, and choose Load older to read
+further back. The console does not run shell commands on a log and does not
+stream new lines as they arrive; reload the page to see them.
 
 ## Read the runtime log after a move or a host failure
 
 [get_logs](https://docs.xhostd.com/mcp-tools#get_logs) with `source="runtime"` reads a
 container's output from the host that ran it. The platform also keeps each
-container's output for one year in a central log store, so the output
-survives when that host fails and when your project moves to another host.
+container's output in a central log store, for the retention period that the
+account's plan sets, so the output survives when that host fails and when
+your project moves to another host.
 
 When the host that ran a container does not answer, or no longer holds it, the
 reply comes from the central store, and its header says
@@ -39,7 +43,9 @@ reply comes from the central store, and its header says
 
 A central read keeps the newest 200,000 lines or 64 MiB of a container's
 output. When it leaves out older lines, the header says
-`older lines omitted`. Your command sees only those newest lines.
+`older lines omitted`. Your command sees only those newest lines. When the
+central store holds fewer lines than the container wrote, the header says
+`lines missing`.
 
 ## Deploy an existing revision from the console
 

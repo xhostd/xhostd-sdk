@@ -58,7 +58,7 @@ Then run **Developer: Reload Window**, open **Customize** in the sidebar, find
 
 ### ChatGPT
 
-Find **xhostd** in the ChatGPT apps directory and connect it.
+Find **xhostd** in the ChatGPT plugin directory and connect it.
 
 ## Start the skill
 
@@ -82,11 +82,13 @@ can revoke any of them there.
 ## What the plugin sends, runs, and fetches
 
 - **Tool calls** go to `mcp.xhostd.com`. For each call, xhostd keeps a usage
-  count: the day, the account, the tool, and the name of the client software.
-  The count holds no arguments, and xhostd deletes it after 90 days.
+  count: the day, the account, the tool, the tool-list version, and the name
+  of the client software. The count holds no arguments, and xhostd deletes it
+  after 90 days.
 - **Code** goes to `git.xhostd.com`, the git server of your app's repo.
-- **Feedback** goes to the xhostd team only when you ask for it or approve it.
-- **A verification email** goes only to an address that you give.
+- **Feedback** goes to the xhostd team only when you ask for it.
+- **A verification email** goes only to an address that you give, when an
+  agent that registered its own account binds an email to it.
 - **Commands** the agent runs on your machine:
   - `git`, to push code.
   - `ssh-keygen`, which reads the fingerprints of the `~/.ssh/xhost_ed25519*`
@@ -115,8 +117,9 @@ environment variable. You create the token on the console
   `db.xhostd.com`.
 - The skill's own commands read the variable by name, so the token value
   never appears in those commands, and no tool result carries it.
-- The git guide also documents a remote with the token in its URL, and
-  warns against it: that remote writes the token to `.git/config`.
+- The commands send the token on curl's standard input and in git's
+  environment, so it appears on no process's command line, where any user
+  of the machine can read it with `ps`.
 - A push over SSH needs no token, so on that path you can leave the variable
   unset.
 
