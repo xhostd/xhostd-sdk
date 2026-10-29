@@ -1,6 +1,6 @@
 {
   "name": "xhostd",
-  "version": "0.74.1",
+  "version": "0.75.0",
   "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create apps, push code, deploy previews or production, inspect status, and manage channels, environment, storage, and domains.",
   "author": {
     "name": "xhostd",
@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "xhostd",
     "shortDescription": "Deploy apps from your agent",
-    "longDescription": "Use xhostd from Codex to create apps, push code, deploy previews or production, inspect runtime status and logs, and manage channels, environment variables, storage, domains, and other hosting resources through an OAuth-authenticated MCP server.",
+    "longDescription": "Use xhostd from ChatGPT or Codex to create apps, write and push code, deploy previews or production to HTTPS URLs, read deploy and runtime logs, and manage channels, environment variables, secrets, database snapshots, and custom domains through an OAuth-authenticated MCP server. It serves developers, and anyone who wants a site or an app online without running a server. Limitations: in a client with no shell, code reaches an app as file commits, with no git push; a secret's value is entered in the xhostd console or uploaded from a shell, never in the chat; and plan changes, payments, member invitations, and git host connections happen in the xhostd console, not through the plugin.",
     "developerName": "xhostd",
     "category": "Developer Tools",
     "capabilities": [
@@ -39,9 +39,9 @@
     "logo": "./assets/icon.png",
     "composerIcon": "./assets/icon.png",
     "defaultPrompt": [
-      "Deploy this project to xhostd",
-      "Create a preview for this branch on xhostd",
-      "Check my xhostd apps and deployment status"
+      "Create a one-page site on xhostd and put it online",
+      "Show my xhostd apps and their live URLs",
+      "Why did my latest xhostd deploy fail?"
     ]
   },
   "extensions": {
@@ -59,46 +59,50 @@
               "description": "The user creates a new static site and puts it online.",
               "prompt": "Using xhostd, create a static app called hello-review with a one-page site that says Hello, and put it online.",
               "tools_triggered": "create_app, commit_files, deploy, get_logs",
-              "expected_behavior": "Creates the app. Commits index.html with commit_files. Deploys the returned sha. Polls get_logs until the status is success. Returns the URL."
+              "expected_behavior": "Creates the app, or reuses hello-review when it already exists from an earlier run. Commits index.html with commit_files, deploys the returned sha, and polls get_logs until the status is success. Returns the URL."
             },
             {
               "description": "The user edits a page of an existing app and redeploys it.",
-              "prompt": "On xhostd, change the heading on review-site to 'Updated by the reviewer' and redeploy it.",
+              "prompt": "On xhostd, add a line with today's date under the heading of review-site's home page, and redeploy it.",
               "tools_triggered": "read_source_file, commit_files, deploy, get_logs",
-              "expected_behavior": "Reads the page, changes the heading with commit_files edits, deploys the commit, and confirms that the deploy succeeded."
+              "expected_behavior": "Reads the page, adds the date line under the heading with commit_files edits, deploys the commit, and confirms that the deploy succeeded."
             },
             {
               "description": "The user adds a secret to an app without sharing its value in the chat.",
               "prompt": "On xhostd, add a secret named API_KEY to review-site.",
               "tools_triggered": "set_secret",
-              "expected_behavior": "Returns the console link with the key filled in. Never asks for the value in the chat."
+              "expected_behavior": "Never asks for the value in the chat. Gives the console link with the key filled in, or, in a client with a shell, the upload command that reads the value from a file."
             },
             {
               "description": "The user connects a custom domain to an app.",
-              "prompt": "On xhostd, connect the domain shop.example.com to review-site.",
+              "prompt": "On xhostd, connect the domain review-site.lifshitz.io to review-site.",
               "tools_triggered": "add_custom_domain",
-              "expected_behavior": "Relays the DNS records word for word, and tells the user to ask for verification once the records exist."
+              "expected_behavior": "Attaches the domain to review-site's prod channel; the domain is already attached, so the call changes nothing. Relays the domain's status and DNS records word for word."
             }
           ],
           "negative": [
             {
               "description": "The request is unrelated to hosting, so the plugin does not trigger.",
-              "prompt": "Book me a flight to Lisbon next Tuesday."
+              "prompt": "Book me a flight to Lisbon next Tuesday.",
+              "expected_behavior": "No xhostd tool is called."
             },
             {
-              "description": "The user asks for a secret value, which no tool returns.",
-              "prompt": "Show me the value of the API_KEY secret on review-site."
+              "description": "The request is a coding question that needs no hosting, so the plugin does not act.",
+              "prompt": "Write a Python function that reverses a string.",
+              "expected_behavior": "No xhostd tool is called. The assistant answers in the chat."
             },
             {
               "description": "The user asks for a plan change and a payment, which the plugin does not make.",
-              "prompt": "Upgrade my xhostd plan and pay with my card."
+              "prompt": "Upgrade my xhostd plan and pay with my card.",
+              "expected_behavior": "No xhostd tool is called. The assistant says it cannot change plans or take payments, asks for no card details, and shows no plans or purchase link."
             }
           ]
         },
-        "demo_recording_url": "https://youtu.be/OQQeyv19C2A"
+        "demo_recording_url": "https://youtu.be/5qfwnyOuPqY",
+        "commerce": false
       },
       "publication": {
-        "release_notes": "xhostd for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains."
+        "release_notes": "xhostd 0.75.0 for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains. What changed in 0.75.0: every tool parameter carries a description; the snapshot link tool is now get_snapshot_download_link; email binding left the tools for the HTTP API; the app tools return fewer internal fields; and the tools that delete or restore ask the agent to confirm the target with the user."
       }
     }
   }

@@ -82,9 +82,9 @@ through `tail` or `head` to stay below that limit.
 
 ### Read the previous container's log
 
-The line `readable containers: #1, #2` in that header is the useful part.
-Container #1 is the version that you replaced. The platform archives the log of
-a container before it removes that container. Thus, after a redeploy that made
+The line `readable containers: #1, #2` in that header lists the containers
+whose logs you can read. Container #1 is the version that you replaced. The
+platform archives the log of a container before it removes that container. Thus, after a redeploy that made
 the fault worse, you can still read why the old container was correct. You can
 also read why the new container is not correct:
 
@@ -279,9 +279,10 @@ and you put the code in that repository.
 Your credential is your own token in the `XHOSTD_TOKEN` environment variable:
 a person mints it on the console [/tokens](https://console.xhostd.com/tokens)
 page, and a registered agent exports the token that registration returned.
-Send it as a header,
-`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push ...`, and
-never write the token value into a command or a file that you commit. No tool
+Send it as a header from git's environment,
+`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push ...`
+(git 2.31 or later), so the token is on no process's command line. Never write
+the token value into a command or a file that you commit. No tool
 result carries a token. You can also mint a scoped, short-lived token with the
 request that `get_credential_request` describes, and send it the same way from a
 variable of its own; the [Git guide](https://docs.xhostd.com/guides/git) shows
@@ -508,12 +509,14 @@ off.
 **403 `protected_action` — the operation needs a person, not an agent.** These
 controls are protected: the project members, the owner of a project, and the
 reveal of a secret value. So are external access to the database, external
-access to the object storage, the public TCP toggle, and the GitHub connect and
-disconnect. There is no tool for any of them. The message names the console URL
-that turns them on. Tell the user to open that URL. A user who wants an agent to
-run these operations turns **agent access** on there first. A change of the
-owner of a project is the one exception: the console alone does it, and no
-setting changes that.
+access to the object storage, the public TCP toggle, and the connect and
+disconnect of a source repository. There is no tool for any of them. The
+message names the console URL that turns them on. Tell the user to open that
+URL. A user who wants an agent to run these operations turns **agent access**
+on there first. Three operations are exceptions: a change of the owner of a
+project, and the **Connect** and the **Remove** of a git host account, such as
+a Cursor Origin account, on the console's account page. The console alone does
+each of them, and no setting changes that.
 
 **409 `channel_busy`, `restore_in_flight`, or a conflict — another operation
 is active.** `channel_busy` means a deploy holds the channel. `restore_in_flight`

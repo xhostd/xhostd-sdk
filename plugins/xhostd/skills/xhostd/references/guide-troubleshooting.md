@@ -84,6 +84,9 @@ host that ran it stopped before it removed the container, or when the container
 ran before the platform kept that record. Its output can still be readable:
 call `get_logs` with `source="runtime"` and a `command`, such as `tail -n 200 app.log`.
 
+**The header says `lines missing`.** The central log store holds fewer lines
+than the container wrote, so your command can miss some of its output.
+
 **The runtime log is unavailable.** A runtime log read can answer with one of
 these messages:
 
@@ -97,6 +100,16 @@ these messages:
 If a message stays for more than a few minutes,
 [contact support](mailto:support@xhostd.com) with the project, channel, and
 time.
+
+**The console's Logs view shows a notice.** The Logs view on a project's
+Activity page can show one of these:
+
+- `The search didn't finish in time.` A page searches for a few seconds. On a
+  long time range with a filter, it can stop before it finds a line. Choose
+  Load older to keep searching from where it stopped, or choose a shorter range
+  or a more specific filter.
+- `Logs are unavailable right now.` The central log store did not answer.
+  Reload the page in a minute.
 
 ## Data or files are missing
 

@@ -1,1 +1,1 @@
-{"id": "b8d1e2f3-a4b5-4c6d-9e7f-8a9b0c1d2e3f", "name": "{{input.name}}", "git_ref_binding": "{{input.git_ref_binding}}", "hostname": "{{input.name}}-notes-app-eval.xhostd.app", "current_sha": null, "pending_deploy": null}
+{"name": "{{input.name}}", "hostname": "{{input.name}}-notes-app-eval.xhostd.app", "git_ref_binding": "{{input.git_ref_binding}}", "follows_branch": false, "current_sha": null, "status": "provisioning", "pending_deploy": null}

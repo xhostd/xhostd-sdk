@@ -17,7 +17,7 @@ This walks through what an agent does, end-to-end, when a non-technical user say
 
 ## 0. Prerequisites
 
-The xhostd connector is connected (claude.ai, the Claude desktop app, or Claude Code through claude.ai), or the xhostd plugin is installed (Claude Code). The xhostd tools are available. This page names each tool by its bare name, such as `deploy`; your client might add a prefix of its own. The user has authenticated once through the browser. If not, in Claude Code, point them to `/mcp` → **claude.ai xhostd** (or **xhostd** when the plugin provides it) → **Authenticate**. In claude.ai or the Claude desktop app, point them to **Settings → Connectors** → **xhostd**, or, if it isn't listed, to the Connectors directory, where they search for xhostd and choose **Connect to Claude**. The sign-in page accepts an xhostd username or email address and password, or Google sign-in. A preprovisioned account signs in directly and requires no signup, username selection, email verification, multifactor authentication (MFA), or SMS. A person who uses Google with an email address that has no xhostd account must choose a **username** on first sign-in (lowercase letters, digits, hyphens; 1–40 chars; cannot start or end with a hyphen). That username becomes part of every public URL. With no person present, the agent registers its own account with an SSH key — [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
+The xhostd tools are available in the client, through a connector or a plugin that a person signed in once in the browser. This page names each tool by its bare name, such as `deploy`; your client might add a prefix of its own. If a tool reports that it is not signed in, ask the user to reconnect xhostd in the client's settings; `SKILL.md`, Authentication, lists the steps for each client. The sign-in page accepts an xhostd username or email address and password, or Google sign-in. A preprovisioned account signs in directly and requires no signup, username selection, email verification, multifactor authentication (MFA), or SMS. A person who uses Google with an email address that has no xhostd account must choose a **username** on first sign-in (lowercase letters, digits, hyphens; 1–40 chars; cannot start or end with a hyphen). That username becomes part of every public URL. With no person present, the agent registers its own account with an SSH key — [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
 
 ## 1. Decide on a name
 
@@ -35,16 +35,17 @@ The response looks like:
 
 ```json
 {
-  "id": "f1e2…",
   "name": "lisbon-coffee",
+  "owner_username": "alice",
+  "role": "owner",
   "repo_url": "https://git.xhostd.com/alice/lisbon-coffee.git",
   "template": "static",
   "channels": [
     {
-      "id": "c0a1…",
       "name": "prod",
       "hostname": "lisbon-coffee-alice.xhostd.app",
       "git_ref_binding": null,
+      "follows_branch": false,
       "current_sha": null,
       "status": "provisioning",
       "pending_deploy": null
@@ -53,7 +54,7 @@ The response looks like:
 }
 ```
 
-Every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a channel by name (`channel="prod"`); either also accepts the UUID, on every tool but `add_app_feedback`, which names another owner's app. `git_ref_binding` is `null`: `prod` has no branch until the first deploy with `ref` binds it (or pass `branch` to `create_app`).
+The result carries no id: every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a channel by name (`channel="prod"`). `git_ref_binding` is `null`: `prod` has no branch until the first deploy with `ref` binds it (or pass `branch` to `create_app`).
 
 ## 3. Write the site
 
@@ -74,14 +75,19 @@ An SSH push needs no token — the `repo_url` from step 2 gives the username and
 
 If `register_ssh_key` answers `409`, the default key belongs to a different xhostd account on this machine. Make `~/.ssh/xhost_ed25519_alice` the same way if it is absent, register it, and push with `GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519_alice -o IdentitiesOnly=yes"`. If that registration also answers `409`, this machine holds no usable SSH key for this account: push over HTTPS when `XHOSTD_TOKEN` is set, else use `commit_files`, and never make a key under any other name. A file name proves nothing about the account; only a match in `list_ssh_keys` does.
 
-Use only those two key paths — never the project directory, and never a per-project, per-app or per-tool suffix. They sit in `$HOME`, so every Claude Code session, IDE window and project on the machine reuses one key per account and registers no other.
+Use only those two key paths — never the project directory, and never a per-project, per-app or per-tool suffix. They sit in `$HOME`, so every agent session, editor window, and project on the machine reuses one key per account and registers no other.
 
-**HTTPS:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, neither transport can push: use `commit_files`, as the **Without git** paragraph below describes, and never ask the user to paste a token. No tool result carries a token. Send it as a header (`repo_url` came back in step 2), and push:
+**HTTPS:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, neither transport can push: use `commit_files`, as the **Without git** paragraph below describes, and never ask the user to paste a token. No tool result carries a token. Send it as a header that git reads from its environment (`repo_url` came back in step 2), and push:
 
 ```
 git remote add xhostd "https://git.xhostd.com/alice/lisbon-coffee.git"
-git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push xhostd HEAD:master
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git push xhostd HEAD:master
 ```
+
+The token then stays off every process's argv, which any user of the machine can read with `ps`, and the URL-scoped key sends it to `git.xhostd.com` alone. Put the three variables in front of every git command that reaches the repo over HTTPS. This form needs git 2.31 or later.
 
 You can also mint a scoped, short-lived token with the request that `get_credential_request` describes, and send it the same way from a variable of its own; `references/guide-git.md` shows the commands.
 
@@ -140,13 +146,13 @@ Read `hostname` from the prod channel (it was in step 2's response, and `get_app
 
 ## 7. Iterate
 
-For each follow-up change — "add a section for tea shops", "fix the broken link" — edit the files in the checkout, `git commit`, `git push xhostd HEAD:master`, then `deploy` with `ref="master"`. The same `prod` channel is targeted, and the remote is already configured, so a follow-up is a couple of shell commands and one tool call. The push carries only the lines that changed. In a client with no shell access, the loop is: `commit_files` — `edits` or `patches` for a file that already exists, `files` for a new one — then `deploy` with the sha it returns.
+For each follow-up change — "add a section for tea shops", "fix the broken link" — edit the files in the checkout, `git commit`, push with the same command as step 3 (over SSH, `GIT_SSH_COMMAND` and `xhostd-ssh`; over HTTPS, the three `GIT_CONFIG_*` variables and `xhostd`), then `deploy` with `ref="master"`. The same `prod` channel is targeted, and the remote is already configured, so a follow-up is a couple of shell commands and one tool call. The push carries only the lines that changed. In a client with no shell access, the loop is: `commit_files` — `edits` or `patches` for a file that already exists, `files` for a new one — then `deploy` with the sha it returns.
 
 To preview a change without touching production:
 
 ```
 create_channel(app_name="lisbon-coffee", name="draft", git_ref_binding="branch:draft")
-git push xhostd HEAD:draft
+GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:draft   # <key> is the key from step 3; or the HTTPS push of step 3, with HEAD:draft
 deploy(app_name="lisbon-coffee", channel="draft", ref="draft")
 ```
 
@@ -154,13 +160,13 @@ The preview is live at `https://draft-lisbon-coffee-alice.xhostd.app`.
 
 ## 8. Optional extras
 
-- **Env vars & secrets:** `set_env(app_name, key="LOG_LEVEL", value="debug")` stores a plain value, which passes through the conversation, so never pass it a credential. For a credential, call `set_secret(app_name, key="STRIPE_KEY")`: it takes no value and returns the `PUT` request that uploads it from a file with your own token (`curl -sS --fail-with-body -X PUT -H "Authorization: Bearer $XHOSTD_TOKEN" -H "Content-Type: application/octet-stream" --data-binary @<file> "<url>"`), plus a `console_url` where a user without a shell pastes it. `set_secret(..., generate=True)` generates and stores a random value. A secret is never readable back through MCP; the reveal is a protected action that answers `protected_action` to an agent credential, and it is audit-logged. Add `channel="staging"` to either tool for a per-channel override that wins over the app default at deploy time. `list_env(app_name, channel=…)` shows the resolved view. Every non-static channel automatically has `DATABASE_URL` for its own Postgres database; don't set it. A static channel has no database and no `DATABASE_URL`.
+- **Env vars & secrets:** `set_env(app_name, key="LOG_LEVEL", value="debug")` stores a plain value, which passes through the conversation, so never pass it a credential. For a credential, call `set_secret(app_name, key="STRIPE_KEY")`: it takes no value and returns the `PUT` request that uploads it from a file with your own token, sent on curl's stdin (`printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl -sS --fail-with-body -X PUT --header @- -H "Content-Type: application/octet-stream" --data-binary @<file> "<url>"`), plus a `console_url` where a user without a shell pastes it. `set_secret(..., generate=True)` generates and stores a random value. A secret is never readable back through MCP; the reveal is a protected action that answers `protected_action` to an agent credential, and it is audit-logged. Add `channel="staging"` to either tool for a per-channel override that wins over the app default at deploy time. `list_env(app_name, channel=…)` shows the resolved view. Every non-static channel automatically has `DATABASE_URL` for its own Postgres database; don't set it. A static channel has no database and no `DATABASE_URL`.
 - **Custom domain:** `add_custom_domain(app_name, channel, domain)` returns an `instructions` field with the exact TXT + CNAME/A records the user needs to add at their registrar — relay it verbatim. After they add the records, call `add_custom_domain` again with the same args and `verify=True`. HTTPS works automatically once verified.
 - **Google sign-in for parts of the site:** zero-config — no tool to call. `/xhost-auth/*` works on every channel. After sign-in the gateway sets a signed identity cookie `__Host-xhost_id` (an RS256 JWT) on the channel host; the app verifies it against the JWKS at `https://auth.xhostd.com/xhost-auth/jwks` (pin `RS256`, check `iss`/`aud`/`exp`) and gates its own routes. **xhostd does identity only, never edge gatekeeping — nothing is blocked at the edge, so every route stays public (anonymous visitors get `200`) until your app verifies the cookie and enforces access itself in code.** Send signed-out users to `/xhost-auth/login?return_to=<path>`. `__Host-xhost_id` is a reserved cookie name. Per-stack verify snippets: <https://docs.xhostd.com/oauth>.
 
 ## Troubleshooting
 
-**Tool reports unauthenticated.** In Claude Code, tell the user to run `/mcp`, select the xhostd entry whose tool reported unauthenticated (**claude.ai xhostd**, **xhostd**, or the plugin's xhostd entry), and choose **Authenticate**. In claude.ai or the Claude desktop app, tell the user to open **Settings → Connectors**, select **xhostd**, and reconnect. If it isn't listed, they search for xhostd in the Connectors directory and choose **Connect to Claude**. On the OAuth path there is no token to set. A registered agent renews its token with its key when the token expired, as [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) describes.
+**Tool reports unauthenticated.** Ask the user to reconnect xhostd in the client's settings; `SKILL.md`, Authentication, lists the steps for each client. On the OAuth path there is no token to set. A registered agent renews its token with its key when the token expired, as [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) describes.
 
 **"app name is already taken"** — they already own one with that name. Pick a different name or delete the old app with `delete_app`.
 

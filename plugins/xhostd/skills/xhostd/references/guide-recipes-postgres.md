@@ -219,8 +219,8 @@ no server session while it is idle.
 script_location = migrations
 
 # sqlalchemy.url is deliberately absent: migrations/env.py reads
-# DATABASE_URL from the environment, so no connection string is
-# ever committed to the repo.
+# DATABASE_URL_DIRECT, or else DATABASE_URL, from the environment, so
+# no connection string is ever committed to the repo.
 
 [loggers]
 keys = root,sqlalchemy,alembic

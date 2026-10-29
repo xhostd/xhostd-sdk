@@ -349,18 +349,22 @@ its git repo and its object store.
 
 ```text
 create_app(name="recipe-blob", template="app")
-→ {"id": "efb0f79a-ab98-4bb2-ad8a-40b27ab3f7fc",
-   "name": "recipe-blob",
-   "template": "app",
+→ {"name": "recipe-blob",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-blob.git",
-   "channels": [{"id": "21eb795a-7071-407b-8cf0-0e4f940af3c8",
-                 "name": "prod",
+   "template": "app",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-blob-docs.xhostd.app",
-                 "current_sha": null}], ...}
+                 "git_ref_binding": null,
+                 "follows_branch": false,
+                 "current_sha": null,
+                 "status": "provisioning",
+                 "pending_deploy": null}],
+   ...}
 ```
 
-Keep the app `id` and the `prod` channel `id`. Every later call takes one or
-both.
+Later calls take the app's name and the channel's name, such as `prod`.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
 platform API. Use your own
@@ -378,14 +382,28 @@ every app on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
-Send the token as a header on each git command:
-`git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>`.
+Send the token as a header on each git command, from git's environment:
+
+```text
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
+```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 **3. Clone, commit, push.** A new xhostd repo is empty, and git tells you so.
 The warning is correct; it is not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-blob.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-blob.git
 Cloning into 'recipe-blob'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -396,7 +414,10 @@ Write the four files into that directory. Then commit and push them:
 $ cd recipe-blob
 $ git add -A
 $ git commit -m "blob-uploads recipe"
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 ```
 
 Never write the token value itself into a command, a file that you commit, or
@@ -415,13 +436,15 @@ set_secret(app_name="recipe-blob", key="WRITE_TOKEN")
 ```
 
 Make a random token in a file that only you can read, then run that request
-with the file as the body:
+with the file as the body. `printf` writes the header to curl's standard
+input, and `--header @-` reads it from there, so neither token is on a
+process's command line, where any user of the machine can read it with `ps`:
 
 ```console
 $ mkdir -p ~/.xhostd
 $ (umask 077; openssl rand -hex 32 | tr -d '\n' > ~/.xhostd/recipe-blob-write-token)
-$ curl -sS --fail-with-body -X PUT \
-    -H "Authorization: Bearer $XHOSTD_TOKEN" \
+$ printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl -sS --fail-with-body -X PUT \
+    --header @- \
     -H "Content-Type: application/octet-stream" \
     --data-binary @"$HOME/.xhostd/recipe-blob-write-token" \
     "https://api.xhostd.com/apps/efb0f79a-ab98-4bb2-ad8a-40b27ab3f7fc/env/WRITE_TOKEN?kind=secret"
@@ -521,7 +544,8 @@ The transcript below shows the full sequence against the live channel. It
 shows the public reads, the two conditions that refuse a write, and the two
 writes that carry the token. `$WRITE_TOKEN` holds the value from step 4, read
 from its file with `WRITE_TOKEN="$(cat ~/.xhostd/recipe-blob-write-token)"`.
-The token itself never appears in a transcript.
+The token itself never appears in a transcript. Each request that carries a
+token sends its header on curl's standard input, as in step 4.
 
 ```console
 $ curl -sS https://recipe-blob-docs.xhostd.app/
@@ -533,13 +557,13 @@ $ curl -sS -w ' [%{http_code}]\n' -F 'file=@notes.txt' \
     https://recipe-blob-docs.xhostd.app/files
 {"detail":"Invalid write token."} [401]
 
-$ curl -sS -w ' [%{http_code}]\n' -F 'file=@notes.txt' \
-    -H 'Authorization: Bearer not-the-token' \
+$ printf 'Authorization: Bearer %s\n' not-the-token \
+    | curl -sS -w ' [%{http_code}]\n' -F 'file=@notes.txt' --header @- \
     https://recipe-blob-docs.xhostd.app/files
 {"detail":"Invalid write token."} [401]
 
-$ curl -sS -F 'file=@notes.txt' \
-    -H "Authorization: Bearer $WRITE_TOKEN" \
+$ printf 'Authorization: Bearer %s\n' "$WRITE_TOKEN" \
+    | curl -sS -F 'file=@notes.txt' --header @- \
     https://recipe-blob-docs.xhostd.app/files
 {"key":"notes.txt","bytes":20}
 
@@ -553,7 +577,8 @@ $ curl -sS -w ' [%{http_code}]\n' -X DELETE \
     https://recipe-blob-docs.xhostd.app/files/notes.txt
 {"detail":"Invalid write token."} [401]
 
-$ curl -sS -X DELETE -H "Authorization: Bearer $WRITE_TOKEN" \
+$ printf 'Authorization: Bearer %s\n' "$WRITE_TOKEN" \
+    | curl -sS -X DELETE --header @- \
     https://recipe-blob-docs.xhostd.app/files/notes.txt
 {"deleted":"notes.txt"}
 

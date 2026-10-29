@@ -81,7 +81,7 @@ COPY . .
 
 # Migrations run in the START command, never at build time. The build has
 # no DATABASE_URL at all — xhostd injects env at run time only, never as
-# build args — so a build-time migration cannot work even in principle.
+# build args — so a migration at build time has no database to connect to.
 CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app:app --host 0.0.0.0 --port $XHOSTD_HTTP_PORT"]
 ```
 
@@ -265,18 +265,22 @@ git repo and its Postgres database.
 
 ```text
 create_app(name="recipe-docker-pg", template="docker")
-→ {"id": "2ea4b560-2b5c-43b4-8509-86ded52248cf",
-   "name": "recipe-docker-pg",
-   "template": "docker",
+→ {"name": "recipe-docker-pg",
+   "owner_username": "docs",
+   "role": "owner",
    "repo_url": "https://git.xhostd.com/docs/recipe-docker-pg.git",
-   "channels": [{"id": "16df8282-8498-4567-a595-fe769090b8b6",
-                 "name": "prod",
+   "template": "docker",
+   "channels": [{"name": "prod",
                  "hostname": "recipe-docker-pg-docs.xhostd.app",
-                 "current_sha": null}], ...}
+                 "git_ref_binding": null,
+                 "follows_branch": false,
+                 "current_sha": null,
+                 "status": "provisioning",
+                 "pending_deploy": null}],
+   ...}
 ```
 
-Keep the app id and the `prod` channel id, because every later call needs one
-or both. `repo_url` is the repo for your push. `get_app` returns that URL
+Later calls take the app's name and the channel's name, such as `prod`. `repo_url` is the repo for your push. `get_app` returns that URL
 again if you lose it.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
@@ -298,14 +302,25 @@ Send the token as a header on each git command. That detail is
 important:
 
 ```text
-git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" <command>
+GIT_CONFIG_COUNT=1 \
+  GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+  GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+  git <command>
 ```
+
+git reads the header from its environment, so the token is on no process's
+command line, where any user of the machine can read it with `ps`. The key
+names `https://git.xhostd.com/`, so git sends the header to that host alone.
+This form needs git 2.31 or later.
 
 **3. Clone the repo, then commit and push.** A new xhostd repo is empty, and
 git tells you so. This warning is normal, not a fault:
 
 ```bash
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" clone https://git.xhostd.com/docs/recipe-docker-pg.git
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git clone https://git.xhostd.com/docs/recipe-docker-pg.git
 Cloning into 'recipe-docker-pg'...
 warning: You appear to have cloned an empty repository.
 ```
@@ -316,7 +331,10 @@ Write the eight files into that directory. Then commit and push them:
 $ cd recipe-docker-pg
 $ git add -A
 $ git commit -m "notes API on the docker template"
-$ git -c http.extraHeader="Authorization: Bearer $XHOSTD_TOKEN" push origin master
+$ GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
+    GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
+    git push origin master
 ```
 
 Never write the token value itself into a command, a file that you commit, or
