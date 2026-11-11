@@ -108,7 +108,7 @@ The payload carries eight claims:
 | Claim | Meaning |
 |---|---|
 | `iss` | `https://auth.xhostd.com` |
-| `aud` | **the channel's own hostname** |
+| `aud` | **the hostname the visitor signed in on** |
 | `sub` | Google's stable user id |
 | `email` | the verified Google address |
 | `name` | display name |
@@ -128,8 +128,10 @@ the correct literal for production. The value comes from the configured
 platform domain, not from a hardcoded string. Pin `iss` in your verification,
 and remember its source.
 
-**`aud` is your channel's hostname, and no component tells your container that
-name.** No environment variable carries it. The correct source is the request.
+**`aud` is the hostname the visitor signed in on, and no environment variable
+carries it.** `XHOSTD_HOSTNAME` names only the platform hostname, and
+`XHOSTD_DOMAINS` changes only at the channel's next deploy. The correct source
+is the request.
 The proxy passes the browser's `Host` header through without a change. Thus
 `request.url.hostname` is the audience of the token. The same code stays
 correct when you point a custom domain at the channel, because the cookie on
@@ -470,7 +472,7 @@ started: 2026-10-04T06:11:17.830356Z   finished: 2026-10-04T06:11:27.406054Z
 [2026-10-04T06:11:25+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:11:25+00:00] health_check ok
 [2026-10-04T06:11:25+00:00] [container] INFO:     10.77.1.7:36858 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:11:25+00:00] caddy ensure_route hostname=recipe-oauth-docs.xhostd.app upstream=10.77.1.7:32095
+[2026-10-04T06:11:25+00:00] traffic switched to the new container
 [2026-10-04T06:11:27+00:00] deploy success
 ```
 

@@ -247,7 +247,7 @@ started: 2026-10-04T06:11:01.958443Z   finished: 2026-10-04T06:11:12.631756Z
 [2026-10-04T06:11:10+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:11:10+00:00] health_check ok
 [2026-10-04T06:11:10+00:00] [container] INFO:     10.77.1.7:53382 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:11:10+00:00] caddy ensure_route hostname=recipe-python-docs.xhostd.app upstream=10.77.1.7:32093
+[2026-10-04T06:11:10+00:00] traffic switched to the new container
 [2026-10-04T06:11:12+00:00] deploy success
 ```
 
@@ -276,8 +276,9 @@ restore returns the database to, so it costs nothing here.
 **`Uvicorn running on http://0.0.0.0:3000`, then `"GET / HTTP/1.1" 200 OK`.**
 That 200 *is* the health check. The platform prints the `[xhost] starting
 launch.sh (XHOSTD_HTTP_PORT=3000)` line above it, not your code. That line names
-the port that the probe uses. `health_check ok` comes next. Only then does
-`caddy ensure_route` point the hostname at the new container.
+the port that the probe uses. `health_check ok` comes next. Only then does the
+platform point the hostname at the new container: `traffic switched to the new
+container`.
 
 Then two commands prove the result against the live app:
 

@@ -514,7 +514,7 @@ started: 2026-10-04T06:11:31.517476Z   finished: 2026-10-04T06:11:44.413179Z
 [2026-10-04T06:11:41+00:00] health_check ok
 [2026-10-04T06:11:41+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:11:41+00:00] [container] INFO:     10.77.1.7:43668 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:11:42+00:00] caddy ensure_route hostname=recipe-blob-docs.xhostd.app upstream=10.77.1.7:32089
+[2026-10-04T06:11:42+00:00] traffic switched to the new container
 [2026-10-04T06:11:44+00:00] deploy success
 ```
 

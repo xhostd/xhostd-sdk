@@ -398,7 +398,7 @@ started: 2026-10-04T06:53:59.684877Z   finished: 2026-10-04T06:54:10.384603Z
 [2026-10-04T06:54:09+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:54:09+00:00] health_check ok
 [2026-10-04T06:54:09+00:00] [container] INFO:     10.77.1.7:38162 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:54:09+00:00] caddy ensure_route hostname=recipe-docker-pg-docs.xhostd.app upstream=10.77.1.7:32085
+[2026-10-04T06:54:09+00:00] traffic switched to the new container
 [2026-10-04T06:54:10+00:00] deploy success
 ```
 
@@ -444,8 +444,8 @@ seconds later.** In those five seconds the migrations run, and then uvicorn
 binds its port. The probe gets its first 2xx after that. The 120-second
 window gives a migration the time to finish.
 
-**`caddy ensure_route`.** xhostd points the hostname at the new container
-only after the health check passes. On a redeploy, the line that retires the
+**`traffic switched to the new container`.** xhostd points the hostname at the
+new container only after the health check passes. On a redeploy, the line that retires the
 previous container, `stop_and_remove old container=...`, comes after that.
 That order is the reason why a redeploy loses no requests.
 

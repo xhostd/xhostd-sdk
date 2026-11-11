@@ -247,7 +247,7 @@ started: 2026-10-04T06:10:42.032256Z   finished: 2026-10-04T06:10:56.605659Z
 [2026-10-04T06:10:49+00:00] [container] [xhost] starting launch.sh (XHOSTD_HTTP_PORT=3000) ...
 [2026-10-04T06:10:50+00:00] health_check ok
 [2026-10-04T06:10:50+00:00] [container] listening on 0.0.0.0:3000
-[2026-10-04T06:10:50+00:00] caddy ensure_route hostname=recipe-node-docs.xhostd.app upstream=10.77.1.7:32100
+[2026-10-04T06:10:50+00:00] traffic switched to the new container
 [2026-10-04T06:10:50+00:00] stop_and_remove old container=6436d158f94c...
 [2026-10-04T06:10:56+00:00] stop_and_remove ok
 [2026-10-04T06:10:56+00:00] deploy success
@@ -281,9 +281,10 @@ restore returns the database to, so it costs nothing here.
 ok`.** The platform prints that line, not your code. It gives the port that your
 process must bind, immediately before `launch.sh` runs. Your own line
 `listening on 0.0.0.0:3000` comes after it. Only after the probe passes does
-`caddy ensure_route` point the hostname at the new container. This deploy
-replaced a running container, so `stop_and_remove old container` comes after
-the route, and the old container served every request until then.
+the platform point the hostname at the new container: `traffic switched to the
+new container`. This deploy replaced a running container, so `stop_and_remove
+old container` comes after the switch, and the old container served every
+request until then.
 
 To find out if the app is alive, and to read no log, call `get_logs` with
 `source="runtime"` and **no** `command`:

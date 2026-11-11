@@ -189,7 +189,7 @@ Get details of a single app by UUID.
 
 ## DELETE /apps/{app_id}
 
-Delete an app and all its channels. Tears down containers, networks, and Caddy routes.
+Delete an app and all its channels. Tears down containers and networks, and the platform stops serving the app's hostnames.
 
 **Required scope:** `repo:*`
 
@@ -1033,7 +1033,7 @@ Re-run the TXT + routing DNS check for an attached domain and update its status.
 
 **Response (200):** Same shape as the attach response, with updated `status`, `reason`, and `verified_at`. `status` flips `pending → verified` on a passing check. `reason` uses a closed vocabulary: `txt_nxdomain`, `txt_token_mismatch`, `dns_not_pointing`, `domain_nxdomain` (the four definitive failures — the only ones that downgrade a verified domain), plus the transient `txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`.
 
-`notice` is a string when this call moved the domain into or out of `verified`, and `null` otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a verify does not restart the container. Relay it, and deploy the channel when the app checks the `Host` header.
+`notice` is a string when this call moved the domain into or out of `verified`, and `null` otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a verify does not restart the container. When the call verified the domain, it also says that a sign-in there carries the domain as the identity cookie's `aud`, so the app must check `aud` against the request's host. Relay it, and deploy the channel when the app checks the `Host` header.
 
 **Errors:**
 - `not_found` (404) — app/channel/domain not found
