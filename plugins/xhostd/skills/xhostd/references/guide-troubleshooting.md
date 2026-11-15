@@ -6,10 +6,12 @@ failed deployment attempt from the revision that is currently serving traffic.
 ## Contents
 
 - A deployment failed
+- A tool call returned an error
 - The client blocked the action
 - The app is slow or unavailable
 - The address returns 404 or 502
 - The runtime log is unavailable or its status is unknown
+- The app doesn't see a new environment value
 - Data or files are missing
 - Escalate with useful context
 
@@ -24,12 +26,36 @@ A git push alone does not deploy. A queued response is not success. Follow the
 [deployment procedure](https://docs.xhostd.com/guides/deployments) through its
 terminal state.
 
+## A tool call returned an error
+
+An error from xhostd arrives as the tool's reply, and its message usually names
+what to change. Change what it names before you call the tool again.
+
+Two replies have causes of their own:
+
+- **A tool you expect is missing, or a call fails on an argument the tool
+  doesn't take.** Your client cached the tool list when it connected, and the
+  tools changed after that. Reconnect xhostd in your client. An agent asks its
+  user to reconnect. The [current tool list](https://docs.xhostd.com/llms-full.txt)
+  names the tools that xhostd serves now.
+- **The reply reads only `Error executing tool <name>`, with no message after
+  it.** The platform failed while it ran the call. The action might still have
+  taken effect, so check before you call the tool again. For a deploy, call
+  `get_app`: the channel's `pending_deploy` names a deploy that is still queued
+  or running, and `current_sha` names the commit the channel serves. Read a
+  pending deploy's log with `get_logs`, `source="deploy"`, and its `deploy_id`.
+  If the fault repeats,
+  [escalate with useful context](https://docs.xhostd.com/guides/troubleshooting#escalate-with-useful-context).
+
 ## The client blocked the action
 
 Distinguish a client approval prompt from a platform permission error. The
+refusal comes from your client, not in the tool's reply. The call never reached
+xhostd, so there is nothing to retry against the API. The
 [blocked-deploy guide](https://docs.xhostd.com/guides/client-blocked-deploy)
-explains how to identify the source. Do not enable unrelated protected actions
-as a workaround.
+explains how to identify the source. Its steps belong to the person at the
+keyboard, so an agent gives its user that link. Do not enable unrelated
+protected actions as a workaround.
 
 ## The app is slow or unavailable
 
@@ -110,6 +136,31 @@ Activity page can show one of these:
   or a more specific filter.
 - `Logs are unavailable right now.` The central log store did not answer.
   Reload the page in a minute.
+
+## The app doesn't see a new environment value
+
+A running container keeps the environment variables and secrets it started
+with. A new value, a changed value, or a deletion reaches a channel's
+container at that channel's next deploy, and saving the value restarts
+nothing.
+
+To check whether a channel still runs with the previous values, use one of
+these:
+
+- Call `get_app`. A channel whose container is behind the stored values has
+  `env_pending: true`.
+- Read the notice that came with the change. `set_env`, `delete_env`, and
+  `set_secret` with `generate` return it. When you upload a secret with the
+  `PUT` request that `set_secret` returns, the upload's response carries it.
+  The notice names the channels whose container is now behind, and the
+  channels with no deploy yet.
+- Open the project's Env page in the
+  [console](https://console.xhostd.com/projects). A channel whose container is
+  behind shows "pending next deploy".
+
+Deploy each channel that the notice or the flag names. After the deploy, the
+app reads the stored values. To see the values a past deploy ran with, call
+`list_env` with `channel` and `deploy_id`.
 
 ## Data or files are missing
 

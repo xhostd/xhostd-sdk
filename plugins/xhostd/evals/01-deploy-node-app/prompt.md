@@ -16,7 +16,7 @@ package.json:
   "name": "hello-api",
   "version": "1.0.0",
   "main": "server.js",
-  "dependencies": { "express": "4.21.2" }
+  "dependencies": { "express": "4.22.3" }
 }
 ```
 

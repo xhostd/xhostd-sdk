@@ -296,19 +296,23 @@ from your own record.
 ### requirements.txt
 
 ```text
-fastapi==0.115.6
+fastapi==0.162.4
+starlette==1.10.0
 uvicorn==0.34.0
-python-multipart==0.0.20
+python-multipart==0.0.33
 boto3==1.43.59
 botocore==1.43.59
 ```
 
 FastAPI needs `python-multipart` to parse a `multipart/form-data` body.
-Without it, an `UploadFile` parameter fails at request time, not at import
-time. Thus the app starts, and then answers 500 on the first upload. This
-recipe pins `boto3` and `botocore` to the same version on purpose. boto3
-accepts only a narrow range of botocore versions. If you pin one of the two
-only, the other one can change.
+Without it, FastAPI raises a `RuntimeError` when `app.py` defines a route with
+an `UploadFile` parameter. The import of `app.py` fails, uvicorn exits before
+it serves a request, and the deploy fails its health check. This recipe pins
+`boto3` and `botocore` to the same version on purpose. boto3 accepts only a
+narrow range of botocore versions. If you pin one of the two only, the other
+one can change. The recipe also pins `starlette`, the framework under FastAPI,
+because the oldest Starlette version that FastAPI accepts has known
+vulnerabilities.
 
 ### install.sh
 
@@ -499,11 +503,11 @@ deploy 1908d546 — success (sha ad52964eb3ef)
 started: 2026-10-04T06:11:31.517476Z   finished: 2026-10-04T06:11:44.413179Z
 
 ...
-[2026-10-04T06:11:32+00:00] [build] #7 0.696 Resolved 20 packages in 546ms
-[2026-10-04T06:11:34+00:00] [build] #7 1.816 Installed 20 packages in 86ms
-[2026-10-04T06:11:34+00:00] [build] #7 1.816  + boto3==1.43.59
-[2026-10-04T06:11:34+00:00] [build] #7 1.816  + botocore==1.43.59
-[2026-10-04T06:11:34+00:00] [build] #7 1.816  + python-multipart==0.0.20
+[2026-10-04T06:11:32+00:00] [build] #7 1.577 Resolved 22 packages in 1.39s
+[2026-10-04T06:11:34+00:00] [build] #7 6.064 Installed 22 packages in 108ms
+[2026-10-04T06:11:34+00:00] [build] #7 6.064  + boto3==1.43.59
+[2026-10-04T06:11:34+00:00] [build] #7 6.064  + botocore==1.43.59
+[2026-10-04T06:11:34+00:00] [build] #7 6.064  + python-multipart==0.0.33
 ...
 [2026-10-04T06:11:37+00:00] [build] image 1030.69 MB total, 59.33 MB charged — base xhost-runtime:node22-py313 exempt
 [2026-10-04T06:11:38+00:00] channel snapshot marker recorded

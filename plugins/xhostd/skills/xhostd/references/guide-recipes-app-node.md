@@ -37,7 +37,7 @@ Four files at the repo root.
   "private": true,
   "type": "module",
   "dependencies": {
-    "express": "4.21.2"
+    "express": "4.22.3"
   }
 }
 ```

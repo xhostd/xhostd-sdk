@@ -1,6 +1,6 @@
 {
   "name": "xhostd",
-  "version": "0.75.0",
+  "version": "0.76.0",
   "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create apps, push code, deploy previews or production, inspect status, and manage channels, environment, storage, and domains.",
   "author": {
     "name": "xhostd",
@@ -102,7 +102,7 @@
         "commerce": false
       },
       "publication": {
-        "release_notes": "xhostd 0.75.0 for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains. What changed in 0.75.0: every tool parameter carries a description; the snapshot link tool is now get_snapshot_download_link; email binding left the tools for the HTTP API; the app tools return fewer internal fields; and the tools that delete or restore ask the agent to confirm the target with the user."
+        "release_notes": "xhostd 0.76.0 for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains. What changed in 0.76.0: a new environment value or secret now says that it takes effect at each channel's next deploy, and names the channels still running the old value; each channel reports env_pending when its stored environment changed since its container started; the custom-domain tools say how soon the platform serves or stops serving a domain; and the server points the agent to the troubleshooting guide when a call fails."
       }
     }
   }
