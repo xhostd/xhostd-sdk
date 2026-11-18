@@ -108,7 +108,7 @@ The payload carries eight claims:
 | Claim | Meaning |
 |---|---|
 | `iss` | `https://auth.xhostd.com` |
-| `aud` | **the channel's own hostname** |
+| `aud` | **the hostname the visitor signed in on** |
 | `sub` | Google's stable user id |
 | `email` | the verified Google address |
 | `name` | display name |
@@ -128,8 +128,10 @@ the correct literal for production. The value comes from the configured
 platform domain, not from a hardcoded string. Pin `iss` in your verification,
 and remember its source.
 
-**`aud` is your channel's hostname, and no component tells your container that
-name.** No environment variable carries it. The correct source is the request.
+**`aud` is the hostname the visitor signed in on, and no environment variable
+carries it.** `XHOSTD_HOSTNAME` names only the platform hostname, and
+`XHOSTD_DOMAINS` changes only at the channel's next deploy. The correct source
+is the request.
 The proxy passes the browser's `Host` header through without a change. Thus
 `request.url.hostname` is the audience of the token. The same code stays
 correct when you point a custom domain at the channel, because the cookie on
@@ -160,7 +162,8 @@ LOGIN_URL = "/xhost-auth/login?return_to=/private"
 
 # One JWKS fetch per process, not one per request: PyJWKClient keeps the
 # key set in memory and re-fetches it when a token turns up with a `kid` it
-# has not seen, which is how a platform key rotation is picked up.
+# has not seen, at most once every 30 seconds by default. That re-fetch is
+# how a platform key rotation is picked up.
 _jwks = jwt.PyJWKClient(f"{ISSUER}/xhost-auth/jwks", timeout=5)
 
 app = FastAPI()
@@ -265,11 +268,14 @@ uses no key is not a check.
 
 **`PyJWKClient` selects the key by the `kid` in the token header, and keeps the
 key set in memory.** The client fetches the key set again when the cache
-lifetime expires, 300 s by default. The client also fetches again immediately
-when a token carries a `kid` that it has not seen. A key rotation on the
+lifetime expires, 300 s by default. The client also fetches again when a token
+carries a `kid` that it has not seen, at most once every 30 s by default. The
+`cooldown_duration` argument sets that interval. A key rotation on the
 platform appears as an unseen `kid`, so your app gets the new key with no
-redeploy. Your app can also fetch the JWKS on each request. Each request then
-waits for that fetch, and fails when the fetch fails.
+redeploy. For up to 30 s after a rotation, your app can show a signed-in
+visitor the signed-out page. Your app can also fetch the JWKS on each
+request. Each request then waits for that fetch, and fails when the fetch
+fails.
 
 **`audience=request.url.hostname`, with `strict_aud`.** The audience comes from
 the request, for the reason above. `strict_aud` refuses the loose match that a
@@ -297,10 +303,11 @@ email address can move to a different person.
 ### requirements.txt
 
 ```text
-fastapi==0.115.6
+fastapi==0.162.4
+starlette==1.10.0
 uvicorn==0.34.0
-PyJWT[crypto]==2.13.0
-cryptography==49.0.0
+PyJWT[crypto]==2.15.1
+cryptography==50.0.2
 ```
 
 `PyJWT[crypto]` is the important line. PyJWT alone cannot do RS256. The
@@ -308,7 +315,8 @@ cryptography==49.0.0
 install plain `PyJWT`, every verification fails with an error, because a
 dependency is not present. That error occurs at request time, not at start-up.
 The file also pins `cryptography` directly, so the transitive version cannot
-change.
+change. It also pins `starlette`, the framework under FastAPI, because the
+oldest Starlette version that FastAPI accepts has known vulnerabilities.
 
 ### install.sh
 
@@ -461,8 +469,8 @@ deploy aee52aa8 — success (sha 22cda920f30a)
 started: 2026-10-04T06:11:17.830356Z   finished: 2026-10-04T06:11:27.406054Z
 
 ...
-[2026-10-04T06:11:20+00:00] [build] #7 0.757  + cryptography==49.0.0
-[2026-10-04T06:11:20+00:00] [build] #7 0.758  + pyjwt==2.13.0
+[2026-10-04T06:11:20+00:00] [build] #7 2.647  + cryptography==50.0.2
+[2026-10-04T06:11:20+00:00] [build] #7 2.647  + pyjwt==2.15.1
 ...
 [2026-10-04T06:11:22+00:00] [build] image 1005.02 MB total, 33.66 MB charged — base xhost-runtime:node22-py313 exempt
 [2026-10-04T06:11:23+00:00] health_check container=3f7e1561b9cf61fb112e430c26c1716ad0a26bcb20cea700601193298d980368 port=3000 timeout=120.0s
@@ -470,13 +478,13 @@ started: 2026-10-04T06:11:17.830356Z   finished: 2026-10-04T06:11:27.406054Z
 [2026-10-04T06:11:25+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:11:25+00:00] health_check ok
 [2026-10-04T06:11:25+00:00] [container] INFO:     10.77.1.7:36858 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:11:25+00:00] caddy ensure_route hostname=recipe-oauth-docs.xhostd.app upstream=10.77.1.7:32095
+[2026-10-04T06:11:25+00:00] traffic switched to the new container
 [2026-10-04T06:11:27+00:00] deploy success
 ```
 
 Read two lines in that log.
 
-**`+ cryptography==49.0.0` and `+ pyjwt==2.13.0`.** One `PyJWT[crypto]==2.13.0`
+**`+ cryptography==50.0.2` and `+ pyjwt==2.15.1`.** One `PyJWT[crypto]==2.15.1`
 line in `requirements.txt` installs two distributions. The `cryptography` line
 in the build log confirms that RS256 works. If the build log has `pyjwt` but no
 `cryptography`, your `requirements.txt` does not have the `[crypto]` extra.

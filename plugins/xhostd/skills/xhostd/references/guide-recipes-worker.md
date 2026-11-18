@@ -300,10 +300,7 @@ started: 2026-10-04T06:16:20.521063Z   finished: 2026-10-04T06:16:28.144639Z
 [2026-10-04T06:16:26+00:00] health_check ok
 [2026-10-04T06:16:26+00:00] [container] {"ts": "2026-10-04T06:16:26.441959+00:00", "event": "ready", "interval_s": 5.0}
 [2026-10-04T06:16:26+00:00] [container] {"ts": "2026-10-04T06:16:26.442097+00:00", "event": "tick", "count": 1, "uptime_s": 0.0}
-[2026-10-04T06:16:27+00:00] caddy ensure_route hostname=recipe-worker-docs.xhostd.app upstream=10.77.1.7:32091
-[2026-10-04T06:16:27+00:00] caddy ensure_route ok
-[2026-10-04T06:16:27+00:00] caddy ensure_s3_route host=recipe-worker-docs.s3.xhostd.app upstream=10.77.1.7:6533
-[2026-10-04T06:16:27+00:00] caddy ensure_s3_route ok
+[2026-10-04T06:16:27+00:00] traffic switched to the new container
 [2026-10-04T06:16:28+00:00] pinned deployed sha 90564c22acaa3800c0896ea71dc9c8b19662a99f
 [2026-10-04T06:16:28+00:00] channel row updated
 [2026-10-04T06:16:28+00:00] deploy success
@@ -331,9 +328,9 @@ worker's `ready` line share the second `06:16:26`.
 own output, and the `[container]` prefix marks them. `interval_s: 5.0` is the
 default value from `setup`, because the channel set no `TICK_SECONDS`.
 
-**`caddy ensure_route hostname=recipe-worker-docs.xhostd.app`.** The channel
-gets its HTTPS route, the same as every other channel. Nothing listens behind
-that route, so the hostname answers 502.
+**`traffic switched to the new container`.** The channel's HTTPS hostname now
+reaches this container, the same as for every other channel. Nothing listens
+behind it, so the hostname answers 502.
 
 ### The status header
 
@@ -578,10 +575,11 @@ $ curl -sS -o /dev/null -w '%{http_code}\n' https://recipe-worker-docs.xhostd.ap
 502
 ```
 
-The channel gets `recipe-worker-docs.xhostd.app`, and Caddy routes that
+The channel gets `recipe-worker-docs.xhostd.app`, and the platform routes that
 hostname. No process listens on the health port, so the proxy has no upstream.
-A 404 from the hostname is different: it tells you that the channel has no
-route, because the deploy did not reach `caddy ensure_route`.
+A 404 from the hostname is different: it tells you that no container serves
+the channel, because the deploy did not reach `traffic switched to the new
+container`.
 
 To get a worker **and** a URL, serve HTTP on `$XHOSTD_HTTP_PORT` from the same
 container, next to the loop. The platform permits this, and the HTTP arm of the

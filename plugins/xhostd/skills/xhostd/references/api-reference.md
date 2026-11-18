@@ -106,7 +106,8 @@ List all apps owned by the authenticated user.
           "follows_branch": false,
           "current_sha": "abc1234567890abcdef1234567890abcdef12345",
           "status": "running",
-          "pending_deploy": null
+          "pending_deploy": null,
+          "env_pending": false
         }
       ],
       "owner_username": "alice",
@@ -117,6 +118,7 @@ List all apps owned by the authenticated user.
 ```
 
 - `channels[].pending_deploy` — the channel's newest queued or running deploy, as `{"deploy_id": "uuid", "sha": "...", "status": "queued" | "running"}`, or `null` when nothing is in flight. `current_sha` only advances when a deploy succeeds, so an old `current_sha` next to a non-null `pending_deploy` means the new deploy has not finished yet — it does not mean the deploy failed.
+- `channels[].env_pending` — `true` when the channel's running container is behind the stored environment variables and secrets. A change reaches the container at the channel's next deploy, so a deploy clears it. `false` for a channel that has never had a container.
 
 ---
 
@@ -162,7 +164,8 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
       "follows_branch": false,
       "current_sha": null,
       "status": "provisioning",
-      "pending_deploy": null
+      "pending_deploy": null,
+      "env_pending": false
     }
   ],
   "owner_username": "alice",
@@ -189,7 +192,7 @@ Get details of a single app by UUID.
 
 ## DELETE /apps/{app_id}
 
-Delete an app and all its channels. Tears down containers, networks, and Caddy routes.
+Delete an app and all its channels. Tears down containers and networks, and the platform stops serving the app's hostnames.
 
 **Required scope:** `repo:*`
 
@@ -215,7 +218,8 @@ List all channels for an app.
     "follows_branch": false,
     "current_sha": "abc1234...",
     "status": "running",
-    "pending_deploy": null
+    "pending_deploy": null,
+    "env_pending": false
   },
   {
     "id": "uuid",
@@ -225,7 +229,8 @@ List all channels for an app.
     "follows_branch": false,
     "current_sha": null,
     "status": "provisioning",
-    "pending_deploy": null
+    "pending_deploy": null,
+    "env_pending": false
   }
 ]
 ```
@@ -263,7 +268,8 @@ Create a new channel on an app.
   "git_ref_binding": "branch:staging",
   "current_sha": null,
   "status": "provisioning",
-  "pending_deploy": null
+  "pending_deploy": null,
+  "env_pending": false
 }
 ```
 
@@ -648,7 +654,14 @@ Set (upsert) an environment variable or secret on an app.
 - `kind` (string, optional) — `env` (plain variable) or `secret`. Omitted, an existing key keeps its kind and a new key defaults to `env`. `secret` turns a plain variable into a secret. `env` over a secret in the same scope answers 409: a secret never becomes a plain variable in place. Secret values are omitted from list responses (metadata only); the single reveal path is `GET /apps/{app_id}/env/{key}/value` (the web console's reveal uses the same endpoint), and each reveal is audit-logged.
 - `channel_id` (string, optional) — Omit for an app-level default; set to a channel id for a per-channel override. At deploy time the channel override wins over the app default, and system-injected keys win over both.
 
-**Response:** 204 No Content
+**Response (200):**
+```json
+{
+  "notice": "The new value of MY_VAR reaches a channel's container at that channel's next deploy. A running container keeps the value it started with. These channels run a container that is now behind the stored environment: prod."
+}
+```
+
+- `notice` — when the change reaches each affected channel, the channels whose running container is now behind, and the channels with no deploy yet. Relay it, and offer to deploy the channels it names. Every env write answers with the same field.
 
 **Errors:**
 - `bad_request` (400) — invalid key format or reserved key
@@ -677,7 +690,7 @@ printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
   "https://api.xhostd.com/apps/<app_id>/env/STRIPE_KEY?kind=secret"
 ```
 
-**Response:** 204 No Content. The response never carries the value.
+**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns. The response never carries the value.
 
 **Errors:**
 - `bad_request` (400) — invalid key format or reserved key, a body past 16 KiB, an empty body (an empty plain value goes through `POST /apps/{app_id}/env`), a body that is not UTF-8, or another `Content-Type` such as a form or JSON. curl's `--data-binary` sends a form type unless you set the header.
@@ -698,7 +711,7 @@ Store a new random secret under a new key: 43 URL-safe characters, 256 bits. The
 
 **Request body:** none.
 
-**Response:** 204 No Content
+**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns, and no value.
 
 **Errors:**
 - `bad_request` (400) — invalid key format, a reserved key, or a request body
@@ -717,7 +730,7 @@ Delete an environment variable or a secret from an app.
 **Query parameters:**
 - `channel_id` (optional) — With it, deletes only that channel's override; without it, deletes the app-level default.
 
-**Response:** 204 No Content
+**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns, led by "The deletion of KEY". A key with no value in that scope answers the same way.
 
 ---
 
@@ -1033,7 +1046,7 @@ Re-run the TXT + routing DNS check for an attached domain and update its status.
 
 **Response (200):** Same shape as the attach response, with updated `status`, `reason`, and `verified_at`. `status` flips `pending → verified` on a passing check. `reason` uses a closed vocabulary: `txt_nxdomain`, `txt_token_mismatch`, `dns_not_pointing`, `domain_nxdomain` (the four definitive failures — the only ones that downgrade a verified domain), plus the transient `txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`.
 
-`notice` is a string when this call moved the domain into or out of `verified`, and `null` otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a verify does not restart the container. Relay it, and deploy the channel when the app checks the `Host` header.
+`notice` is a string when this call moved the domain into or out of `verified`, and `null` otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a verify does not restart the container. When the call verified the domain, it also says that a sign-in there carries the domain as the identity cookie's `aud`, so the app must check `aud` against the request's host. Relay it, and deploy the channel when the app checks the `Host` header.
 
 **Errors:**
 - `not_found` (404) — app/channel/domain not found

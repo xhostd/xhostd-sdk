@@ -151,7 +151,8 @@ therefore breaks over `DATABASE_URL`:
   other parameter at connect with `unsupported startup parameter`, for
   example `?options=-c statement_timeout=5000` in the URL, or
   `server_settings={"jit": "off"}` in asyncpg. `SET LOCAL` in the
-  transaction works.
+  transaction works. Just-in-time (JIT) compilation is already off on
+  xhost, so you can drop a `jit` setting.
 
 Run each of these over `DATABASE_URL_DIRECT`, or use the
 transaction-scoped form. A migration tool and a job queue that listens
@@ -658,11 +659,13 @@ If you do not, the next container start applies the migration again.
 
 ## PostGIS
 
-The database server marks PostGIS trusted, so a migration installs it
-with no superuser. Install the extension in the migration that first needs
-a geometry column, add the column, and add a GiST index on it in the same
-migration. The extension is a one-time cost of about two seconds and
-7.5 MB per database.
+Your channel's role installs PostGIS with plain SQL, with no superuser.
+Install the extension in the migration that first needs a geometry
+column, add the column, and add a GiST index on it in the same
+migration. The migration runs over `DATABASE_URL_DIRECT`, which the
+install needs: a pooled connection can carry another client's session
+state, and the install refuses such a session. The extension is a
+one-time cost of about two seconds and 7.5 MB per database.
 
 ```python
 def upgrade() -> None:
@@ -684,10 +687,21 @@ def upgrade() -> None:
 `ALTER TABLE places ADD COLUMN location geometry(Point, 4326)` and
 `CREATE INDEX ix_places_location ON places USING GIST (location)`.
 
+PostGIS lives in its own schema, `postgis`, which the platform owns, and
+your database's `search_path` is `"$user", public, postgis`, so the
+`geometry` type and the `ST_*` functions need no schema. Leave out the
+`SCHEMA` and `VERSION` clauses: `WITH SCHEMA public` and `WITH SCHEMA
+extensions` are refused. A reset keeps PostGIS, and PostGIS has no
+uninstall: `DROP EXTENSION postgis` is refused, and so is `DROP EXTENSION IF
+EXISTS postgis`, even in a database that holds no PostGIS. Leave the drop
+out of your migration's `downgrade()`.
+
 Only `postgis` is installable. `postgis_raster`, `postgis_topology`,
-`postgis_sfcgal`, and the tiger geocoder stay untrusted. `spatial_ref_sys`
+`postgis_sfcgal`, and the tiger geocoder need a superuser. `spatial_ref_sys`
 is read-only for your role, with every EPSG code present. A snapshot
 restore, scheduled maintenance, and an export all carry a PostGIS database.
+When the install refuses, read
+[`CREATE EXTENSION postgis` is refused](#create-extension-postgis-is-refused).
 
 ## When it goes wrong
 
@@ -784,6 +798,36 @@ Keep a deploy-time migration short, and do not let it block. Use
 with a default in place of a rewrite of the rows. Move a long backfill out of
 the deploy path. Ship the schema change first, then run the backfill as its
 own step after the app is live.
+
+### `CREATE EXTENSION postgis` is refused
+
+xhost checks the session before it installs PostGIS, and a refused install
+leaves nothing behind. The message names the cause:
+
+- `extension "postgis" installation via pgextwlist is restricted to the
+  database owner`: the session is not your channel's write role. Run the
+  migration over `DATABASE_URL_DIRECT`, not `DATABASE_URL_READONLY`.
+- `extension "postgis" must be installed in schema "postgis"`: remove the
+  `SCHEMA` clause.
+- `extension "postgis" installs only at its default version on xhost`:
+  remove the `VERSION` clause.
+- `CREATE EXTENSION postgis cannot run in a session that holds temporary
+  objects`: run `DISCARD TEMP`, or run the statement in a new session over
+  `DATABASE_URL_DIRECT`.
+- `CREATE EXTENSION postgis cannot run while these settings differ from
+  their defaults: …`: `RESET` each setting the message names, or use a new
+  session over `DATABASE_URL_DIRECT`. A setting that you stored with
+  `ALTER DATABASE … SET` or `ALTER ROLE … SET` needs `ALTER … RESET` first.
+  When the message names `transaction_isolation`, the migration runs in a
+  `REPEATABLE READ` or `SERIALIZABLE` transaction. An isolation level lasts
+  until its transaction ends, so run the install outside that transaction.
+- `schema "postgis" belongs to role "…"; PostGIS installs only into a
+  schema the platform owns`: rename or drop your own schema named
+  `postgis`, then run the migration again.
+- `DROP EXTENSION postgis is not available on xhost`: xhost refuses every
+  drop of PostGIS, `DROP EXTENSION IF EXISTS postgis` included, even in a
+  database that holds no PostGIS. Remove the statement from the
+  down-migration.
 
 ### An UNLOGGED table is refused
 
@@ -1012,8 +1056,9 @@ After the last revoke, offer the transfer again, or accept it again.
 
 ### 404 and 502 from the hostname mean different things
 
-A channel that exists but has no route returns **404** on its hostname. A
-channel with a route but no live server returns **502**. Both codes help you.
-A 404 tells you that the deploy did not reach `caddy ensure_route`. A 502
-tells you that the deploy reached it, but the container does not serve. For a
+A channel that exists but has no container to serve it returns **404** on its
+hostname. A channel with a container but no live server returns **502**. Both
+codes help you. A 404 tells you that the deploy did not reach `traffic switched
+to the new container`. A 502 tells you that the deploy reached it, but the
+container does not serve. For a
 Python app on this platform, a 502 is often the psycopg2 failure above.

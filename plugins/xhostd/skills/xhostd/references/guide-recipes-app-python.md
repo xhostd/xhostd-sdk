@@ -55,13 +55,16 @@ you rename the file, you must also change that argument.
 ### requirements.txt
 
 ```
-fastapi==0.115.6
+fastapi==0.162.4
+starlette==1.10.0
 uvicorn==0.34.0
 ```
 
 Pin every dependency to an exact version. Without the pins, two deploys of the
 same commit can install different code. The deploy that fails is then the
-deploy that you did not change.
+deploy that you did not change. The file pins `starlette`, the framework under
+FastAPI, because the oldest Starlette version that FastAPI accepts has known
+vulnerabilities.
 
 ### install.sh
 
@@ -215,7 +218,7 @@ get_logs(app_name="recipe-python",
 
 This is that deploy. The reply starts with a status header, then the log. The
 log below shows the ids in a short form. It omits the lines that teach nothing
-here, such as the buildkit lines and ten dependency lines.
+here, such as the buildkit lines and eleven dependency lines.
 
 ```text
 deploy d8ceb2cf — success (sha 2fed79b20b40)
@@ -228,14 +231,16 @@ started: 2026-10-04T06:11:01.958443Z   finished: 2026-10-04T06:11:12.631756Z
 [2026-10-04T06:11:03+00:00] [build] #5 CACHED
 [2026-10-04T06:11:03+00:00] [build] #6 [2/3] COPY --chown=app:app . /app
 [2026-10-04T06:11:03+00:00] [build] #7 [3/3] RUN if [ -f /app/install.sh ]; then chmod +x /app/install.sh && cd /app && ./install.sh && rm -f /app/install.sh; fi && chown -R app:app /app
-[2026-10-04T06:11:03+00:00] [build] #7 0.236 Using Python 3.13.14 environment at: /usr/local
-[2026-10-04T06:11:03+00:00] [build] #7 0.791 Resolved 12 packages in 544ms
-[2026-10-04T06:11:04+00:00] [build] #7 0.811 Downloading pydantic-core (2.0MiB)
-[2026-10-04T06:11:04+00:00] [build] #7 0.889 Prepared 12 packages in 89ms
-[2026-10-04T06:11:04+00:00] [build] #7 0.904 Installed 12 packages in 22ms
-[2026-10-04T06:11:04+00:00] [build] #7 0.909  + fastapi==0.115.6
-[2026-10-04T06:11:04+00:00] [build] #7 0.909  + uvicorn==0.34.0
-[2026-10-04T06:11:04+00:00] [build] #7 DONE 1.0s
+[2026-10-04T06:11:03+00:00] [build] #7 0.207 Using Python 3.13.18 environment at: /usr/local
+[2026-10-04T06:11:03+00:00] [build] #7 1.609 Resolved 14 packages in 1.40s
+[2026-10-04T06:11:04+00:00] [build] #7 1.785 Downloading pydantic-core (2.2MiB)
+[2026-10-04T06:11:04+00:00] [build] #7 2.180  Downloaded pydantic-core
+[2026-10-04T06:11:04+00:00] [build] #7 2.181 Prepared 14 packages in 571ms
+[2026-10-04T06:11:04+00:00] [build] #7 2.198 Installed 14 packages in 16ms
+[2026-10-04T06:11:04+00:00] [build] #7 2.198  + fastapi==0.162.4
+[2026-10-04T06:11:04+00:00] [build] #7 2.198  + starlette==1.10.0
+[2026-10-04T06:11:04+00:00] [build] #7 2.198  + uvicorn==0.34.0
+[2026-10-04T06:11:04+00:00] [build] #7 DONE 2.2s
 [2026-10-04T06:11:06+00:00] [build] finished in 3s
 [2026-10-04T06:11:06+00:00] [build] queue wait 0s, build 4s
 [2026-10-04T06:11:06+00:00] [build] image 984.82 MB total, 13.46 MB charged — base xhost-runtime:node22-py313 exempt
@@ -247,26 +252,26 @@ started: 2026-10-04T06:11:01.958443Z   finished: 2026-10-04T06:11:12.631756Z
 [2026-10-04T06:11:10+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:11:10+00:00] health_check ok
 [2026-10-04T06:11:10+00:00] [container] INFO:     10.77.1.7:53382 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:11:10+00:00] caddy ensure_route hostname=recipe-python-docs.xhostd.app upstream=10.77.1.7:32093
+[2026-10-04T06:11:10+00:00] traffic switched to the new container
 [2026-10-04T06:11:12+00:00] deploy success
 ```
 
 Read five facts in that log.
 
-**`Installed 12 packages in 22ms`.** That speed is `uv`, and it is the reason
+**`Installed 14 packages in 16ms`.** That speed is `uv`, and it is the reason
 why `uv` is the standard here. The install step runs after the `COPY` of your
-source, so a change to any file resolves and downloads the two pins in
-`requirements.txt` again: `Resolved 12 packages in 544ms`, with a 2 MiB
+source, so a change to any file resolves and downloads the three pins in
+`requirements.txt` again: `Resolved 14 packages in 1.40s`, with a 2.2 MiB
 `pydantic-core` wheel. The whole build, with the image export, took four
 seconds.
 
-**`Using Python 3.13.14 environment at: /usr/local`.** `--system` installed
+**`Using Python 3.13.18 environment at: /usr/local`.** `--system` installed
 into the image's own interpreter, not into a virtualenv. Thus `launch.sh` calls
 `uvicorn` directly, and it activates no virtualenv first.
 
 **`image 984.82 MB total, 13.46 MB charged`.** The platform counts only the
 bytes that your build adds to the platform base. The base layers are exempt
-from the image-size cap of your plan. Your twelve packages are the 13.46 MB.
+from the image-size cap of your plan. Your packages are the charged megabytes.
 
 **`channel snapshot marker recorded`.** This is the automatic database snapshot
 before the deploy. Every deploy that is not `static` records one, also when you
@@ -276,8 +281,9 @@ restore returns the database to, so it costs nothing here.
 **`Uvicorn running on http://0.0.0.0:3000`, then `"GET / HTTP/1.1" 200 OK`.**
 That 200 *is* the health check. The platform prints the `[xhost] starting
 launch.sh (XHOSTD_HTTP_PORT=3000)` line above it, not your code. That line names
-the port that the probe uses. `health_check ok` comes next. Only then does
-`caddy ensure_route` point the hostname at the new container.
+the port that the probe uses. `health_check ok` comes next. Only then does the
+platform point the hostname at the new container: `traffic switched to the new
+container`.
 
 Then two commands prove the result against the live app:
 

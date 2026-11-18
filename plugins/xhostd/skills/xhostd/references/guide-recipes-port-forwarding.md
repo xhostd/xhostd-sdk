@@ -719,10 +719,11 @@ $ curl -sS -o /dev/null -w '%{http_code}\n' https://recipe-tcp-docs.xhostd.app/
 502
 ```
 
-The channel gets `recipe-tcp-docs.xhostd.app`, and Caddy routes that hostname.
-No process listens on the health port, so the proxy has no upstream. A 404 from
-the hostname is different: it tells you that the channel has no route, because
-the deploy did not reach `caddy ensure_route`.
+The channel gets `recipe-tcp-docs.xhostd.app`, and the platform routes that
+hostname. No process listens on the health port, so the proxy has no upstream.
+A 404 from the hostname is different: it tells you that no container serves the
+channel, because the deploy did not reach `traffic switched to the new
+container`.
 
 To get both, serve HTTP on `$XHOSTD_HTTP_PORT` *and* TCP on
 `$XHOSTD_FORWARD_PORT` from the same container. The platform permits this, and

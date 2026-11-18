@@ -236,8 +236,9 @@ JWT in it. Verify that token correctly, every time:
   select the key by the token's `kid`.
 - Accept `alg` only if it is `RS256`. Never let the token's own header select
   the algorithm for you.
-- Check that `iss` is `https://auth.xhostd.com`. Check that `aud` is your
-  channel's hostname. Check that `exp` is in the future.
+- Check that `iss` is `https://auth.xhostd.com`. Check that `aud` is the host
+  the request arrived on, not a fixed hostname: on a custom domain, it is that
+  domain. Check that `exp` is in the future.
 - The identity is in `sub`. The claims `email` and `name` are next to it.
 
 If you decode the payload but do not verify the signature, you do not

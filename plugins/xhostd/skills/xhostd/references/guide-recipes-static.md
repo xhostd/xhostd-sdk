@@ -214,8 +214,7 @@ started: 2026-07-31T17:30:18Z   finished: 2026-07-31T17:30:19Z
 [2026-07-31T17:30:19+00:00] [container] 2026/07/31 17:30:19 [notice] 1#1: nginx/1.31.3
 [2026-07-31T17:30:19+00:00] [container] 2026/07/31 17:30:19 [notice] 1#1: start worker processes
 [2026-07-31T17:30:19+00:00] [container] 10.77.1.5 - - [31/Jul/2026:17:30:19 +0000] "GET / HTTP/1.1" 200 1297 "-" "Python-urllib/3.13" "-"
-[2026-07-31T17:30:19+00:00] caddy ensure_route hostname=recipe-static-docs.xhostd.app upstream=10.77.1.5:32005
-[2026-07-31T17:30:19+00:00] caddy ensure_route ok
+[2026-07-31T17:30:19+00:00] traffic switched to the new container
 [2026-07-31T17:30:19+00:00] pinned deployed sha 206b94135aaa92b47421e30a1b86efc6d6ed824f
 [2026-07-31T17:30:19+00:00] deploy success
 ```
@@ -246,10 +245,11 @@ answers 2xx or 3xx.** That line is below `health_check ok`, not above it. The
 cause is the batch: the platform drains the container output into the log a
 short time after the probe.
 
-**`caddy ensure_route`.** The platform points the hostname at the new
-container only after the health check passes. This log is a first deploy, so
-there was no previous container to remove. On a second deploy, the line
-`stop_and_remove old container=...` comes after the platform moves the route.
+**`traffic switched to the new container`.** The platform points the hostname
+at the new container only after the health check passes. This log is a first
+deploy, so there was no previous container to remove. On a second deploy, the
+line `stop_and_remove old container=...` comes after the platform switches the
+traffic.
 Thus the previous version serves the site until the new version passes its
 health check. A failed deploy leaves your site in service.
 

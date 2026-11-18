@@ -71,8 +71,8 @@ FROM python:3.13-slim
 WORKDIR /app
 
 # uv resolves and installs the Python dependencies. Pinned to an exact
-# version tag — append @sha256:<digest> if you need it immutable.
-COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
+# version tag and to its image digest, so every build copies the same binary.
+COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
 
 COPY requirements.txt .
 RUN uv pip install --system --no-cache -r requirements.txt
@@ -154,10 +154,13 @@ gets the stop signals directly. Your app needs both details. See
 ### requirements.txt
 
 This file pins every version exactly. Each later deploy thus builds the same
-image that you tested.
+image that you tested. It pins `starlette`, the framework under FastAPI,
+because the oldest Starlette version that FastAPI accepts has known
+vulnerabilities.
 
 ```text
-fastapi==0.115.6
+fastapi==0.162.4
+starlette==1.10.0
 uvicorn==0.34.0
 sqlalchemy==2.0.36
 alembic==1.14.0
@@ -383,7 +386,7 @@ started: 2026-10-04T06:53:59.684877Z   finished: 2026-10-04T06:54:10.384603Z
 [2026-10-04T06:54:02+00:00] [build] #5 [stage-0 1/6] FROM docker.io/library/python:3.13-slim@sha256:bb2988715db2...
 [2026-10-04T06:54:02+00:00] [build] #8 [stage-0 5/6] RUN uv pip install --system --no-cache -r requirements.txt
 [2026-10-04T06:54:02+00:00] [build] #8 CACHED
-[2026-10-04T06:54:02+00:00] [build] #11 [stage-0 3/6] COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
+[2026-10-04T06:54:02+00:00] [build] #11 [stage-0 3/6] COPY --from=ghcr.io/astral-sh/uv:0.13.7@sha256:96f40d3904aad8d0bd010539001d36c8e2188b981e1334471a90c4a1d93bb490 /uv /usr/local/bin/uv
 [2026-10-04T06:54:02+00:00] [build] #11 CACHED
 [2026-10-04T06:54:02+00:00] [build] #12 [stage-0 6/6] COPY . .
 [2026-10-04T06:54:02+00:00] [build] #12 CACHED
@@ -398,7 +401,7 @@ started: 2026-10-04T06:53:59.684877Z   finished: 2026-10-04T06:54:10.384603Z
 [2026-10-04T06:54:09+00:00] [container] INFO:     Uvicorn running on http://0.0.0.0:3000 (Press CTRL+C to quit)
 [2026-10-04T06:54:09+00:00] health_check ok
 [2026-10-04T06:54:09+00:00] [container] INFO:     10.77.1.7:38162 - "GET / HTTP/1.1" 200 OK
-[2026-10-04T06:54:09+00:00] caddy ensure_route hostname=recipe-docker-pg-docs.xhostd.app upstream=10.77.1.7:32085
+[2026-10-04T06:54:09+00:00] traffic switched to the new container
 [2026-10-04T06:54:10+00:00] deploy success
 ```
 
@@ -444,8 +447,8 @@ seconds later.** In those five seconds the migrations run, and then uvicorn
 binds its port. The probe gets its first 2xx after that. The 120-second
 window gives a migration the time to finish.
 
-**`caddy ensure_route`.** xhostd points the hostname at the new container
-only after the health check passes. On a redeploy, the line that retires the
+**`traffic switched to the new container`.** xhostd points the hostname at the
+new container only after the health check passes. On a redeploy, the line that retires the
 previous container, `stop_and_remove old container=...`, comes after that.
 That order is the reason why a redeploy loses no requests.
 

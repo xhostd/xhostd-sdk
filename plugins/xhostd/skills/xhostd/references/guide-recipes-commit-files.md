@@ -291,8 +291,7 @@ get_logs(app_name="recipe-commit-files",
 
 That is the first deploy. The reply starts with a status header, then the
 log. The transcript shows short ids. It omits the nginx entrypoint lines and
-the routine per-channel lines for the network, the blob route and the channel
-row:
+the routine per-channel lines for the network and the channel row:
 
 ```text
 deploy df8750a5 — success (sha 0bf2770b0ab0)
@@ -308,8 +307,7 @@ started: 2026-07-31T23:20:42Z   finished: 2026-07-31T23:20:44Z
 [2026-07-31T23:20:43+00:00] [container] 2026/07/31 23:20:43 [notice] 1#1: nginx/1.31.3
 [2026-07-31T23:20:43+00:00] [container] 2026/07/31 23:20:43 [notice] 1#1: start worker processes
 [2026-07-31T23:20:43+00:00] [container] 10.77.1.5 - - [31/Jul/2026:23:20:43 +0000] "GET / HTTP/1.1" 200 815 "-" "Python-urllib/3.13" "-"
-[2026-07-31T23:20:43+00:00] caddy ensure_route hostname=recipe-commit-files-docs.xhostd.app upstream=10.77.1.5:32050
-[2026-07-31T23:20:43+00:00] caddy ensure_route ok
+[2026-07-31T23:20:43+00:00] traffic switched to the new container
 [2026-07-31T23:20:43+00:00] pinned deployed sha 0bf2770b0ab04b119bc4138faf2d9b1a270ab095
 [2026-07-31T23:20:44+00:00] deploy success
 ```
@@ -337,7 +335,7 @@ The second deploy's log is the same log with two more lines. The first deploy
 does not print them, because it replaces no container:
 
 ```text
-[2026-07-31T23:26:36+00:00] caddy ensure_route ok
+[2026-07-31T23:26:36+00:00] traffic switched to the new container
 [2026-07-31T23:26:36+00:00] stop_and_remove old container=07e5fbe4b902...
 [2026-07-31T23:26:36+00:00] stop_and_remove ok
 ```
