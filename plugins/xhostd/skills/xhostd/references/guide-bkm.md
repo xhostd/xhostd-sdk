@@ -330,6 +330,9 @@ name.
 | `XHOSTD_HOSTNAME` | — | The channel's platform hostname. The deploy health probe sends it as the `Host` header. |
 | `XHOSTD_URL` | — | `https://` plus the channel's platform hostname, with no trailing slash. It never names a custom domain. |
 | `XHOSTD_DOMAINS` | — | The channel's platform hostname and its verified custom domains, comma-separated. Treat the value as a set: don't infer a primary domain from its position, and read the platform hostname from `XHOSTD_HOSTNAME` or `XHOSTD_URL`. Deploy again after you verify or remove a domain. |
+| `XHOSTD_PROJECT` | — | The project's name. Set only when the project uses the services deploy path. |
+| `XHOSTD_ENVIRONMENT` | — | The environment's name. Set only when the project uses the services deploy path. |
+| `XHOSTD_SERVICE` | — | The service's name. Set only when the project uses the services deploy path. |
 
 `PORT` is a deprecated alias of `XHOSTD_HTTP_PORT`, with the same value. The
 platform injects `PORT`, but it will remove the alias. New code must never read
@@ -408,8 +411,8 @@ cannot remove the key from that layer.
 message.** The platform injects these keys, and `set_env` refuses to write
 them: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`,
 `XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOSTD_HOSTNAME`, `XHOSTD_URL`,
-`XHOSTD_DOMAINS`, `XHOST_USER`, `XHOST_SHA`,
-`XHOST_HTTP_PORT`, `PORT`, `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`,
+`XHOSTD_DOMAINS`, `XHOSTD_PROJECT`, `XHOSTD_ENVIRONMENT`, `XHOSTD_SERVICE`,
+`XHOST_USER`, `XHOST_SHA`, `XHOST_HTTP_PORT`, `PORT`, `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`,
 `DATABASE_URL`, `DATABASE_URL_READONLY`, `DATABASE_URL_DIRECT`,
 `DATABASE_HOST`, `DATABASE_PASSWORD`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
 `S3_SECRET_ACCESS_KEY`, `S3_REGION`. Every other key that starts with
