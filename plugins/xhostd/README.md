@@ -21,23 +21,18 @@ The plugin contains no hooks, scripts, or binaries.
 Install from the Anthropic directory: run `/plugin`, open **Discover**, and
 select **xhostd**.
 
-To install from the marketplace, run these commands:
-
-```
-/plugin marketplace add xhostd/xhostd-sdk
-/plugin install xhostd@xhostd-sdk
-/reload-plugins
-```
+To install from the `xhostd/xhostd-sdk` marketplace instead, follow the
+Claude Code guide to
+[adding a marketplace and installing a plugin from it](https://code.claude.com/docs/en/discover-plugins#add-a-marketplace).
 
 ### Codex
 
-Install from the plugin directory in Codex, or add the marketplace:
+Install from the plugin directory in Codex: run `/plugins`, select
+**xhostd**, and select **Install plugin**.
 
-```
-codex plugin marketplace add xhostd/xhostd-sdk
-```
-
-Then run `/plugins`, select **xhostd**, and select **Install plugin**.
+To install from the `xhostd/xhostd-sdk` marketplace instead, follow the
+OpenAI guide to
+[adding a plugin marketplace to Codex](https://developers.openai.com/plugins/build/plugins#add-a-marketplace-from-the-cli).
 
 ### Cursor
 
@@ -45,16 +40,9 @@ Install from the Cursor Marketplace, or from
 [cursor.directory](https://cursor.directory): search for **xhostd** and
 install it.
 
-To install it as a local plugin, run these commands:
-
-```
-git clone https://github.com/xhostd/xhostd-sdk.git
-mkdir -p ~/.cursor/plugins/local
-cp -r xhostd-sdk/plugins/xhostd ~/.cursor/plugins/local/xhostd
-```
-
-Then run **Developer: Reload Window**, open **Customize** in the sidebar, find
-**xhostd**, and select **Install**.
+To install the `plugins/xhostd` folder of the `xhostd/xhostd-sdk`
+repository as a local plugin instead, follow the Cursor guide to
+[testing plugins locally](https://cursor.com/docs/plugins#test-plugins-locally).
 
 ### ChatGPT
 
