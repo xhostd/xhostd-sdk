@@ -1,6 +1,6 @@
 {
   "name": "xhostd",
-  "version": "0.77.0",
+  "version": "0.77.1",
   "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create apps, push code, deploy previews or production, inspect status, and manage channels, environment, storage, and domains.",
   "author": {
     "name": "xhostd",
@@ -102,7 +102,7 @@
         "commerce": false
       },
       "publication": {
-        "release_notes": "xhostd 0.77.0 for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains. What changed in 0.77.0: the environment-variable tools reserve three more names that the platform sets in a container, XHOSTD_PROJECT, XHOSTD_ENVIRONMENT, and XHOSTD_SERVICE, and the skill describes them."
+        "release_notes": "xhostd 0.77.1 for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains. What changed in 0.77.1: the README's install section links to each client's own instructions for adding a plugin marketplace or installing a plugin."
       }
     }
   }
