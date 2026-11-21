@@ -68,6 +68,25 @@ write its value into a command. It comes from one of two places:
   with `POST /auth/ssh-key`; read
   [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
 
+When external database access is on in the console, use the token as your
+Postgres password:
+
+```sh
+PGPASSWORD="$XHOSTD_TOKEN" psql "postgresql://<username>@db.xhostd.com:5432/<db>?sslmode=require"
+```
+
+`<db>` is the project name for the `prod` environment, and
+`<environment>-<project>` for any other environment.
+
+Send the same token when you fetch a download link that a tool returns,
+such as the `download_url` of `get_snapshot_download_link`. curl reads the
+`Authorization: Bearer` header from its standard input, so the token stays
+off the command line:
+
+```sh
+printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl -sS --fail-with-body --header @- -o <file> <url>
+```
+
 You can use that token directly, or mint a scoped, short-lived token
 from it, and both work the same way. A scoped token suits an unattended
 job, or a token that you hand to another process. No MCP tool result
