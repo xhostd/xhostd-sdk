@@ -112,7 +112,6 @@ Example minimal pair (`install.sh` bakes deps into the image at build time, then
 # install.sh
 #!/bin/sh
 set -e
-# uv installs the same packages as pip.
 uv pip install --system --no-cache flask gunicorn
 ```
 ```sh
