@@ -98,21 +98,21 @@ stop signals directly. A shell in front of uvicorn ignores those signals.
 
 ## The deploy
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Every project owns a git repo. **With git, push the code, then call `deploy`.**
 A push sends only the diff. Use `commit_files` where git is not available
 on your machine, or where neither git transport can push. **A push stores your
 code, but it does not deploy the code.** `deploy` is a separate call, so you
 name the commit that goes live.
 
-The deploy has four steps. If this is your first app, the
+The deploy has four steps. If this is your first project, the
 [static site recipe](https://docs.xhostd.com/guides/recipes-static) covers the
 same four steps in detail.
 
-**1. Create the app.** This call creates the `prod` channel, its hostname and
-its git repo.
+**1. Create the project.** This call creates the `prod` environment, its
+hostname, and its git repo.
 
 ```text
-create_app(name="recipe-python", template="app")
+create_project(name="recipe-python", template="app")
 → {"name": "recipe-python",
    "owner_username": "docs",
    "role": "owner",
@@ -128,7 +128,8 @@ create_app(name="recipe-python", template="app")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`.
+Later calls take the project's name and the environment's name, such as
+`prod`.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
 platform API. Use your own
@@ -142,7 +143,7 @@ commands.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -192,8 +193,8 @@ never lands in `.git/config`, in your shell history, or in the output of
 **4. Deploy the branch.**
 
 ```text
-deploy(app_name="recipe-python",
-       channel="prod",
+deploy(project="recipe-python",
+       environment="prod",
        ref="master")
 → {"deploy_id": "d8ceb2cf-3614-41a6-a916-9205a23212a6",
    "channel_id": "44788022-ee4d-458d-802f-277cfda9116c",
@@ -210,8 +211,8 @@ status is `queued` or `running`.
 ## Verify it
 
 ```text
-get_logs(app_name="recipe-python",
-         channel="prod",
+get_logs(project="recipe-python",
+         environment="prod",
          source="deploy",
          deploy_id="d8ceb2cf-3614-41a6-a916-9205a23212a6")
 ```

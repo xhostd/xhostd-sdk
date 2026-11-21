@@ -29,10 +29,10 @@ the `app` template, where `launch.sh` holds the start command.
 
 ## What you get
 
-Each non-static channel gets its own Postgres database. The platform makes that
-database when it makes the channel. Your container reads the connection details
-from an injected `DATABASE_URL`. A static channel has no database, so it gets no
-`DATABASE_URL`.
+Each environment of a project that runs code gets its own Postgres database.
+The platform makes that database when it makes the environment. Your container
+reads the connection details from an injected `DATABASE_URL`. An environment of
+a static project has no database, so it gets no `DATABASE_URL`.
 
 The container also carries `DATABASE_URL_READONLY`: the same database, a
 second role that can `SELECT` from every table in `public` by default and run no write.
@@ -44,7 +44,7 @@ create (`CREATE SCHEMA private`), which the read-only role cannot read
 until you grant it.
 
 Schema changes ship as ordinary alembic migrations, and they run at container
-start. The first boot of a new app applies every migration in order against
+start. The first boot of a new project applies every migration in order against
 an empty database. A later deploy applies only the migrations that are new.
 There is no manual step and no separate migration job.
 
@@ -60,7 +60,7 @@ own name.
 
 ## The files
 
-The app is `recipe-docker-pg`. This guide shows the five files of its data
+The project is `recipe-docker-pg`. This guide shows the five files of its data
 layer. [The Docker recipe](https://docs.xhostd.com/guides/recipes-docker)
 shows `Dockerfile`, `requirements.txt` and `app.py` in full. All eight files
 ship in one commit. The two guides divide the prose only, never the deploy.
@@ -79,7 +79,7 @@ two values:
 
 On a database with no pooler, the two values are equal.
 [What a transaction pooler changes](#what-a-transaction-pooler-changes)
-lists what breaks over `DATABASE_URL`. Your channel owns
+lists what breaks over `DATABASE_URL`. Your environment owns
 a whole database, and your data is in the standard `public` schema of
 that database. Your SQL therefore uses plain table names — `notes`, not
 `someschema.notes`.
@@ -207,9 +207,9 @@ the pool that uses `DATABASE_URL_DIRECT` at 10 connections or fewer,
 which every plan has room for.
 
 When your databases run on a database server of your own, all of your
-apps and channels share about 180 server sessions on it:
+projects and environments share about 180 server sessions on it:
 its `max_connections` of 200, less the sessions Postgres and the
-platform keep for themselves. A direct pool in each of many channels
+platform keep for themselves. A direct pool in each of many environments
 adds up toward that total. A pooled connection through `DATABASE_URL` holds
 no server session while it is idle.
 
@@ -279,8 +279,8 @@ from sqlalchemy import create_engine
 
 def _url() -> str:
     # Migrations dial the database server directly: DATABASE_URL can go
-    # through a transaction pooler, which drops session state. A channel
-    # whose database has no pooler gets the same value in both variables.
+    # through a transaction pooler, which drops session state. An
+    # environment whose database has no pooler gets the same value in both variables.
     url = os.environ.get("DATABASE_URL_DIRECT") or os.environ["DATABASE_URL"]
     return url.replace("postgresql://", "postgresql+psycopg://", 1)
 
@@ -346,7 +346,7 @@ def downgrade() -> None:
 ### migrations/versions/0001_create_notes.py
 
 This is the first migration. It creates the table from nothing. The database
-of each new channel starts in that empty state.
+of each new environment starts in that empty state.
 
 ```python
 """create notes
@@ -448,12 +448,12 @@ on the machine where you work, or where neither git transport can push.
 Both paths keep the same rule. **A push stores your code, but it does not
 deploy your code.** `deploy` is a separate and explicit call.
 [The Docker recipe](https://docs.xhostd.com/guides/recipes-docker) gives the
-full sequence step by step: `create_app`, your own token from
+full sequence step by step: `create_project`, your own token from
 `$XHOSTD_TOKEN`, the clone and the push, then `deploy`. This guide shows only the call that matters here:
 
 ```text
-deploy(app_name="recipe-docker-pg",
-       channel="prod",
+deploy(project="recipe-docker-pg",
+       environment="prod",
        ref="master")
 → {"deploy_id": "a6baf3fc-f573-40f7-82c6-e74912525228",
    "channel_id": "16df8282-8498-4567-a595-fe769090b8b6",
@@ -492,11 +492,11 @@ Seven lines of that deploy log tell you what the data layer did.
 ```
 
 **`channel snapshot marker recorded`** is automatic. Every non-static deploy
-records a snapshot of the channel's Postgres database *before* the new
+records a snapshot of the environment's Postgres database *before* the new
 container starts. The snapshot is thus the state immediately before that
 deploy's changes. The marker copies no data. It records a moment in the
 database's continuous backup, and a restore returns the database to that
-moment. On the app's first deploy, that moment holds an empty database.
+moment. On the project's first deploy, that moment holds an empty database.
 
 **The two `Running upgrade` lines** show the migrations at work. They run in
 revision order against that empty database: `-> 0001` creates the table, then
@@ -537,12 +537,12 @@ printed no upgrade line. Read a deploy log by that difference. The banner
 with a `Running upgrade` line means that the schema changed. The banner alone
 means that the schema did not change.
 
-`list_channel_snapshots` returns the snapshots newest first. This capture
+`list_snapshots` returns the snapshots newest first. This capture
 came some minutes after the second deploy, so it also holds a `nightly`
 snapshot that the platform took on its own schedule:
 
 ```text
-list_channel_snapshots(app_name="recipe-docker-pg", channel="prod")
+list_snapshots(project="recipe-docker-pg", environment="prod")
 → {
     "snapshot_id": "d13a318a-65cf-4144-87cb-02adbc16d451",
     "deploy_id": null,
@@ -575,7 +575,7 @@ list_channel_snapshots(app_name="recipe-docker-pg", channel="prod")
 Read the `deploy_id` on each `pre_deploy` snapshot. A snapshot is the state
 immediately **before** that deploy. The oldest snapshot holds the empty schema,
 from the point before the first deploy's migrations. Its `git_sha` is null,
-because no code ran on the channel before that deploy. The snapshot of the
+because no code ran on the environment before that deploy. The snapshot of the
 second deploy holds the table, which then existed and held the note. The
 `nightly` snapshot names no deploy. It holds the database as it was when the
 platform took it.
@@ -602,18 +602,18 @@ $ curl -sS -X POST https://recipe-docker-pg-docs.xhostd.app/notes \
 ```
 
 A restore of **`prod`** is a protected action. An agent credential gets 403
-`protected_action` until the app owner turns agent access on in the console,
+`protected_action` until the project owner turns agent access on in the console,
 and the refusal is the guard at work, not a fault. Ask the owner before you
 restore. A restore saves no snapshot of the state that it replaces, because
 the platform saves a snapshot before a deploy only. The rows that the restore
 overwrites are thus not in the snapshot list after it.
 
-Restore the channel to the snapshot from immediately before the second
+Restore the environment to the snapshot from immediately before the second
 deploy. That snapshot holds note 1 and not note 2.
 
 ```text
-restore_channel_snapshot(app_name="recipe-docker-pg",
-                         channel="prod",
+restore_snapshot(project="recipe-docker-pg",
+                         environment="prod",
                          snapshot_id="5f6aac2f-1852-482d-9aa5-40332376d0f6",
                          part="database")
 ```
@@ -630,11 +630,11 @@ writing, pass `during_restore="live"`; the restore then discards those
 writes. In every mode, a note added while the restore still waits to
 start is discarded too. xhostd's maintenance page answers HTTP 503, so an
 uptime monitor reports the app as down during the restore. To show your own
-page, deploy a static app first and pass its app and channel as
-`maintenance_app` and `maintenance_channel`.
+page, deploy a static project first and pass its project and environment
+as `maintenance_project` and `maintenance_environment`.
 
 The restore loads the snapshot into a new database on the database server,
-then switches the channel to it in a few seconds. A failed restore leaves the
+then switches the environment to it in a few seconds. A failed restore leaves the
 database unchanged, so it loses nothing. The same `DATABASE_URL` continues
 to work with no new deploy. Only the data changes: it is back at the state of
 the snapshot. After a restore to that snapshot, `GET /notes` returns note 1
@@ -648,8 +648,8 @@ the column's default. The same default fills the column for the rows already
 in the table when the migration runs. A migration without that default fails
 in exactly that case.
 
-A restore and the channel's deploys do not overlap. The restore cancels the
-deploys still queued on the channel and lists them as `cancelled_deploys`. A
+A restore and the environment's deploys do not overlap. The restore cancels
+the deploys still queued on the environment and lists them as `cancelled_deploys`. A
 deploy that already runs finishes first, and the restore waits for it. Until
 the restore ends, a new deploy answers `restore_in_flight`.
 
@@ -659,7 +659,7 @@ If you do not, the next container start applies the migration again.
 
 ## PostGIS
 
-Your channel's role installs PostGIS with plain SQL, with no superuser.
+Your environment's role installs PostGIS with plain SQL, with no superuser.
 Install the extension in the migration that first needs a geometry
 column, add the column, and add a GiST index on it in the same
 migration. The migration runs over `DATABASE_URL_DIRECT`, which the
@@ -717,7 +717,7 @@ health check. No line in the deploy log mentions the database. Read the
 container's own output, not the health-check line alone:
 
 ```text
-get_logs(app_name="...", channel="prod", source="runtime", command="tail -n 200 app.log")
+get_logs(project="...", environment="prod", source="runtime", command="tail -n 200 app.log")
 ```
 
 To correct it, name the driver in the URL at each point where you make an
@@ -778,7 +778,7 @@ column "done" of relation "notes" contains null values
 
 A `NOT NULL` column that you add to a table with rows fails, because Postgres
 has no value for those rows. The migration passes in development against an
-empty table. It fails at the first deploy to a channel with real data.
+empty table. It fails at the first deploy to an environment with real data.
 
 Add `server_default` in the same `op.add_column`, as `0002` does. If the
 value can have no default, use three migrations. Add the column as nullable,
@@ -805,7 +805,7 @@ xhost checks the session before it installs PostGIS, and a refused install
 leaves nothing behind. The message names the cause:
 
 - `extension "postgis" installation via pgextwlist is restricted to the
-  database owner`: the session is not your channel's write role. Run the
+  database owner`: the session is not your environment's write role. Run the
   migration over `DATABASE_URL_DIRECT`, not `DATABASE_URL_READONLY`.
 - `extension "postgis" must be installed in schema "postgis"`: remove the
   `SCHEMA` clause.
@@ -936,7 +936,7 @@ A migration tool avoids this failure.
 
 ### A grant to another role is refused
 
-Each channel's database has two roles of its own: the user in `DATABASE_URL`,
+Each environment's database has two roles of its own: the user in `DATABASE_URL`,
 `r_<32 hex characters>`, and the read-only user in `DATABASE_URL_READONLY`,
 the same name with `_ro` added. A database on xhost gives access only to
 those two roles, to `PUBLIC`, to any role whose name starts with `pg_`, and
@@ -949,8 +949,8 @@ DETAIL:  table public.orders names the role r_…, which is not one of this data
 HINT:  Grant to this database's own roles or to PUBLIC. See docs.xhostd.com/postgres-roles.
 ```
 
-Why: every other `r_…` role belongs to another channel, often another
-account's. Access you gave it would let that channel read or change your
+Why: every other `r_…` role belongs to another environment, often
+another account's. Access you gave it would let that environment read or change your
 data. Scheduled maintenance also copies your database together with its own
 two roles alone, so it could not keep such a grant.
 
@@ -961,8 +961,8 @@ statements inside a function or a `DO` block.
 
 To fix a refused statement, grant to one of the database's own roles, or to
 `PUBLIC`. Only the database's own roles can connect to it, so a grant to
-`PUBLIC` reaches no other account. To share data between two channels, yours
-included, have one of them expose it over HTTP.
+`PUBLIC` reaches no other account. To share data between two environments,
+yours included, have one of them expose it over HTTP.
 
 A dump from another database can carry `GRANT` lines that name that
 database's roles. Restore it with `--no-acl` and `--no-owner`, which skip
@@ -1006,7 +1006,7 @@ refuses UNLOGGED tables, and your role cannot drop or disable it.
 
 ### A transfer is refused because a database gives access to a role that is not its own
 
-Each channel's database has two roles of its own: the user in `DATABASE_URL`,
+Each environment's database has two roles of its own: the user in `DATABASE_URL`,
 `r_<32 hex characters>`, and the read-only user in `DATABASE_URL_READONLY`,
 the same name with `_ro` added. A project changes owner only while each of its
 databases gives access to no other role, and no other database gives access to
@@ -1018,8 +1018,9 @@ This project's database `ch_…` gives access to a role that is not its own: `GR
 ```
 
 The roles `PUBLIC`, any role whose name starts with `pg_`, `xhost_admin`, and
-`xhost_pooler_auth` are allowed. A grant between two of your own channels is a
-reference too, even inside one project. To share data between channels, have
+`xhost_pooler_auth` are allowed. A grant between two of your own environments is
+a reference too, even inside one project. To share data between environments,
+have
 one of them expose it over HTTP.
 
 Connect to the database the refusal names with its own `DATABASE_URL_DIRECT`,
@@ -1045,7 +1046,7 @@ ALTER POLICY my_policy ON public.orders TO public;
 
 An object that another role owns needs support. Only the object's current
 owner can run `ALTER TABLE public.orders OWNER TO r_this`, and Postgres also
-requires that owner to be a member of the new owning role. Another channel's
+requires that owner to be a member of the new owning role. Another environment's
 role is not a member of your database's role, so support gives the object back
 to the database's own role. When the refusal
 says another of your projects gives access to this
@@ -1056,8 +1057,8 @@ After the last revoke, offer the transfer again, or accept it again.
 
 ### 404 and 502 from the hostname mean different things
 
-A channel that exists but has no container to serve it returns **404** on its
-hostname. A channel with a container but no live server returns **502**. Both
+An environment that exists but has no container to serve it returns **404**
+on its hostname. An environment with a container but no live server returns **502**. Both
 codes help you. A 404 tells you that the deploy did not reach `traffic switched
 to the new container`. A 502 tells you that the deploy reached it, but the
 container does not serve. For a

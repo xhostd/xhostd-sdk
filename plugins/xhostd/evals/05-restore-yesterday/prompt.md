@@ -1,5 +1,5 @@
 ---
-description: Should trigger. The user asks to roll an app's database back to a snapshot.
+description: Should trigger. The user asks to roll a project's database back to a snapshot.
 tags: [trigger, should-trigger]
 max_turns: 20
 timeout_seconds: 450

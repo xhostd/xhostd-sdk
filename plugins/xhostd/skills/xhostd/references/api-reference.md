@@ -2,6 +2,8 @@
 
 This is the underlying HTTP API that the MCP tools wrap. An agent's day-to-day work goes through the xhostd MCP tools, which an OAuth session or a registered agent's token authenticates. This reference is for deep dives, debugging, or direct programmatic access.
 
+**The HTTP API keeps the earlier names.** Its paths, fields, and token scopes call a project an `app` and an environment a `channel`, as in `/apps/{app_id}/channels/{channel_id}` and `channel_id`. This reference uses those names because the API does. The MCP tools take the new names: `project`, `environment`, and `service`.
+
 Base URL: `https://api.xhostd.com`
 
 All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send the header on curl's stdin, `printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl --header @- ...`; never write the value into a command. Any local user can read a process's argv with `ps`, and `printf` is a shell builtin that starts no process, so the token reaches no argv. With the header on stdin, a request body comes from an argument or a file, never from stdin. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credential_request` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
@@ -23,6 +25,12 @@ All error responses use the envelope: `{"error": {"code": "<code>", "message": "
 - GET /apps/{app_id}/channels/{channel_id}
 - PATCH /apps/{app_id}/channels/{channel_id}
 - DELETE /apps/{app_id}/channels/{channel_id}
+- GET /apps/{app_id}/services
+- POST /apps/{app_id}/services
+- PATCH /apps/{app_id}/services/{service_id}
+- DELETE /apps/{app_id}/services/{service_id}
+- PATCH /apps/{app_id}/channels/{channel_id}/services/{service_id}
+- POST /apps/{app_id}/channels/{channel_id}/restart
 - POST /apps/{app_id}/channels/{channel_id}/deploy
 - POST /apps/{app_id}/channels/{channel_id}/rewind
 - GET /apps/{app_id}/channels/{channel_id}/logs?deploy={deploy_id}
@@ -110,6 +118,20 @@ List all apps owned by the authenticated user.
           "env_pending": false
         }
       ],
+      "services": [
+        {
+          "id": "uuid",
+          "name": "web",
+          "position": 0,
+          "command": null,
+          "directory": "",
+          "template": "static",
+          "public": true,
+          "memory_mb": null,
+          "rollout": "overlap",
+          "created_at": "2025-01-15T10:30:00Z"
+        }
+      ],
       "owner_username": "alice",
       "role": "owner"
     }
@@ -166,6 +188,20 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
       "status": "provisioning",
       "pending_deploy": null,
       "env_pending": false
+    }
+  ],
+  "services": [
+    {
+      "id": "uuid",
+      "name": "web",
+      "position": 0,
+      "command": null,
+      "directory": "",
+      "template": "static",
+      "public": true,
+      "memory_mb": null,
+      "rollout": "overlap",
+      "created_at": "2025-01-15T10:30:00Z"
     }
   ],
   "owner_username": "alice",
@@ -292,7 +328,7 @@ Get details of a single channel.
 
 ## PATCH /apps/{app_id}/channels/{channel_id}
 
-Change the branch a channel is bound to, whether it follows that branch, or both, without deploying. The MCP tool is `update_channel`. The branch does not have to exist in the repo yet. The project's activity feed records a `channel.update` event per changed field; a PATCH to the current value records nothing.
+Change the branch a channel is bound to, whether it follows that branch, or both, without deploying. The MCP tool is `update_environment`. The branch does not have to exist in the repo yet. The project's activity feed records a `channel.update` event per changed field; a PATCH to the current value records nothing.
 
 **Required scope:** `channel:*`, and `deploy:*` as well to set `follows_branch` to `true`
 
@@ -332,6 +368,98 @@ Delete a channel. Cannot delete the `prod` channel.
 
 ---
 
+## GET /apps/{app_id}/services
+
+List the services of a project, by position. A service is one process of a project, built from one directory of the repository with one template. Each project starts with the public service `web`, which holds the project's addresses. Each service that is turned on in a channel uses one slot of the plan's limit. The MCP tools read services through `get_project`.
+
+**Required scope:** `channel:*`
+
+**Response (200):** `{"services": [Service]}`, where a Service is `{id, name, position, command, directory, template, public, memory_mb, rollout, created_at}`, as in the `services` list of `GET /apps`.
+
+---
+
+## POST /apps/{app_id}/services
+
+Create a service, turned on in the listed channels, or in every channel. Nothing starts: the service starts at each channel's next deploy. The MCP tool is `create_service`.
+
+**Required scope:** `channel:*`
+
+**Request body:**
+```json
+{
+  "name": "worker",
+  "command": "python worker.py"
+}
+```
+
+- `name` (string, required) — 1 to 16 lowercase letters, digits, or hyphens, unique in the project and not a channel name. `prod`, `localhost`, a name that starts with `xhost-`, and a 12-character hexadecimal name are reserved.
+- `command` (string, optional) — The process to run, on one line. Omitted, the template's default. A `static` service runs none.
+- `directory` (string, optional) — The repository directory to build from. Default `""`, the repository root. A `static` service is served from the root, and a project with a `static` service keeps every service at the root.
+- `template` (string, optional) — `static`, `app`, or `docker`. Omitted, the project's template. A project whose public service is `static` holds `static` services only.
+- `memory_mb` (integer, optional) — The service's own memory limit, from 64 to the plan's memory.
+- `rollout` (string, optional) — `replace` (the default for a service that is not public) or `overlap`.
+- `channel_ids` (string[], optional) — The channels to turn the service on in. Omitted, every channel.
+
+**Response (200):** `{"service": Service, "notice": "The service starts at each environment's next deploy."}`. The `notice` can add a sentence on shared memory: relay it.
+
+**Errors:**
+- `bad_request` (400) — a name, setting, or source rule refused the service, or an unknown channel id
+- `plan_limit_exceeded` (402) — the service needs more slots than the plan's limit leaves free; the message states the count
+- `conflict` (409) — a service of the name exists, a second public service, the project changed owner during the call, or the account is under scheduled maintenance
+
+---
+
+## PATCH /apps/{app_id}/services/{service_id}
+
+Change `command`, `directory`, `memory_mb`, or `rollout`. An omitted field stays as it is; `null` resets `command` and `memory_mb`. A change reaches a running service at its next deploy or restart, and a `directory` change at its next deploy. The reply has the shape of the create's, and its `notice` says when the change applies. The MCP tool is `update_service`.
+
+**Required scope:** `channel:*`
+
+**Errors:**
+- `bad_request` (400) — nothing to update, `null` for `directory` or `rollout`, or a refused setting, such as a directory that another service built from with another template
+- `not_found` (404) — service not found
+
+---
+
+## DELETE /apps/{app_id}/services/{service_id}
+
+Delete a service and stop its containers. Each channel keeps its database. Returns 204 No Content. The MCP tool is `delete_service`.
+
+**Required scope:** `channel:*`
+
+**Errors:**
+- `not_found` (404) — service not found
+- `conflict` (409) — the public service, which holds the project's addresses, or the account is under scheduled maintenance
+
+---
+
+## PATCH /apps/{app_id}/channels/{channel_id}/services/{service_id}
+
+Turn a service on or off in one channel, with the body `{"enabled": false}` or `{"enabled": true}`. Off stops the container at once and frees its slot. On uses a slot and starts the service at the channel's next deploy or restart. The public service stays on. The MCP tool is `update_service` with `environment` and `enabled`.
+
+**Required scope:** `channel:*`
+
+**Response (200):** `{service_id, name, public, enabled, status, current_sha, env_pending, notice}`: the entry of the channel's `services` list, and `notice`. A turn-on that changes `enabled` sets `notice` to "The service starts at the environment's next deploy or restart. Run restart with this service to start it now." A turn-off and a call that changes nothing answer `null`.
+
+**Errors:**
+- `plan_limit_exceeded` (402) — a turn-on needs a slot that the plan's limit does not leave
+- `not_found` (404) — service or channel not found
+- `conflict` (409) — a turn-off of the public service, the project changed owner during the call, or the account is under scheduled maintenance
+
+---
+
+## POST /apps/{app_id}/channels/{channel_id}/restart
+
+Restart services on the versions they run, with no build. Poll the returned deploy as for a deploy. The MCP tool is `restart`.
+
+**Required scope:** `deploy:*`
+
+**Request body:** `{"services": ["worker"]}`, optional. Omitted or null, every service that is turned on in the channel restarts.
+
+**Response (200):** `{deploy_id, channel_id, status}`, as for a deploy.
+
+---
+
 ## POST /apps/{app_id}/channels/{channel_id}/deploy
 
 Enqueue a deploy of a branch or a commit to a channel.
@@ -347,6 +475,7 @@ Enqueue a deploy of a branch or a commit to a channel.
 
 - `ref` (string, optional) — A branch name (`main` or `refs/heads/main`). xhostd deploys its current HEAD and **binds the channel to that branch**, in the same transaction as the enqueue. A later build or boot failure keeps the new binding.
 - `sha` (string, optional) — A 40-character hex SHA, or a branch name matching `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. It deploys once and never changes the binding.
+- `services` (string[], optional) — The names of the services to deploy. Omitted or null, every service that is turned on in the channel deploys. A value that is not a list of strings answers 422.
 
 If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither, xhostd deploys the current HEAD of the channel's bound branch. On an app with a connected source repository, the deploy fetches from it first.
 
@@ -657,7 +786,7 @@ Set (upsert) an environment variable or secret on an app.
 **Response (200):**
 ```json
 {
-  "notice": "The new value of MY_VAR reaches a channel's container at that channel's next deploy. A running container keeps the value it started with. These channels run a container that is now behind the stored environment: prod."
+  "notice": "The new value of MY_VAR reaches an environment's container at that environment's next deploy. A running container keeps the value it started with. These environments run a container that is now behind the stored variables: prod."
 }
 ```
 
@@ -1021,7 +1150,7 @@ Attach a custom domain to a channel (max 5 per channel; domains are globally uni
   "dns_records": {
     "txt_host": "_xhost.myapp.com",
     "txt_value": "xhost-verify-...",
-    "cname_target": "my-app-alice.xhostd.app",
+    "cname_target": "cname.xhostd.app",
     "a_values": ["198.51.100.7"]
   },
   "created_at": "2025-01-16T10:30:00Z",
@@ -1030,7 +1159,7 @@ Attach a custom domain to a channel (max 5 per channel; domains are globally uni
 }
 ```
 
-- `dns_records` — Create the TXT record with `txt_value`, plus a routing record: `CNAME` → `cname_target` for subdomains, or `A` → `a_values` at an apex. `a_values` may be empty if platform IP resolution transiently failed.
+- `dns_records` — Create the TXT record with `txt_value`, plus a routing record: `CNAME` → `cname_target` for subdomains, or `A` → `a_values` at an apex. `a_values` may be empty if platform IP resolution transiently failed. `dns_records.cname_target` is the platform's generic target. A CNAME to the channel's own hostname also verifies.
 
 **Errors:**
 - `bad_request` (400) — `invalid domain: <reason>` (`is_ip_address`, `invalid_idna`, `too_long`, `invalid_label`, `platform_domain_forbidden`, `needs_dot`) or `domain_limit_reached`

@@ -13,7 +13,7 @@
 ## What you get
 
 A FastAPI service stores uploaded files in the S3-compatible object store.
-xhostd provisions that store for the channel. `POST /files` uploads one file.
+xhostd provisions that store for the environment. `POST /files` uploads one file.
 `GET /files` lists the files. `GET /files/{key}` downloads one file.
 `DELETE /files/{key}` removes one file. You create no bucket, you configure no
 credentials and you set no flag. The platform injects five `S3_*` variables
@@ -21,7 +21,7 @@ into the container, and boto3 uses them unchanged.
 
 The two reads are public. The two writes need
 `Authorization: Bearer <token>`. The app compares that token with a
-`WRITE_TOKEN` that you set yourself as a secret: `set_secret(app_name,
+`WRITE_TOKEN` that you set yourself as a secret: `set_secret(project,
 key="WRITE_TOKEN")` returns the request that uploads it from a file.
 
 The split between the reads and the writes is necessary. An app on a public
@@ -44,17 +44,17 @@ This guide adds only the storage layer.
 
 ## The five injected variables
 
-Every channel has its own object store. The platform provisions that store
-when it creates the channel. When the store becomes `ready`, each deploy of
-the channel injects these five variables into the container. Before the store
+Every environment has its own object store. The platform provisions that
+store when it creates the environment. When the store becomes `ready`, each
+deploy of the environment injects these five variables into the container. Before the store
 is `ready`, no deploy injects them. A store that is not yet `ready` does not
 stop a deploy: the deploy continues, but the variables are absent.
 
 | Variable | What it holds |
 |---|---|
 | `S3_ENDPOINT` | This cell's own S3 gateway, an `http://<overlay-ip>:6533` URL on the private WireGuard overlay |
-| `S3_BUCKET` | The channel's virtual bucket name — the first label of its hostname, here `recipe-blob-docs` |
-| `S3_ACCESS_KEY_ID` | The channel's own scoped key id |
+| `S3_BUCKET` | The environment's virtual bucket name — the first label of its hostname, here `recipe-blob-docs` |
+| `S3_ACCESS_KEY_ID` | The environment's own scoped key id |
 | `S3_SECRET_ACCESS_KEY` | Its secret |
 | `S3_REGION` | `us-east-1`, a neutral placeholder |
 
@@ -76,30 +76,30 @@ store them, so this setting skips the wasted work. It is never required.
 address. Nothing on your laptop can route to it.
 
 **Pass `S3_BUCKET` exactly as the platform gives it to you.** The gateway
-compares the bucket name in every request with the channel's own name. Any
+compares the bucket name in every request with the environment's own name. Any
 other name gets a 404 `NoSuchBucket`, on a read, a write and a copy alike.
 Read the value from the environment. Do not hardcode it, and do not reuse
-another channel's name.
+another environment's name.
 
 **`S3_REGION` is a placeholder.** The real upstream region never appears in
 your container. Pass the value, because the SDK needs one. Give it no other
 meaning.
 
 **Keys are plain and have no prefix.** Upstream, the gateway puts every object
-under this channel's own private key prefix. The key `notes.txt` in your code
-is `notes.txt` in every list. It cannot collide with another channel's object
-of the same name, and it cannot reach one. The gateway refuses access between
-channels; this is not only a convention. Keep out of one name space:
+under this environment's own private key prefix. The key `notes.txt` in your code
+is `notes.txt` in every list. It cannot collide with another environment's
+object of the same name, and it cannot reach one. The gateway refuses access
+between environments; this is not only a convention. Keep out of one name space:
 `.xhost/`. The platform keeps `.xhost/` for its own deploy snapshot markers.
 The gateway refuses a key under `.xhost/` with a 403, and removes the markers
 from your lists.
 
-**You enable nothing.** The app record shows a flag named
+**You enable nothing.** The project record shows a flag named
 `external_blob_access_enabled`. That flag is **not** part of this recipe. It
 controls whether S3 tools *outside* the platform can reach the store through
 the public gateway. Examples are `aws s3` on your laptop, rclone, and an SDK
-on another host. The flag is a protected action, and it is `false` for the app
-in this recipe. A person sets it in the console; the platform answers a `403
+on another host. The flag is a protected action, and it is `false` for the
+project in this recipe. A person sets it in the console; the platform answers a `403
 protected_action` error to an agent. Your container's own access does not
 depend on it.
 
@@ -119,15 +119,15 @@ from botocore.exceptions import ClientError
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 
-# uvicorn's logger, so these lines show up in the channel's logs.
+# uvicorn's logger, so these lines show up in the environment's logs.
 logger = logging.getLogger("uvicorn.error")
 
 BUCKET = os.environ["S3_BUCKET"]
 
-# Your own secret, set with set_env. Reads stay public; writes carry it.
+# Your own secret, set with set_secret. Reads stay public; writes carry it.
 WRITE_TOKEN = os.environ.get("WRITE_TOKEN", "")
 
-# The platform injects all five S3_* variables once the channel's blob store
+# The platform injects all five S3_* variables once the environment's blob store
 # is ready. S3_ENDPOINT is this cell's own gateway on the private overlay
 # network, so plain http and stock SigV4 are correct here — no botocore
 # Config, no TLS options.
@@ -179,8 +179,8 @@ def root():
 
 
 # Keys are plain and unprefixed: the gateway files every object under this
-# channel's own private prefix, so "notes.txt" here can never collide with or
-# reach another channel's objects. The one name to avoid is anything under
+# environment's own private prefix, so "notes.txt" here can never collide with
+# or reach another environment's objects. The one name to avoid is anything under
 # ".xhost/", which is reserved for the platform.
 @app.post("/files", dependencies=[Depends(require_write_token)])
 def upload(file: UploadFile):
@@ -226,7 +226,7 @@ def download(key: str):
     except ClientError as exc:
         # A missing object can come back as AccessDenied, not NoSuchKey:
         # the store will not confirm a key is absent to a caller scoped to one
-        # prefix. Every key this app can name is inside its own channel's
+        # prefix. Every key this app can name is inside its own environment's
         # prefix, so both codes mean the same thing here — no such file.
         if exc.response["Error"]["Code"] in ("NoSuchKey", "AccessDenied"):
             raise HTTPException(
@@ -260,13 +260,13 @@ def delete(key: str):
 Five details in that file are important.
 
 **`BUCKET = os.environ["S3_BUCKET"]` runs at import.** This is a deliberate
-trade-off, and it has a good result and a bad result. A channel whose blob
+trade-off, and it has a good result and a bad result. An environment whose blob
 store is not `ready` has no `S3_*` variable in its environment. Then this line
 raises `KeyError`, and the process does not start. The deploy fails on the
 health check. The missing storage thus shows at deploy time. It does not show
 later, as an app that answers `/` with a 200 and fails every `POST /files`
 with a 500. But the deploy still fails. If you
-want a channel that starts without storage, read the variable in the handler,
+want an environment that starts without storage, read the variable in the handler,
 and answer 503 when the variable is absent.
 
 **Every route is a sync `def`, not `async def`.** boto3 blocks the thread. A
@@ -337,22 +337,22 @@ exec uvicorn app:app --host 0.0.0.0 --port "$XHOSTD_HTTP_PORT"
 
 ## The deploy
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Every project owns a git repo. **With git, push the code, then call `deploy`.**
 A push sends only the diff. Use `commit_files` where git is not available on
 the machine that you work on, or where neither git transport can push. **A push stores your code; it
 does not deploy the code.**
 `deploy` is a separate call, so you name the commit that goes live.
 
-There are five steps: the four steps that every app takes, and the write
-token. If this is your first app, the
+There are five steps: the four steps that every project takes, and the write
+token. If this is your first project, the
 [static site recipe](https://docs.xhostd.com/guides/recipes-static) explains
 the four common steps in detail.
 
-**1. Create the app.** This call provisions the `prod` channel, its hostname,
-its git repo and its object store.
+**1. Create the project.** This call provisions the `prod` environment, its
+hostname, its git repo, and its object store.
 
 ```text
-create_app(name="recipe-blob", template="app")
+create_project(name="recipe-blob", template="app")
 → {"name": "recipe-blob",
    "owner_username": "docs",
    "role": "owner",
@@ -368,7 +368,8 @@ create_app(name="recipe-blob", template="app")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`.
+Later calls take the project's name and the environment's name, such as
+`prod`.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
 platform API. Use your own
@@ -382,7 +383,7 @@ commands.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -433,8 +434,8 @@ never lands in `.git/config`, in your shell history, or in the output of
 `set_secret` for the request that uploads it:
 
 ```text
-set_secret(app_name="recipe-blob", key="WRITE_TOKEN")
-→ {"key": "WRITE_TOKEN", "scope": "app", "method": "PUT",
+set_secret(project="recipe-blob", key="WRITE_TOKEN")
+→ {"key": "WRITE_TOKEN", "scope": "project", "method": "PUT",
    "url": "https://api.xhostd.com/apps/efb0f79a-ab98-4bb2-ad8a-40b27ab3f7fc/env/WRITE_TOKEN?kind=secret",
    "content_type": "application/octet-stream", ...}
 ```
@@ -456,12 +457,12 @@ $ printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl -sS --fail-with-bod
 
 `set_secret` is important. The token goes from the file straight to xhostd,
 so it never passes through a tool call or the conversation. MCP never gives a
-secret value back: `list_env` returns the key, its kind, its scope and its
+secret value back: `list_variables` returns the key, its kind, its scope and its
 change time, but a null value. To read the value, use the click-to-reveal
 control in the web console, or the HTTP API call
 `GET /apps/{app_id}/env/{key}/value`. The platform audits every reveal. A
-plain variable from `set_env` is different: its value passes through the
-conversation, and `list_env` returns it as cleartext. That is the wrong place
+plain variable from `set_variable` is different: its value passes through the
+conversation, and `list_variables` returns it as cleartext. That is the wrong place
 for a credential that permits writes to your object store. Your own copy of
 the token stays in `~/.xhostd/recipe-blob-write-token`.
 
@@ -474,8 +475,8 @@ app refuses every write until you deploy again.
 **5. Deploy the branch.**
 
 ```text
-deploy(app_name="recipe-blob",
-       channel="prod",
+deploy(project="recipe-blob",
+       environment="prod",
        ref="master")
 → {"deploy_id": "1908d546-e226-4442-ab01-def038eb843d",
    "channel_id": "21eb795a-7071-407b-8cf0-0e4f940af3c8",
@@ -496,7 +497,7 @@ its reply states the outcome, and you poll while the status is `queued` or
 This reply comes from the deploy above,
 `1908d546-e226-4442-ab01-def038eb843d`. The status header comes first, then
 the log. The transcript does not include the buildkit lines that teach
-nothing. Every deploy of the channel writes the same set of lines.
+nothing. Every deploy of the environment writes the same set of lines.
 
 ```text
 deploy 1908d546 — success (sha ad52964eb3ef)
@@ -522,18 +523,18 @@ started: 2026-10-04T06:11:31.517476Z   finished: 2026-10-04T06:11:44.413179Z
 [2026-10-04T06:11:44+00:00] deploy success
 ```
 
-Two of those lines concern the channel's object store.
+Two of those lines concern the environment's object store.
 
 **`blob snapshot saved: ts=...`.** Before your new container replaces the old
-container, the platform marks a moment in the channel's object store. It does
-the same for the channel's Postgres schema. The platform writes one marker
+container, the platform marks a moment in the environment's object store. It
+does the same for the environment's Postgres schema. The platform writes one marker
 object, not a copy. The store keeps each earlier version of an object for 120
 days, so a timestamp is enough to return every object to its state at that
 moment, for a snapshot up to 30 days old. You do not
 request the marker, and you cannot omit it.
 
 **`blob record pushed to cell gateway`.** This line explains why your key pair
-works. The platform gives the channel and its scoped upstream credential to
+works. The platform gives the environment and its scoped upstream credential to
 the cell-local gateway. It does this before the container that uses them
 starts. If a deploy reaches `health_check` without this line, check the S3
 calls from the container first.
@@ -544,7 +545,7 @@ standard image-size report: only the layers that you add on the warm
 
 ### The curl
 
-The transcript below shows the full sequence against the live channel. It
+The transcript below shows the full sequence against the live environment. It
 shows the public reads, the two conditions that refuse a write, and the two
 writes that carry the token. `$WRITE_TOKEN` holds the value from step 4, read
 from its file with `WRITE_TOKEN="$(cat ~/.xhostd/recipe-blob-write-token)"`.
@@ -614,7 +615,7 @@ tells an anonymous caller which part of the request was correct. `GET /` is
 public for a second reason: the deploy's health check probes that route.
 
 **The key in that list is `notes.txt`, with no prefix in front of it.** The
-channel prefix exists upstream, and the gateway applies it on every call. The
+environment's prefix exists upstream, and the gateway applies it on every call. The
 prefix is never part of the name that your code handles.
 
 **The app checks the last two calls itself; the store does not.** A key that
@@ -622,7 +623,7 @@ is absent gives a 404. `_checked_key` refuses a name that points outside the
 prefix, and answers 400 before the app calls boto3.
 
 **The transcript omits one path on purpose: the 503.** To capture that path,
-the app must run without a `WRITE_TOKEN`. This channel is a public demo, and a
+the app must run without a `WRITE_TOKEN`. This environment is a public demo, and a
 deploy without a write token puts the demo in the exact state that the token
 prevents. Thus this guide describes the behaviour, and does not capture it.
 Without a token in the container, `POST /files` and `DELETE /files/{key}`
@@ -632,7 +633,7 @@ continue to work. The list of failure modes below tells you what to do.
 
 ## Object versions, deletes and your usage number
 
-Every channel's store keeps all versions of an object. This behaviour is S3
+Every environment's store keeps all versions of an object. This behaviour is S3
 object versioning, and you cannot turn it off. Two results follow, and both
 surprise people.
 
@@ -651,7 +652,7 @@ that was current at that moment, and writes that version again as the new
 head. A restore only adds versions. Thus a restore cannot destroy another
 snapshot, and you can undo a restore.
 
-The usage number in `get_stats` with `view="object_storage"` and on the channel stats page counts
+The usage number in `get_stats` with `view="object_storage"` and on the environment's stats page counts
 **live bytes only**. Live bytes are the latest version of each key that has no
 delete marker. A noncurrent version and a key with a delete marker do not
 count against your plan's quota. Thus a delete does free space, although the
@@ -670,7 +671,8 @@ that does not exist — `GET /files/nope.txt` — misses that branch. The reques
 then goes to the generic branch, and the app answers **502**, not 404.
 
 The cause is the isolation guarantee, and the guarantee is correct. Your
-channel's upstream credential has a scope: your channel's own key prefix. The
+environment's upstream credential has a scope: your environment's own key
+prefix. The
 storage provider does not confirm to such a caller that an object is *absent*.
 The answer "no such key" is itself information about a name space that the
 caller has no permission to see. Thus the provider answers `AccessDenied`. The
@@ -678,7 +680,7 @@ gateway sends the upstream status and body on without a change, so boto3
 receives `AccessDenied`.
 
 Your app has no real ambiguity. Every key that your code can name is inside
-your own channel's prefix. Thus an `AccessDenied` on a GET has one meaning
+your own environment's prefix. Thus an `AccessDenied` on a GET has one meaning
 only: there is no such object. Treat both codes as 404. The `download` route
 does this:
 
@@ -699,8 +701,8 @@ runtime log.
 
 A `507 Insufficient Storage` from the gateway means that the PUT goes past
 your plan's blob quota. The quota is per user. It is the sum over every
-channel of every app that you own. Thus one channel can cause a 507 on another
-channel.
+environment of every project that you own. Thus one environment can cause a 507
+on another environment.
 
 Delete the objects that you do not need. Then send the PUT again. The new
 space appears about one minute later, because the gateway computes the usage
@@ -719,7 +721,7 @@ if exc.response["ResponseMetadata"]["HTTPStatusCode"] == 507:
 
 ### `KeyError: 'S3_BUCKET'` at startup
 
-The channel's blob store was not `ready` at the time of the deploy. Thus the
+The environment's blob store was not `ready` at the time of the deploy. Thus the
 platform injected no `S3_*` variable, and `os.environ["S3_BUCKET"]` at module
 level raised the error. The container exits immediately. The health check
 finds nothing on the port. The deploy then fails on a timeout, and the runtime
@@ -738,10 +740,10 @@ compare, the only safe answer is a refusal. The reads still work. Thus the
 deploy passed, and the first upload showed you the fault.
 
 Set the value with the upload request that
-`set_secret(app_name, key="WRITE_TOKEN")` returns, as in step 4. Then deploy
-the channel again. A change to the environment reaches the container at the next
-deploy only. Thus a change against a live channel does nothing until you
-deploy that channel again.
+`set_secret(project, key="WRITE_TOKEN")` returns, as in step 4. Then deploy
+the environment again. A changed variable reaches the container at the next
+deploy only. Thus a change against a live environment does nothing until you
+deploy that environment again.
 
 ### A write answers 401 `Invalid write token.`
 
@@ -755,7 +757,7 @@ tells an anonymous caller which part of the request was correct.
 The 503 above and this 401 are different codes on purpose. The 503 means that
 the app has no write token. The 401 means that *your* request has no correct
 credential. If you are sure that you sent the correct value, confirm the value
-itself. `list_env` never returns a secret. Thus you cannot recover a lost
+itself. `list_variables` never returns a secret. Thus you cannot recover a lost
 token; you upload a new one with the request that `set_secret` returns.
 
 ### You added a botocore `Config`
@@ -774,7 +776,7 @@ required.
 
 `external_blob_access_enabled` is not the control that makes your app's
 storage work. A change to it repairs no fault inside the container. It
-controls whether the public S3 gateway gives your channel's credentials to a
+controls whether the public S3 gateway gives your environment's credentials to a
 client *outside* the platform. It is a protected action: a person sets it in
 the console, and the platform answers a `403 protected_action` error to an
 agent. It changes nothing on the injected `S3_ENDPOINT` path that your

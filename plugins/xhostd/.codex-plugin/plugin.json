@@ -1,7 +1,7 @@
 {
   "name": "xhostd",
-  "version": "0.77.1",
-  "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create apps, push code, deploy previews or production, inspect status, and manage channels, environment, storage, and domains.",
+  "version": "0.80.0",
+  "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create projects, push code, deploy previews or production, inspect status, and manage environments, services, variables, storage, and domains.",
   "author": {
     "name": "xhostd",
     "url": "https://xhostd.com"
@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "xhostd",
     "shortDescription": "Deploy apps from your agent",
-    "longDescription": "Use xhostd from ChatGPT or Codex to create apps, write and push code, deploy previews or production to HTTPS URLs, read deploy and runtime logs, and manage channels, environment variables, secrets, database snapshots, and custom domains through an OAuth-authenticated MCP server. It serves developers, and anyone who wants a site or an app online without running a server. Limitations: in a client with no shell, code reaches an app as file commits, with no git push; a secret's value is entered in the xhostd console or uploaded from a shell, never in the chat; and plan changes, payments, member invitations, and git host connections happen in the xhostd console, not through the plugin.",
+    "longDescription": "Use xhostd from ChatGPT or Codex to create projects, write and push code, deploy previews or production to HTTPS URLs, run a web process and a worker as services of one project, read deploy and runtime logs, and manage environments, variables, secrets, database snapshots, and custom domains through an OAuth-authenticated MCP server. It serves developers, and anyone who wants a site or an app online without running a server. Limitations: in a client with no shell, code reaches a project as file commits, with no git push; a secret's value is entered in the xhostd console or uploaded from a shell, never in the chat; and plan changes, payments, member invitations, and git host connections happen in the xhostd console, not through the plugin.",
     "developerName": "xhostd",
     "category": "Developer Tools",
     "capabilities": [
@@ -40,7 +40,7 @@
     "composerIcon": "./assets/icon.png",
     "defaultPrompt": [
       "Create a one-page site on xhostd and put it online",
-      "Show my xhostd apps and their live URLs",
+      "Show my xhostd projects and their live URLs",
       "Why did my latest xhostd deploy fail?"
     ]
   },
@@ -50,34 +50,34 @@
         "test_cases": {
           "positive": [
             {
-              "description": "The user asks for the live URL of an existing app.",
-              "prompt": "List my xhostd apps and give me the live URL of review-site.",
-              "tools_triggered": "list_apps",
-              "expected_behavior": "Names review-site and gives its HTTPS hostname, read from the channel object."
+              "description": "The user asks for the live URL of an existing project.",
+              "prompt": "List my xhostd projects and give me the live URL of review-site.",
+              "tools_triggered": "list_projects",
+              "expected_behavior": "Names review-site and gives its HTTPS hostname, read from the environment object."
             },
             {
               "description": "The user creates a new static site and puts it online.",
-              "prompt": "Using xhostd, create a static app called hello-review with a one-page site that says Hello, and put it online.",
-              "tools_triggered": "create_app, commit_files, deploy, get_logs",
-              "expected_behavior": "Creates the app, or reuses hello-review when it already exists from an earlier run. Commits index.html with commit_files, deploys the returned sha, and polls get_logs until the status is success. Returns the URL."
+              "prompt": "Using xhostd, create a static project called hello-review with a one-page site that says Hello, and put it online.",
+              "tools_triggered": "create_project, commit_files, deploy, get_logs",
+              "expected_behavior": "Creates the project, or reuses hello-review when it already exists from an earlier run. Commits index.html with commit_files, deploys the returned sha, and polls get_logs until the status is success. Returns the URL."
             },
             {
-              "description": "The user edits a page of an existing app and redeploys it.",
+              "description": "The user edits a page of an existing project and redeploys it.",
               "prompt": "On xhostd, add a line with today's date under the heading of review-site's home page, and redeploy it.",
               "tools_triggered": "read_source_file, commit_files, deploy, get_logs",
               "expected_behavior": "Reads the page, adds the date line under the heading with commit_files edits, deploys the commit, and confirms that the deploy succeeded."
             },
             {
-              "description": "The user adds a secret to an app without sharing its value in the chat.",
+              "description": "The user adds a secret to a project without sharing its value in the chat.",
               "prompt": "On xhostd, add a secret named API_KEY to review-site.",
               "tools_triggered": "set_secret",
               "expected_behavior": "Never asks for the value in the chat. Gives the console link with the key filled in, or, in a client with a shell, the upload command that reads the value from a file."
             },
             {
-              "description": "The user connects a custom domain to an app.",
+              "description": "The user connects a custom domain to a project.",
               "prompt": "On xhostd, connect the domain review-site.lifshitz.io to review-site.",
               "tools_triggered": "add_custom_domain",
-              "expected_behavior": "Attaches the domain to review-site's prod channel; the domain is already attached, so the call changes nothing. Relays the domain's status and DNS records word for word."
+              "expected_behavior": "Attaches the domain to review-site's prod environment; the domain is already attached, so the call changes nothing. Relays the domain's status and DNS records word for word."
             }
           ],
           "negative": [
@@ -102,7 +102,7 @@
         "commerce": false
       },
       "publication": {
-        "release_notes": "xhostd 0.77.1 for ChatGPT and Codex: create apps, commit code, deploy to HTTPS URLs, read logs, and manage environment variables, secrets, and custom domains. What changed in 0.77.1: the README's install section links to each client's own instructions for adding a plugin marketplace or installing a plugin."
+        "release_notes": "xhostd 0.80.0 for ChatGPT and Codex: create projects, commit code, deploy to HTTPS URLs, read logs, and manage variables, secrets, and custom domains. What changed in 0.80.0: an app is now a project, a channel is an environment, and an env var is a variable, and each tool takes the new name, such as list_projects, create_project, update_environment, and set_variable; a project can run several services, such as a web process and a worker, with create_service, update_service, delete_service, and restart; update_service can rename a service, and each old address keeps working for 30 days; rename_database and rename_bucket set the label that names a database or a bucket in listings; XHOSTD_DOMAINS also lists each environment's full address; the guides describe services and the new addresses of a transferred project; the docs name cname.xhostd.app as the CNAME value of a custom domain; and every earlier tool name and argument name still runs for now and is deprecated. Error details and deploy log lines still use the earlier names app and channel."
       }
     }
   }

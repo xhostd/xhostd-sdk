@@ -2,10 +2,11 @@
 
 An app is slow, or it answers with an error, or the deploy log is clean but
 the URL is not correct. One tool answers all three questions. Call
-`get_app_health(app_name, channel)`. It reads the resources of the account,
-the container of the channel, the recent builds, the channel database and how
-long the channel took to answer its recent requests, in one call. It then
-gives you a diagnosis and, with each cause, the action for that cause.
+`get_health(project, environment)`. It reads the resources of the account,
+the containers of the environment and the state of each service, the recent
+builds, the environment's database, and how long the environment took to
+answer its recent requests, in one call. It then gives you a diagnosis and,
+with each cause, the action for that cause.
 
 This guide is for an agent that acts for a user. It shows the order to read
 the reply, and the rule that each part of the reply carries.
@@ -22,12 +23,13 @@ the reply, and the rule that each part of the reply carries.
 ## Call the health tool first
 
 ```
-get_app_health(app_name="my-site", channel="prod")
+get_health(project="my-site", environment="prod")
 ```
 
-Both arguments are necessary. The diagnosis is per channel, so there is no
-all-channel form. If two apps that you can reach have the same name, qualify
-the name as `owner_username/app_name`.
+Both arguments are necessary. The diagnosis is per environment, so there is no
+all-environment form. If two projects that you can reach have the same name,
+qualify the name as `owner_username/project`. Each finding names the service it
+concerns, and `services` lists the state of each service.
 
 There is no window argument. The tool reads the last hour of resource
 figures, and the last day of build events. The `latency` block carries its
@@ -68,7 +70,7 @@ Each finding carries five fields:
 person. `action` is the machine-readable rule, and it is the only field that
 decides your next step.
 
-`findings` is never empty. A channel with no fault carries one finding with
+`findings` is never empty. An environment with no fault carries one finding with
 the code `healthy` and the action `none`.
 
 ## Obey `action`
@@ -105,16 +107,16 @@ detail, or when you write a report for the user.
 
 - **`resource`** — recent CPU, memory, memory pressure, disk pressure and
   OOM-kill counts of the account.
-- **`runtime`** — the container of this channel: whether it runs, its exit
+- **`runtime`** — the container of this environment's first service: whether it runs, its exit
   code, whether the kernel stopped it, and its restart count. The block
   describes the running container, and the newest container when none runs.
   `container_index`, `container_id`, and `source` (`live` or `archive`) name
   that container.
-- **`build`** — how many recent builds of this channel the kernel stopped for
+- **`build`** — how many recent builds of this environment the kernel stopped for
   memory, and when the last one was.
-- **`database`** — the size of the channel database, its cache-hit percent,
+- **`database`** — the size of the environment's database, its cache-hit percent,
   and its slowest statements.
-- **`latency`** — how long this channel took to answer its recent requests:
+- **`latency`** — how long this environment took to answer its recent requests:
   the p50, p95, p99 and the worst request, plus the share of slow requests.
 
 ### What the latency figures cover
@@ -139,7 +141,7 @@ measured durations. 95 of every 100 requests finished under `p95_ms`. Only
 `max_ms` is a measured duration, and it is the worst request of the window.
 
 `requests: 0` with null percentiles means the platform measured nothing. It
-never means that the channel is fast.
+never means that the environment is fast.
 
 ### An unavailable block is not an error
 
@@ -153,15 +155,15 @@ that place would be a false measurement.
 
 Three states are normal, and none of them is a fault:
 
-- **`resource` is unavailable to a member of a shared app.** Those figures
-  cover the whole account of the app owner, over every app that the account
-  runs. They are not per channel, so a member does not read them.
+- **`resource` is unavailable to a member of a shared project.** Those figures
+  cover the whole account of the project owner, over every project that the
+  account runs. They are not per environment, so a member does not read them.
 - **`database.top_statements` carries its OWN `available`.** An unavailable
   `top_statements` beside an available `database` is normal. Every xhostd
   database server holds the `pg_stat_statements` extension, so the cause is
   a failed read. Read `reason` for the true cause. The size and the
   cache-hit figures are still correct.
-- **`runtime` is unavailable before the first deploy.** A channel with no
+- **`runtime` is unavailable before the first deploy.** An environment with no
   container yet has no status to report.
 
 On a statement, `truncated` tells you that the query **text** is cut. It does
@@ -185,7 +187,7 @@ The health tool names the cause. Three other tools give you the detail.
 
 ## A worked example
 
-A channel answers slowly. The health call gives two findings:
+An environment answers slowly. The health call gives two findings:
 
 ```
 "findings": [
@@ -212,5 +214,5 @@ with the high `mean_exec_ms`. Add the index that it needs. Then deploy the
 app again.
 
 The second action is `wait` with a delay of 300 seconds, so you change
-nothing for it. Call `get_app_health` again after that delay. Then see
+nothing for it. Call `get_health` again after that delay. Then see
 whether the pressure fell.

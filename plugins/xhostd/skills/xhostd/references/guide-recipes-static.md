@@ -76,7 +76,7 @@ that you commit beside it at the same path.
 
 ## The deploy
 
-Every app owns a git repo. With a shell, push with git, then call `deploy`.
+Every project owns a git repo. With a shell, push with git, then call `deploy`.
 Without a shell, or where neither git transport can push, write the files
 with `commit_files`, then call `deploy`. A git push sends only the lines that
 changed.
@@ -87,11 +87,11 @@ separate call, so you name the commit that goes live.
 
 Four steps, in order.
 
-**1. Create the app.** This call provisions the `prod` channel, its hostname
-and its git repo.
+**1. Create the project.** This call provisions the `prod` environment, its
+hostname, and its git repo.
 
 ```text
-create_app(name="recipe-static", template="static")
+create_project(name="recipe-static", template="static")
 → {"name": "recipe-static",
    "owner_username": "docs",
    "role": "owner",
@@ -107,9 +107,10 @@ create_app(name="recipe-static", template="static")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`. A new app is not online: the hostname serves
+Later calls take the project's name and the environment's name, such as
+`prod`. A new project is not online: the hostname serves
 nothing until a deploy completes. `repo_url` is the repo that you push to. If
-you lose it, `get_app` returns it again.
+you lose it, `get_project` returns it again.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
 platform API. Use your own token from the
@@ -122,7 +123,7 @@ own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -172,8 +173,8 @@ never lands in `.git/config`, in your shell history, or in the output of
 **4. Deploy the branch.**
 
 ```text
-deploy(app_name="recipe-static",
-       channel="prod",
+deploy(project="recipe-static",
+       environment="prod",
        ref="master")
 → {"deploy_id": "bbd8effc-a9f2-4b57-a5a1-dcdf830a3861",
    "channel_id": "4e8973a5-2a78-4326-bd7b-f95506d84b9f",
@@ -191,8 +192,8 @@ reply states the outcome.
 ## Verify it
 
 ```text
-get_logs(app_name="recipe-static",
-         channel="prod",
+get_logs(project="recipe-static",
+         environment="prod",
          source="deploy",
          deploy_id="bbd8effc-a9f2-4b57-a5a1-dcdf830a3861")
 ```
@@ -223,8 +224,8 @@ The first line states the outcome. `status` is one of `queued`, `running`,
 `success`, or `failed`. Read the status from that header, not from the log
 text. Poll `get_logs` while the status is `queued` or `running` — the
 log grows as the deploy progresses. `success` means the deploy is done, and
-on `failed` the reason is in the log tail. `get_app` also shows an in-flight
-deploy: the channel's `pending_deploy` field holds `{deploy_id, sha, status}`
+on `failed` the reason is in the log tail. `get_project` also shows an in-flight
+deploy: the environment's `pending_deploy` field holds `{deploy_id, sha, status}`
 until the deploy finishes, and `null` after.
 
 Learn three points from that log.

@@ -20,7 +20,8 @@ protocol, and it parses nothing. The endpoint is therefore protocol-agnostic. A
 game server, a message broker, gRPC, a database wire protocol and an `sshd` that
 you install are all the same to the platform.
 
-The app is `recipe-tcp`, the template is `app`, and the channel is `prod`.
+The project is `recipe-tcp`, the template is `app`, and the environment is
+`prod`.
 `expose_port` allocates the public raw-TCP address in
 [The deploy](#the-deploy) below. The address does not change while the exposure
 exists, so you can give it to your users.
@@ -44,7 +45,7 @@ your own config and your own users. `scp`, `sftp` and `-L` all work, because the
 daemon is a real `sshd`.
 
 The costs are these. The method works only on the `app` and the `docker`
-templates, never on `static`. It uses the one forward port of the channel. xhostd
+templates, never on `static`. It uses the one forward port of the environment. xhostd
 does not install, supervise or support your `sshd`.
 
 ## The files
@@ -56,10 +57,10 @@ none.
 ### server.py
 
 ```python
-"""A raw-TCP service on the channel's public forward address.
+"""A raw-TCP service on the environment's public forward address.
 
 The protocol is a toy (PING / ECHO / TIME / QUIT); the shape around it is the
-part to copy. This channel serves no HTTP at all, so the deploy's HTTP probe
+part to copy. This environment serves no HTTP at all, so the deploy's HTTP probe
 can never pass — readiness is signalled by creating $XHOSTD_READY_FILE once the
 listener is up, which is the other signal the health check accepts.
 """
@@ -129,7 +130,7 @@ def main():
         # Create the ready file HERE, not before. The socket is bound and it
         # accepts connections when this object exists, so this is the first
         # correct moment to report "ready". A launch.sh that creates the file
-        # at the top marks the channel healthy while it refuses every client.
+        # at the top marks the service healthy while it refuses every client.
         Path(os.environ["XHOSTD_READY_FILE"]).touch()
         logger.info("listening on 0.0.0.0:%s", PORT)
         server.serve_forever()
@@ -144,11 +145,11 @@ Four parts of that file are important.
 **The port comes from `$XHOSTD_FORWARD_PORT`.** The platform publishes a second
 port on every non-`static` container, next to the HTTP health port. The
 container-side number is one platform constant, `7000`. The platform sets
-`XHOSTD_FORWARD_PORT` in every container, also when the channel has no exposure.
+`XHOSTD_FORWARD_PORT` in every container, also when the environment has no exposure.
 A hardcoded `7000` gives the same result. Read the variable anyway: it costs one
 line, the variable is the documented contract, and the number is an
 implementation detail. It is also the same rule as `$XHOSTD_HTTP_PORT`. The key
-is reserved: `set_env` refuses your own value for it. The platform does not
+is reserved: `set_variable` refuses your own value for it. The platform does not
 accept your value and then replace it.
 
 **The app creates the ready file after the socket listens, not before.** This is
@@ -159,8 +160,8 @@ first. The first signal is an HTTP 2xx/3xx from `GET /` on the health port. The
 
 A TCP-only app serves no HTTP, so it can never satisfy the first signal. There
 is no template switch that stops the HTTP probe. The ready file is therefore the
-only way for a TCP-only channel to pass its deploy. A channel that creates the
-file at the top of `launch.sh` passes its deploy, but it serves nothing: it
+only way for a TCP-only environment to pass its deploy. An environment that
+creates the file at the top of `launch.sh` passes its deploy, but it serves nothing: it
 refuses every connection.
 
 **Bind `0.0.0.0`, not `localhost`.** The relay connects to the container from
@@ -218,7 +219,7 @@ page. You do not have to build the URL for `expose_port`, because the error for
 a toggle that is off contains it:
 
 ```text
-expose_port(app_name="recipe-tcp", channel="prod")
+expose_port(project="recipe-tcp", environment="prod")
 → permission_denied: Public TCP endpoints are turned off for this project.
   A project admin must turn them on first at
   https://console.xhostd.com/projects/cb2ecd27-a8dd-4882-99de-fb191f0c8a00/settings
@@ -237,10 +238,10 @@ The toggle is ADMIN-only, and not MEMBER-only, because it controls
 All the steps below work with the toggle off, up to `expose_port`.
 `expose_port` fails with a 403. Set the toggle first.
 
-### Step 1 — create the app
+### Step 1 — create the project {#step-1-create-the-app}
 
 ```text
-create_app(name="recipe-tcp", template="app")
+create_project(name="recipe-tcp", template="app")
 → {"name": "recipe-tcp",
    "owner_username": "docs",
    "role": "owner",
@@ -256,13 +257,14 @@ create_app(name="recipe-tcp", template="app")
    ...}
 ```
 
-A new app's project toggle is off, also when the current plan includes public
+A new project's toggle is off, also when the current plan includes public
 TCP endpoints: the plan gives the capability, but nobody set the toggle.
-Later calls take the app's name and the channel's name, such as `prod`.
+Later calls take the project's name and the environment's name, such as
+`prod`.
 
 ### Step 2 — push the files
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Every project owns a git repo. **With git, push the code, then call `deploy`.**
 Use `commit_files` when the machine has no git, or when neither git
 transport can push. The rest of the recipe is
 the same for both methods. A deploy reads a commit from the repo, and it does
@@ -270,7 +272,7 @@ not know the source of that commit.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -334,8 +336,8 @@ Never write the token value itself into a command, a commit, or pasted text.
 ### Step 3 — deploy the branch
 
 ```text
-deploy(app_name="recipe-tcp",
-       channel="prod",
+deploy(project="recipe-tcp",
+       environment="prod",
        ref="master")
 → {"deploy_id": "16463431-57c4-40a2-9ae2-8e6ac7869b7a",
    "channel_id": "a9832287-7684-4f78-94dc-9795761c60d8",
@@ -347,10 +349,11 @@ so after a push you do not need the sha.
 
 ### Step 4 — expose the port
 
-`expose_port(app_name="recipe-tcp", channel="prod")` allocates the public
-endpoint of the channel. The port-forwarding tools take **names**, not ids,
-unlike `deploy`. They take `app_name` and `channel`. Use
-`owner_username/app_name` when two apps that you can access have the same name.
+`expose_port(project="recipe-tcp", environment="prod")` allocates the public
+endpoint of the environment. The port-forwarding tools take **names**, not ids.
+They take `project` and `environment`, and an optional `service`, the public
+service that the port forwards to. Use `owner_username/project` when two
+projects that you can access have the same name.
 
 The optional third argument is `allow_cidrs`. It is a source-address allowlist
 of 16 IPv4/IPv6 addresses or CIDR ranges at most (`203.0.113.7`,
@@ -366,7 +369,7 @@ plan includes port forwarding. `active: false` means that you have an address
 that carries no traffic.
 
 ```text
-expose_port(app_name="recipe-tcp", channel="prod")
+expose_port(project="recipe-tcp", environment="prod")
 → {"channel_id": "a9832287-7684-4f78-94dc-9795761c60d8",
    "channel": "prod",
    "host": "fwd-1.xhostd.app",
@@ -390,12 +393,12 @@ Read these three properties of the address before you give it to your users:
 - **It needs no redeploy.** The container already publishes its forward port,
   so `expose_port` only writes a row. The next connection carries traffic.
 - **It does not change.** A redeploy keeps the same address. A second
-  `expose_port` call on a channel that has an endpoint returns the *same* host,
+  `expose_port` call on an environment that has an endpoint returns the *same* host,
   port and `created_at`. Only `allow_cidrs` takes the value of the new call,
   also when the new call gives no value. A release and a new exposure are
   different: they allocate a **new** address.
-- **There is one endpoint for each channel.** A channel has one endpoint at
-  most. `staging` and `prod` get different addresses. You cannot get a second
+- **There is one endpoint for each environment.** An environment has one
+  endpoint at most. `staging` and `prod` get different addresses. You cannot get a second
   port on `prod`.
 
 ## Verify it
@@ -447,23 +450,23 @@ base xhost-runtime:node22-py313 exempt`. The build installed nothing on the warm
 base image. A service that uses only the standard library therefore has an
 almost zero build cost.
 
-The channel also gets its HTTPS hostname, `recipe-tcp-docs.xhostd.app`. That
+The environment also gets its HTTPS hostname, `recipe-tcp-docs.xhostd.app`. That
 hostname returns **502**, and this is correct, because no process listens on the
 health port. See [When it goes wrong](#when-it-goes-wrong).
 
 ### The endpoint is live
 
-`list_exposed_ports(app_name="recipe-tcp")` returns every exposed channel of
-the project in one call. The result is `{forwards: [{channel_id, channel, host,
-port, allow_cidrs, active, created_at}]}`, in channel-name order. There is no
-variant for one channel. Call it before you propose an `expose_port`: if an
+`list_exposed_ports(project="recipe-tcp")` returns every exposed environment
+of the project in one call. The result is `{forwards: [{channel_id, channel, host,
+port, allow_cidrs, active, created_at}]}`, in environment-name order. There is
+no variant for one environment. Call it before you propose an `expose_port`: if an
 entry exists, you only report the address. Call it also when a user reports a
 broken endpoint. `active: false` tells you that the project toggle went off, or
 that the owner's plan changed. That fault is very different from a service that
 does not start.
 
 ```text
-list_exposed_ports(app_name="recipe-tcp")
+list_exposed_ports(project="recipe-tcp")
 → {"forwards": [{"channel_id": "a9832287-7684-4f78-94dc-9795761c60d8",
                  "channel": "prod",
                  "host": "fwd-1.xhostd.app",
@@ -477,7 +480,7 @@ list_exposed_ports(app_name="recipe-tcp")
 
 The proof is a raw TCP exchange with the allocated address: no curl, no HTTP, no
 TLS. In the code below, use the `host` and the `port` that `expose_port`
-returned for **your** channel. The values in the transcript above belong to a
+returned for **your** environment. The values in the transcript above belong to a
 released endpoint. Any TCP client is sufficient: `nc <host> <port>` works, and
 you can type the verbs by hand. The capture below uses Python, because Python
 behaves the same on every machine, and the `nc` command does not:
@@ -485,7 +488,7 @@ behaves the same on every machine, and the `nc` command does not:
 ```python
 import socket
 
-# The host and port expose_port returned for your channel.
+# The host and port expose_port returned for your environment.
 HOST = "<host>"
 PORT = <port>
 
@@ -515,7 +518,7 @@ purpose of a raw TCP port.
 no `command`, it reports what you can read, and it reads nothing:
 
 ```text
-get_logs(app_name="recipe-tcp", channel="prod", source="runtime")
+get_logs(project="recipe-tcp", environment="prod", source="runtime")
 → container #2 (xhost-cb2ecd27-a9832287-00000002, id 5b0e9c34a1f8) — running
   started: 2026-10-04T06:12:30.055278693Z
   readable containers: #1, #2 (pass container_index to read an older one)
@@ -545,13 +548,13 @@ address, put it in your own protocol.
 
 ### The allowlist
 
-A second `expose_port` call on a channel that has an endpoint changes that
+A second `expose_port` call on an environment that has an endpoint changes that
 endpoint in place. This call set the list to `203.0.113.0/24`. That range is
 TEST-NET-3, a documentation range, so the list excludes every real client, and
 also the client of the round trip above:
 
 ```text
-expose_port(app_name="recipe-tcp", channel="prod",
+expose_port(project="recipe-tcp", environment="prod",
             allow_cidrs=["203.0.113.0/24"])
 → {"host": "fwd-1.xhostd.app",
    "port": 30223,
@@ -594,7 +597,7 @@ mean "keep the current list". It is the new value, and its default is the empty
 list:
 
 ```text
-expose_port(app_name="recipe-tcp", channel="prod")
+expose_port(project="recipe-tcp", environment="prod")
 → {..., "allow_cidrs": [], ...}
 ```
 
@@ -603,8 +606,8 @@ the whole internet again. The blocked client then completed a full round trip at
 `06:13:01`. The platform gave no warning, and the response looks like every
 other success.
 
-Therefore, **give `allow_cidrs` in every `expose_port` call for a channel that
-has a list**. Do this also for a call that you think changes nothing. If you do
+Therefore, **give `allow_cidrs` in every `expose_port` call for an environment
+that has a list**. Do this also for a call that you think changes nothing. If you do
 not know the current list, read it with `list_exposed_ports` first. Then send
 the same list back.
 
@@ -666,12 +669,12 @@ Do not confuse this error with the 402 above. A 402 means "your plan does not
 permit this". A 403 means "your plan permits this, but the project toggle is
 off".
 
-### 400 on a `static` app
+### 400 on a `static` project {#400-on-a-static-app}
 
 A static site is a standard nginx with a read-only content mount. You supply
 files, not a process, so no process in the container can bind the forward port.
 The error says this, and it names the `app` and the `docker` templates. The
-platform sets the template of a channel when it creates the container, and a
+platform sets the template of an environment when it creates the container, and a
 redeploy does not change it.
 
 ### 409 on `expose_port`
@@ -695,7 +698,7 @@ The two symptoms have different causes:
     - Your source IP is not in `allow_cidrs`.
     - The project toggle is off.
     - The plan does not permit port forwarding.
-    - The channel does not run.
+    - The environment does not run.
     - The endpoint is at its concurrent-connection cap.
 
   Your app's log shows nothing, because nothing reached the app. Read `active`
@@ -719,10 +722,10 @@ $ curl -sS -o /dev/null -w '%{http_code}\n' https://recipe-tcp-docs.xhostd.app/
 502
 ```
 
-The channel gets `recipe-tcp-docs.xhostd.app`, and the platform routes that
+The environment gets `recipe-tcp-docs.xhostd.app`, and the platform routes that
 hostname. No process listens on the health port, so the proxy has no upstream.
 A 404 from the hostname is different: it tells you that no container serves the
-channel, because the deploy did not reach `traffic switched to the new
+environment, because the deploy did not reach `traffic switched to the new
 container`.
 
 To get both, serve HTTP on `$XHOSTD_HTTP_PORT` *and* TCP on
@@ -734,8 +737,8 @@ the HTTP arm of the health check then passes.
 `unexpose_port` releases the address, and it reports this clearly:
 
 ```text
-unexpose_port(app_name="recipe-tcp", channel="prod")
-→ {"result": "public endpoint released for channel prod"}
+unexpose_port(project="recipe-tcp", environment="prod")
+→ {"result": "public endpoint released for environment prod"}
 ```
 
 The platform refuses new connections from that moment. A connection immediately
@@ -756,7 +759,7 @@ important**:
 
 1. `unexpose_port` removes the address from the allocator, so no client can
    connect to it again.
-2. `deploy` the channel. The new container replaces the old one, and this closes
+2. `deploy` the environment. The new container replaces the old one, and this closes
    the upstream connection of every relay. The data path stops at once.
 
 The deploy stopped the held session, and the logs agree to the second. From
@@ -792,7 +795,7 @@ again to the replacement. With `unexpose_port` first, the peer has no address
 for a new connection.
 
 A new exposure after that gives a **new** address, not the old one. The same
-channel came back on port `31421`, and its first port was `30223`. Its
+environment came back on port `31421`, and its first port was `30223`. Its
 `created_at` is `2026-10-04T06:15:25.223575Z`, against the first
 `2026-10-04T06:12:41.333594Z`. The new timestamp shows that the platform made a
 new endpoint, and did not activate the old one again. Tell every client that has

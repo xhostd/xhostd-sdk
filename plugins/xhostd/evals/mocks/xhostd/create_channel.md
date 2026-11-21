@@ -1,1 +1,0 @@
-{"name": "{{input.name}}", "hostname": "{{input.name}}-notes-app-eval.xhostd.app", "git_ref_binding": "{{input.git_ref_binding}}", "follows_branch": false, "current_sha": null, "status": "provisioning", "pending_deploy": null, "env_pending": false}

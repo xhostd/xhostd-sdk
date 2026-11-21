@@ -30,12 +30,12 @@ guide first if your app builds correctly and the problem is the database.
 ## What you get
 
 You get a FastAPI service. Your own Dockerfile builds it, and it connects to
-the Postgres database that xhostd gives the channel. It serves a JSON health
+the Postgres database that xhostd gives the environment. It serves a JSON health
 response at `/`. It lists the notes at `GET /notes`. It makes a note at
 `POST /notes`. It marks one note done at `POST /notes/{id}/done`.
 
 Alembic migrations create the schema and change it, and they run at container
-start. The first boot of a new app thus makes its own tables. A later deploy
+start. The first boot of a new project thus makes its own tables. A later deploy
 with a new migration applies that migration. Neither step is manual. The
 build takes two seconds when the layer cache is warm.
 
@@ -48,7 +48,7 @@ your own name.
 
 ## The files
 
-The app is `recipe-docker-pg`, and its template is `docker`. This guide shows
+The project is `recipe-docker-pg`, and its template is `docker`. This guide shows
 three of its eight files.
 [The Postgres recipe](https://docs.xhostd.com/guides/recipes-postgres) shows
 `alembic.ini`, `migrations/env.py`, `migrations/script.py.mako` and the two
@@ -252,7 +252,7 @@ the file that `$XHOSTD_READY_FILE` names, which the probe also accepts.
 
 ## The deploy
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.** A
+Every project owns a git repo. **With git, push the code, then call `deploy`.** A
 push sends only the diff: git transfers the few lines that changed, and needs
 no anchor to place them. Use `commit_files` where git is not available on the
 machine where you work, or where neither git transport can push.
@@ -263,11 +263,11 @@ you name the commit that goes live.
 
 Do these four steps in order. All eight files ship in the one push.
 
-**1. Create the app.** This call makes the `prod` channel, its hostname, its
-git repo and its Postgres database.
+**1. Create the project.** This call makes the `prod` environment, its
+hostname, its git repo, and its Postgres database.
 
 ```text
-create_app(name="recipe-docker-pg", template="docker")
+create_project(name="recipe-docker-pg", template="docker")
 → {"name": "recipe-docker-pg",
    "owner_username": "docs",
    "role": "owner",
@@ -283,7 +283,8 @@ create_app(name="recipe-docker-pg", template="docker")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`. `repo_url` is the repo for your push. `get_app` returns that URL
+Later calls take the project's name and the environment's name, such as
+`prod`. `repo_url` is the repo for your push. `get_project` returns that URL
 again if you lose it.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
@@ -297,7 +298,7 @@ own; the [Git guide](https://docs.xhostd.com/guides/git) shows the commands.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -348,8 +349,8 @@ never lands in `.git/config`, in your shell history, or in the output of
 **4. Deploy the branch.**
 
 ```text
-deploy(app_name="recipe-docker-pg",
-       channel="prod",
+deploy(project="recipe-docker-pg",
+       environment="prod",
        ref="master")
 → {"deploy_id": "a6baf3fc-f573-40f7-82c6-e74912525228",
    "channel_id": "16df8282-8498-4567-a595-fe769090b8b6",
@@ -361,12 +362,12 @@ After a push you thus do not need the sha. `sha` is also valid when you want
 an exact commit, and `sha` wins if you give both.
 
 The deploy runs asynchronously. Follow it with
-`get_logs(app_name=..., channel=..., source="deploy", deploy_id=...)`. The first line
+`get_logs(project=..., channel=..., source="deploy", deploy_id=...)`. The first line
 of the reply states the outcome — `status` is one of `queued`, `running`,
 `success`, `failed`, `superseded`, or `cancelled`. Poll while the status is
 `queued` or `running`, and on `failed` the reason is in the log tail. On
-`superseded`, a newer deploy request for this channel replaced this one: poll
-the id the header names. On `cancelled`, a database restore of the channel
+`superseded`, a newer deploy request for this environment replaced this one: poll
+the id the header names. On `cancelled`, a database restore of the environment
 started before the deploy ran: deploy again once the restore ends.
 
 ## Verify it
@@ -427,16 +428,16 @@ Call `get_stats(view="overview")` for the current account's charged image-size c
 Do not infer it from a subscription catalog.
 
 **`channel snapshot marker recorded`.** Every non-static deploy records a
-snapshot of the channel's Postgres schema before the new container starts.
+snapshot of the environment's Postgres schema before the new container starts.
 You do not ask for the snapshot, and you cannot forget it. The marker copies
 no data. It records the moment that a restore returns the database to. A
-snapshot holds the state *before* its own deploy, and on the app's first
+snapshot holds the state *before* its own deploy, and on the project's first
 deploy the database holds nothing at that moment. See
 [the Postgres recipe](https://docs.xhostd.com/guides/recipes-postgres) for
 the calls that list and restore a snapshot.
 
 **The two `Running upgrade` lines.** These lines are `alembic upgrade head`
-inside the container. It makes the schema from nothing on the app's first
+inside the container. It makes the schema from nothing on the project's first
 boot: `-> 0001`, then `0001 -> 0002`, in that order. A deploy that adds a
 third migration prints one more line, and nothing else changes. If you see
 the alembic banner with no `Running upgrade` line, the database is already at
@@ -470,7 +471,7 @@ To learn whether the app is alive, call `get_logs` with `source="runtime"`
 and **no** `command`:
 
 ```text
-get_logs(app_name="recipe-docker-pg", channel="prod", source="runtime")
+get_logs(project="recipe-docker-pg", environment="prod", source="runtime")
 ```
 
 Without a `command`, the call starts no container on the host. It returns the
@@ -488,12 +489,12 @@ crashed. Give its `container_index` to `get_logs`.
 The platform sets three variables in every container, so your app can know
 the names it answers on:
 
-- `XHOSTD_HOSTNAME` is the channel's platform hostname, for example
+- `XHOSTD_HOSTNAME` is the environment's platform hostname, for example
   `recipe-docker-pg-docs.xhostd.app`.
 - `XHOSTD_URL` is `https://` plus that hostname, with no trailing slash. It
   never names a custom domain.
 - `XHOSTD_DOMAINS` holds that hostname and each verified custom domain of the
-  channel, separated by commas with no spaces. Treat the value as a set:
+  environment, separated by commas with no spaces. Treat the value as a set:
   don't infer a primary domain from its position, and read the platform
   hostname from `XHOSTD_HOSTNAME` or `XHOSTD_URL`.
 
@@ -514,13 +515,13 @@ BASE_URL = os.environ.get("XHOSTD_URL", "http://localhost:8000")
 Build an absolute link from the request's own host when the visitor might
 arrive on a custom domain. `BASE_URL` always names the platform hostname.
 
-The deploy health probe sends the channel's platform hostname as its `Host`
+The deploy health probe sends the environment's platform hostname as its `Host`
 header. An app that rejects that host fails the probe, so the deploy fails.
 `GET /` must answer with a 2xx or 3xx status, or the app must create the
 file that `$XHOSTD_READY_FILE` names.
 
 The values are fixed when the platform creates the container. After you
-verify or remove a custom domain, deploy the channel again, so that
+verify or remove a custom domain, deploy the environment again, so that
 `XHOSTD_DOMAINS` includes the change. Until then, the running container
 keeps the old list, and an app that checks the host rejects a newly
 verified domain.
@@ -639,7 +640,7 @@ variable in your own code.
 
 ### 404 and 502 from the hostname mean different things
 
-A 404 means the channel has no route yet, and a 502 means the container does not answer.
+A 404 means the environment has no route yet, and a 502 means the container does not answer.
 [The address returns 404 or 502](https://docs.xhostd.com/guides/troubleshooting#the-address-returns-404-or-502) explains each cause.
 
 ### Single-page apps: your server serves every route
