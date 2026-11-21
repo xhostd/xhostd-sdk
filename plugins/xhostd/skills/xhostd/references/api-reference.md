@@ -1,16 +1,34 @@
 # xhostd API Reference
 
-This is the underlying HTTP API that the MCP tools wrap. An agent's day-to-day work goes through the xhostd MCP tools, which an OAuth session or a registered agent's token authenticates. This reference is for deep dives, debugging, or direct programmatic access.
+This is the underlying HTTP API that the MCP tools wrap. An agent's day-to-day work goes through the
+xhostd MCP tools, which an OAuth session or a registered agent's token authenticates. This reference
+is for deep dives, debugging, or direct programmatic access.
 
-**The HTTP API keeps the earlier names.** Its paths, fields, and token scopes call a project an `app` and an environment a `channel`, as in `/apps/{app_id}/channels/{channel_id}` and `channel_id`. This reference uses those names because the API does. The MCP tools take the new names: `project`, `environment`, and `service`.
+**The HTTP API keeps the earlier names.** Its paths, fields, and token scopes call a project an
+`app` and an environment a `channel`, as in `/apps/{app_id}/channels/{channel_id}` and `channel_id`.
+This reference uses those names because the API does. The MCP tools take the new names: `project`,
+`environment`, and `service`.
 
 Base URL: `https://api.xhostd.com`
 
-All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN` environment variable and send the header on curl's stdin, `printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl --header @- ...`; never write the value into a command. Any local user can read a process's argv with `ps`, and `printf` is a shell builtin that starts no process, so the token reaches no argv. With the header on stdin, a request body comes from an argument or a file, never from stdin. No MCP tool result carries a token. You can use that token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage + downloads + platform API, a subset of the default scopes, up to 30 days): the `get_credential_request` tool describes the `POST /credentials` request, and you keep the minted token in a variable of its own.
+All authenticated endpoints require the header: `Authorization: Bearer <token>` where `<token>` is
+either the user's OAuth-issued bearer (carried by the MCP server), a token the user created on the
+console /tokens page, or the 30-day token `POST /registrations` or `POST /auth/ssh-key` answers an
+agent that registered with its SSH key. Outside the MCP tools, keep that token in the `XHOSTD_TOKEN`
+environment variable and send the header on curl's stdin,
+`printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl --header @- ...`; never write the value
+into a command. Any local user can read a process's argv with `ps`, and `printf` is a shell builtin
+that starts no process, so the token reaches no argv. With the header on stdin, a request body comes
+from an argument or a file, never from stdin. No MCP tool result carries a token. You can use that
+token directly, or mint a scoped, short-lived one from it (git + Postgres + object storage +
+downloads + platform API, a subset of the default scopes, up to 30 days): the
+`get_credential_request` tool describes the `POST /credentials` request, and you keep the minted
+token in a variable of its own.
 
 All error responses use the envelope: `{"error": {"code": "<code>", "message": "<message>"}}`
 
-> **Signing up:** a person signs up in the browser. An agent with no person present registers through `POST /registrations`; read `## POST /registrations`.
+> **Signing up:** a person signs up in the browser. An agent with no person present registers
+through `POST /registrations`; read `## POST /registrations`.
 
 ---
 
@@ -139,8 +157,14 @@ List all apps owned by the authenticated user.
 }
 ```
 
-- `channels[].pending_deploy` — the channel's newest queued or running deploy, as `{"deploy_id": "uuid", "sha": "...", "status": "queued" | "running"}`, or `null` when nothing is in flight. `current_sha` only advances when a deploy succeeds, so an old `current_sha` next to a non-null `pending_deploy` means the new deploy has not finished yet — it does not mean the deploy failed.
-- `channels[].env_pending` — `true` when the channel's running container is behind the stored environment variables and secrets. A change reaches the container at the channel's next deploy, so a deploy clears it. `false` for a channel that has never had a container.
+- `channels[].pending_deploy` — the channel's newest queued or running deploy, as
+  `{"deploy_id": "uuid", "sha": "...", "status": "queued" | "running"}`, or `null` when nothing is
+  in flight. `current_sha` only advances when a deploy succeeds, so an old `current_sha` next to a
+  non-null `pending_deploy` means the new deploy has not finished yet — it does not mean the deploy
+  failed.
+- `channels[].env_pending` — `true` when the channel's running container is behind the stored
+  environment variables and secrets. A change reaches the container at the channel's next deploy, so
+  a deploy clears it. `false` for a channel that has never had a container.
 
 ---
 
@@ -159,9 +183,36 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
 }
 ```
 
-- `name` (string, required) — Must be a valid DNS label and must not use a reserved prefix (see Hostname Rules)
-- `branch` (string, optional) — The branch `prod` deploys. It follows the branch rule in "git_ref_binding Format". Omit it and `prod` has no branch (`git_ref_binding: null`) until the first deploy with `ref` binds it. An invalid name answers 400 and creates nothing.
-- `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"` (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`. The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build** time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template builds the `Dockerfile` at the repo root on every deploy and runs the image with its own `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` holds the same value for apps that read it, and new code reads `$XHOSTD_HTTP_PORT`) and answer `GET /` with a 2xx or 3xx (the request carries the channel's hostname as its `Host` header, and a redirect is never followed), **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy listener; create it once the app is actually running, not at the top of the start command. Such a channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are injected at run time only — never as build args, so secrets are unavailable during the build and must never be baked into the image. Charged image size (total minus warm-base layers) follows the current account entitlement; plugin workflows read the current cap from `get_stats(view="overview")`. Match every `FROM` to a warm base image — including a build-only stage in a multi-stage build, since every stage that names one starts with no pull: `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`, `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position, build duration, image size vs cap) into the deploy log.
+- `name` (string, required) — Must be a valid DNS label and must not use a reserved prefix (see
+  Hostname Rules)
+- `branch` (string, optional) — The branch `prod` deploys. It follows the branch rule in
+  "git_ref_binding Format". Omit it and `prod` has no branch (`git_ref_binding: null`) until the
+  first deploy with `ref` binds it. An invalid name answers 400 and creates nothing.
+- `template` (string, optional, default `"static"`) — Runtime template. Valid values: `"static"`
+  (nginx static file serving), `"app"` (user-provided `install.sh` + `launch.sh`), and `"docker"`.
+  The `app` template runs inside an `xhost-runtime` image with Node 22, Python 3.13, and build tools
+  pre-installed. The user provides `install.sh` (optional, installs dependencies — runs at **build**
+  time as root) and `launch.sh` (required, starts the app on `$XHOSTD_HTTP_PORT` — runs at boot as
+  the non-root `app` user, whose writable paths are `/app`, `$HOME`, `/tmp`). The `docker` template
+  builds the `Dockerfile` at the repo root on every deploy and runs the image with its own
+  `ENTRYPOINT`/`CMD`. Both non-`static` templates pass the health check on **either** of two
+  signals, whichever arrives first: listen on `$XHOSTD_HTTP_PORT` (injected; `$PORT` holds the same
+  value for apps that read it, and new code reads `$XHOSTD_HTTP_PORT`) and answer `GET /` with a 2xx
+  or 3xx (the request carries the channel's hostname as its `Host` header, and a redirect is never
+  followed), **or** create the file named by `$XHOSTD_READY_FILE` (also injected — a per-deploy path
+  directly under `/tmp`, so no `mkdir` and no shell are needed). The second signal exists so a
+  channel with no HTTP surface — a queue consumer, cron daemon or stream processor — needs no dummy
+  listener; create it once the app is actually running, not at the top of the start command. Such a
+  channel keeps its hostname and route, and that URL returns 502, which is expected. Env vars are
+  injected at run time only — never as build args, so secrets are unavailable during the build and
+  must never be baked into the image. Charged image size (total minus warm-base layers) follows the
+  current account entitlement; plugin workflows read the current cap from
+  `get_stats(view="overview")`. Match every `FROM` to a warm base image — including a build-only
+  stage in a multi-stage build, since every stage that names one starts with no pull:
+  `node:22-slim`, `node:24-slim`, `node:26-slim`, `python:3.11-slim`, `python:3.12-slim`,
+  `python:3.13-slim`, `python:3.14-slim`, `debian:trixie-slim`. The final stage's warm-base layers
+  are also exempt from the charged size. Docker deploys stream `[build] ...` lines (queue position,
+  build duration, image size vs cap) into the deploy log.
 
 **Response (200):**
 ```json
@@ -219,7 +270,8 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
 
 Get details of a single app by UUID.
 
-**Response (200):** Same shape as a single entry in the `GET /apps` response (an App object with channels).
+**Response (200):** Same shape as a single entry in the `GET /apps` response (an App object with
+channels).
 
 **Errors:**
 - `not_found` (404) — app not found or not owned by caller
@@ -228,7 +280,8 @@ Get details of a single app by UUID.
 
 ## DELETE /apps/{app_id}
 
-Delete an app and all its channels. Tears down containers and networks, and the platform stops serving the app's hostnames.
+Delete an app and all its channels. Tears down containers and networks, and the platform stops
+serving the app's hostnames.
 
 **Required scope:** `repo:*`
 
@@ -271,7 +324,8 @@ List all channels for an app.
 ]
 ```
 
-`git_ref_binding` is `null` for a channel with no branch yet, such as a new app's `prod` before its first deploy with `ref`.
+`git_ref_binding` is `null` for a channel with no branch yet, such as a new app's `prod` before its
+first deploy with `ref`.
 
 **Errors:**
 - `not_found` (404) — app not found or not owned by caller
@@ -292,8 +346,11 @@ Create a new channel on an app.
 }
 ```
 
-- `name` (string, required) — Must be a valid DNS label. Cannot be `prod` (reserved; system-created).
-- `git_ref_binding` (string, required) — Must match the pattern `branch:<name>`, one explicit channel per branch. The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. `branch:*` is refused.
+- `name` (string, required) — Must be a valid DNS label. Cannot be `prod` (reserved;
+  system-created).
+- `git_ref_binding` (string, required) — Must match the pattern `branch:<name>`, one explicit
+  channel per branch. The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. `branch:*`
+  is refused.
 
 **Response (200):**
 ```json
@@ -319,7 +376,8 @@ Create a new channel on an app.
 
 Get details of a single channel.
 
-**Response (200):** Same shape as a single entry in the `GET /apps/{app_id}/channels` response. `git_ref_binding` is `null` for a channel with no branch yet.
+**Response (200):** Same shape as a single entry in the `GET /apps/{app_id}/channels` response.
+`git_ref_binding` is `null` for a channel with no branch yet.
 
 **Errors:**
 - `not_found` (404) — app or channel not found
@@ -328,7 +386,10 @@ Get details of a single channel.
 
 ## PATCH /apps/{app_id}/channels/{channel_id}
 
-Change the branch a channel is bound to, whether it follows that branch, or both, without deploying. The MCP tool is `update_environment`. The branch does not have to exist in the repo yet. The project's activity feed records a `channel.update` event per changed field; a PATCH to the current value records nothing.
+Change the branch a channel is bound to, whether it follows that branch, or both, without deploying.
+The MCP tool is `update_environment`. The branch does not have to exist in the repo yet. The
+project's activity feed records a `channel.update` event per changed field; a PATCH to the current
+value records nothing.
 
 **Required scope:** `channel:*`, and `deploy:*` as well to set `follows_branch` to `true`
 
@@ -340,17 +401,27 @@ Change the branch a channel is bound to, whether it follows that branch, or both
 }
 ```
 
-- `git_ref_binding` (string, optional) — `branch:<name>`, following "git_ref_binding Format". `null` answers 400: a channel cannot be unbound.
-- `follows_branch` (boolean, optional) — `true` makes each push to the channel's branch on the connected source repository deploy the new head. A `deploy_key` source needs its ping set up first, and an `installation` source needs no setup (see "Deploy on push" under `POST /apps/{app_id}/source/sync`). It needs a connected source repository and a bound branch. `false` is always accepted. A body with both fields applies the binding first; send at least one.
+- `git_ref_binding` (string, optional) — `branch:<name>`, following "git_ref_binding Format". `null`
+  answers 400: a channel cannot be unbound.
+- `follows_branch` (boolean, optional) — `true` makes each push to the channel's branch on the
+  connected source repository deploy the new head. A `deploy_key` source needs its ping set up
+  first, and an `installation` source needs no setup (see "Deploy on push" under
+  `POST /apps/{app_id}/source/sync`). It needs a connected source repository and a bound branch.
+  `false` is always accepted. A body with both fields applies the binding first; send at least one.
 
-**Response (200):** The channel, in the `GET /apps/{app_id}/channels/{channel_id}` shape, with `follows_branch`.
+**Response (200):** The channel, in the `GET /apps/{app_id}/channels/{channel_id}` shape, with
+`follows_branch`.
 
 **Errors:**
 - `bad_request` (400) — an empty body, `null`, or a binding outside the rule
 - `branch_wildcard_deprecated` (400) — `branch:*`
-- `scope_denied` (403) — the credential lacks `channel:*`, or lacks `deploy:*` for `follows_branch: true`
+- `scope_denied` (403) — the credential lacks `channel:*`, or lacks `deploy:*` for
+  `follows_branch: true`
 - `not_found` (404) — app or channel not found
-- `conflict` (409) — `follows_branch: true` on an app with no connected source repository ("connect a source repository first (console → project → Git); a channel follows its branch on each push to that repository"), or on a channel with no branch ("bind a branch first; a channel with no branch has nothing to follow")
+- `conflict` (409) — `follows_branch: true` on an app with no connected source repository ("connect
+  a source repository first (console → project → Git); a channel follows its branch on each push to
+  that repository"), or on a channel with no branch ("bind a branch first; a channel with no branch
+  has nothing to follow")
 
 ---
 
@@ -370,17 +441,23 @@ Delete a channel. Cannot delete the `prod` channel.
 
 ## GET /apps/{app_id}/services
 
-List the services of a project, by position. A service is one process of a project, built from one directory of the repository with one template. Each project starts with the public service `web`, which holds the project's addresses. Each service that is turned on in a channel uses one slot of the plan's limit. The MCP tools read services through `get_project`.
+List the services of a project, by position. A service is one process of a project, built from one
+directory of the repository with one template. Each project starts with the public service `web`,
+which holds the project's addresses. Each service that is turned on in a channel uses one slot of
+the plan's limit. The MCP tools read services through `get_project`.
 
 **Required scope:** `channel:*`
 
-**Response (200):** `{"services": [Service]}`, where a Service is `{id, name, position, command, directory, template, public, memory_mb, rollout, created_at}`, as in the `services` list of `GET /apps`.
+**Response (200):** `{"services": [Service]}`, where a Service is
+`{id, name, position, command, directory, template, public, memory_mb, rollout, created_at}`, as in
+the `services` list of `GET /apps`.
 
 ---
 
 ## POST /apps/{app_id}/services
 
-Create a service, turned on in the listed channels, or in every channel. Nothing starts: the service starts at each channel's next deploy. The MCP tool is `create_service`.
+Create a service, turned on in the listed channels, or in every channel. Nothing starts: the service
+starts at each channel's next deploy. The MCP tool is `create_service`.
 
 **Required scope:** `channel:*`
 
@@ -392,69 +469,97 @@ Create a service, turned on in the listed channels, or in every channel. Nothing
 }
 ```
 
-- `name` (string, required) — 1 to 16 lowercase letters, digits, or hyphens, unique in the project and not a channel name. `prod`, `localhost`, a name that starts with `xhost-`, and a 12-character hexadecimal name are reserved.
-- `command` (string, optional) — The process to run, on one line. Omitted, the template's default. A `static` service runs none.
-- `directory` (string, optional) — The repository directory to build from. Default `""`, the repository root. A `static` service is served from the root, and a project with a `static` service keeps every service at the root.
-- `template` (string, optional) — `static`, `app`, or `docker`. Omitted, the project's template. A project whose public service is `static` holds `static` services only.
+- `name` (string, required) — 1 to 16 lowercase letters, digits, or hyphens, unique in the project
+  and not a channel name. `prod`, `localhost`, a name that starts with `xhost-`, and a 12-character
+  hexadecimal name are reserved.
+- `command` (string, optional) — The process to run, on one line. Omitted, the template's default. A
+  `static` service runs none.
+- `directory` (string, optional) — The repository directory to build from. Default `""`, the
+  repository root. A `static` service is served from the root, and a project with a `static` service
+  keeps every service at the root.
+- `template` (string, optional) — `static`, `app`, or `docker`. Omitted, the project's template. A
+  project whose public service is `static` holds `static` services only.
 - `memory_mb` (integer, optional) — The service's own memory limit, from 64 to the plan's memory.
-- `rollout` (string, optional) — `replace` (the default for a service that is not public) or `overlap`.
-- `channel_ids` (string[], optional) — The channels to turn the service on in. Omitted, every channel.
+- `rollout` (string, optional) — `replace` (the default for a service that is not public) or
+  `overlap`.
+- `channel_ids` (string[], optional) — The channels to turn the service on in. Omitted, every
+  channel.
 
-**Response (200):** `{"service": Service, "notice": "The service starts at each environment's next deploy."}`. The `notice` can add a sentence on shared memory: relay it.
+**Response (200):**
+`{"service": Service, "notice": "The service starts at each environment's next deploy."}`. The
+`notice` can add a sentence on shared memory: relay it.
 
 **Errors:**
-- `bad_request` (400) — a name, setting, or source rule refused the service, or an unknown channel id
-- `plan_limit_exceeded` (402) — the service needs more slots than the plan's limit leaves free; the message states the count
-- `conflict` (409) — a service of the name exists, a second public service, the project changed owner during the call, or the account is under scheduled maintenance
+- `bad_request` (400) — a name, setting, or source rule refused the service, or an unknown channel
+  id
+- `plan_limit_exceeded` (402) — the service needs more slots than the plan's limit leaves free; the
+  message states the count
+- `conflict` (409) — a service of the name exists, a second public service, the project changed
+  owner during the call, or the account is under scheduled maintenance
 
 ---
 
 ## PATCH /apps/{app_id}/services/{service_id}
 
-Change `command`, `directory`, `memory_mb`, or `rollout`. An omitted field stays as it is; `null` resets `command` and `memory_mb`. A change reaches a running service at its next deploy or restart, and a `directory` change at its next deploy. The reply has the shape of the create's, and its `notice` says when the change applies. The MCP tool is `update_service`.
+Change `command`, `directory`, `memory_mb`, or `rollout`. An omitted field stays as it is; `null`
+resets `command` and `memory_mb`. A change reaches a running service at its next deploy or restart,
+and a `directory` change at its next deploy. The reply has the shape of the create's, and its
+`notice` says when the change applies. The MCP tool is `update_service`.
 
 **Required scope:** `channel:*`
 
 **Errors:**
-- `bad_request` (400) — nothing to update, `null` for `directory` or `rollout`, or a refused setting, such as a directory that another service built from with another template
+- `bad_request` (400) — nothing to update, `null` for `directory` or `rollout`, or a refused
+  setting, such as a directory that another service built from with another template
 - `not_found` (404) — service not found
 
 ---
 
 ## DELETE /apps/{app_id}/services/{service_id}
 
-Delete a service and stop its containers. Each channel keeps its database. Returns 204 No Content. The MCP tool is `delete_service`.
+Delete a service and stop its containers. Each channel keeps its database. Returns 204 No Content.
+The MCP tool is `delete_service`.
 
 **Required scope:** `channel:*`
 
 **Errors:**
 - `not_found` (404) — service not found
-- `conflict` (409) — the public service, which holds the project's addresses, or the account is under scheduled maintenance
+- `conflict` (409) — the public service, which holds the project's addresses, or the account is
+  under scheduled maintenance
 
 ---
 
 ## PATCH /apps/{app_id}/channels/{channel_id}/services/{service_id}
 
-Turn a service on or off in one channel, with the body `{"enabled": false}` or `{"enabled": true}`. Off stops the container at once and frees its slot. On uses a slot and starts the service at the channel's next deploy or restart. The public service stays on. The MCP tool is `update_service` with `environment` and `enabled`.
+Turn a service on or off in one channel, with the body `{"enabled": false}` or `{"enabled": true}`.
+Off stops the container at once and frees its slot. On uses a slot and starts the service at the
+channel's next deploy or restart. The public service stays on. The MCP tool is `update_service` with
+`environment` and `enabled`.
 
 **Required scope:** `channel:*`
 
-**Response (200):** `{service_id, name, public, enabled, status, current_sha, env_pending, notice}`: the entry of the channel's `services` list, and `notice`. A turn-on that changes `enabled` sets `notice` to "The service starts at the environment's next deploy or restart. Run restart with this service to start it now." A turn-off and a call that changes nothing answer `null`.
+**Response (200):** `{service_id, name, public, enabled, status, current_sha, env_pending, notice}`:
+the entry of the channel's `services` list, and `notice`. A turn-on that changes `enabled` sets
+`notice` to "The service starts at the environment's next deploy or restart. Run restart with this
+service to start it now." A turn-off and a call that changes nothing answer `null`.
 
 **Errors:**
 - `plan_limit_exceeded` (402) — a turn-on needs a slot that the plan's limit does not leave
 - `not_found` (404) — service or channel not found
-- `conflict` (409) — a turn-off of the public service, the project changed owner during the call, or the account is under scheduled maintenance
+- `conflict` (409) — a turn-off of the public service, the project changed owner during the call, or
+  the account is under scheduled maintenance
 
 ---
 
 ## POST /apps/{app_id}/channels/{channel_id}/restart
 
-Restart services on the versions they run, with no build. Poll the returned deploy as for a deploy. The MCP tool is `restart`.
+Restart services on the versions they run, with no build. Poll the returned deploy as for a deploy.
+The MCP tool is `restart`.
 
 **Required scope:** `deploy:*`
 
-**Request body:** `{"services": ["worker"]}`, optional. Omitted or null, every service that is turned on in the channel restarts.
+**Request body:** `{"services": ["worker"]}`, optional. Omitted or null, every service that is
+turned on in the channel restarts.
 
 **Response (200):** `{deploy_id, channel_id, status}`, as for a deploy.
 
@@ -473,11 +578,18 @@ Enqueue a deploy of a branch or a commit to a channel.
 }
 ```
 
-- `ref` (string, optional) — A branch name (`main` or `refs/heads/main`). xhostd deploys its current HEAD and **binds the channel to that branch**, in the same transaction as the enqueue. A later build or boot failure keeps the new binding.
-- `sha` (string, optional) — A 40-character hex SHA, or a branch name matching `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. It deploys once and never changes the binding.
-- `services` (string[], optional) — The names of the services to deploy. Omitted or null, every service that is turned on in the channel deploys. A value that is not a list of strings answers 422.
+- `ref` (string, optional) — A branch name (`main` or `refs/heads/main`). xhostd deploys its current
+  HEAD and **binds the channel to that branch**, in the same transaction as the enqueue. A later
+  build or boot failure keeps the new binding.
+- `sha` (string, optional) — A 40-character hex SHA, or a branch name matching
+  `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. It deploys once and never changes the binding.
+- `services` (string[], optional) — The names of the services to deploy. Omitted or null, every
+  service that is turned on in the channel deploys. A value that is not a list of strings
+  answers 422.
 
-If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither, xhostd deploys the current HEAD of the channel's bound branch. On an app with a connected source repository, the deploy fetches from it first.
+If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither,
+xhostd deploys the current HEAD of the channel's bound branch. On an app with a connected source
+repository, the deploy fetches from it first.
 
 **Response (200):**
 ```json
@@ -489,22 +601,35 @@ If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged
 }
 ```
 
-`joined` is true when a deploy of the same commit, queued by a deploy request or by a push to the connected source repository, is already waiting for this channel. `deploy_id` names that deploy, and no second deploy was queued. It reads the current env when it starts, so poll it as usual. Any other deploy request replaces a deploy still queued for the channel, and the replaced deploy turns `superseded`.
+`joined` is true when a deploy of the same commit, queued by a deploy request or by a push to the
+connected source repository, is already waiting for this channel. `deploy_id` names that deploy, and
+no second deploy was queued. It reads the current env when it starts, so poll it as usual. Any other
+deploy request replaces a deploy still queued for the channel, and the replaced deploy turns
+`superseded`.
 
-**Note:** This endpoint must be called explicitly after `git push` to trigger a deploy. Pushing code does not automatically deploy.
+**Note:** This endpoint must be called explicitly after `git push` to trigger a deploy. Pushing code
+does not automatically deploy.
 
 **Errors:**
-- `bad_request` (400) — invalid SHA format, or a `ref` outside the branch rule (`HEAD` and names under `xhost/` included)
-- `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message names both fixes and, for an app with a connected source repository, that repository's default branch
-- `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the bound branch, the message names the fix and the source repository's default branch
-- `conflict` (409) — the source repository sync failed (the message carries the error), the channel is under maintenance, or the app is undergoing scheduled maintenance
-- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the app is under scheduled maintenance; retry in a minute
+- `bad_request` (400) — invalid SHA format, or a `ref` outside the branch rule (`HEAD` and names
+  under `xhost/` included)
+- `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message
+  names both fixes and, for an app with a connected source repository, that repository's default
+  branch
+- `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the
+  bound branch, the message names the fix and the source repository's default branch
+- `conflict` (409) — the source repository sync failed (the message carries the error), the channel
+  is under maintenance, or the app is undergoing scheduled maintenance
+- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's
+  repo, or the app is under scheduled maintenance; retry in a minute
 
 ---
 
 ## POST /apps/{app_id}/channels/{channel_id}/rewind
 
-Rewind a channel to its previous successful deploy's image, with no rebuild, no git sync, and no snapshot. It starts the retained image directly. "Previous" is the last successful deploy whose commit differs from the one live now.
+Rewind a channel to its previous successful deploy's image, with no rebuild, no git sync, and no
+snapshot. It starts the retained image directly. "Previous" is the last successful deploy whose
+commit differs from the one live now.
 
 **Required scope:** `deploy:*`
 
@@ -519,10 +644,13 @@ Rewind a channel to its previous successful deploy's image, with no rebuild, no 
 }
 ```
 
-**Note:** To deploy an OLDER commit, or to rebuild one, use the deploy endpoint with an explicit `sha`. Rewind is not available for `static` apps (they bind-mount the live worktree and have no built image).
+**Note:** To deploy an OLDER commit, or to rebuild one, use the deploy endpoint with an explicit
+`sha`. Rewind is not available for `static` apps (they bind-mount the live worktree and have no
+built image).
 
 **Errors:**
-- `bad_request` (400) — the app is `static`, or the channel has only ever deployed one commit (nothing to rewind to)
+- `bad_request` (400) — the app is `static`, or the channel has only ever deployed one commit
+  (nothing to rewind to)
 - `conflict` (409) — the app is undergoing scheduled maintenance
 - `not_found` (404) — app or channel not found
 
@@ -536,7 +664,10 @@ Fetch one deploy's status and a byte window of its build log.
 
 **Query parameters:**
 - `deploy` (required) — the deploy UUID.
-- `offset` (integer, optional) — byte offset to read the log from. Without it, the reply carries the LAST `max_bytes` bytes of the log, advanced past the first newline so the window starts on a whole line. An explicit `offset` reads byte-exactly from that offset, with no line snapping; an offset past the end of the file yields an empty `log`.
+- `offset` (integer, optional) — byte offset to read the log from. Without it, the reply carries the
+  LAST `max_bytes` bytes of the log, advanced past the first newline so the window starts on a whole
+  line. An explicit `offset` reads byte-exactly from that offset, with no line snapping; an offset
+  past the end of the file yields an empty `log`.
 - `max_bytes` (integer, optional, default 16384, max 262144) — window size in bytes.
 
 **Response (200):**
@@ -555,12 +686,19 @@ Fetch one deploy's status and a byte window of its build log.
 }
 ```
 
-- `status` — one of `queued`, `running`, `success`, `failed`, `superseded`, `cancelled`. Read the outcome here; never grep the log text for `deploy success`.
-- `superseded_by` — set only when the status is `superseded`: a newer deploy request for this channel replaced this one, and this field names it, so poll that id. A superseded deploy's log is empty, or ends where a control-plane restart paused it.
-- A `cancelled` deploy never ran: a database restore of the channel started first. Its log says so. Deploy again once the restore ends.
+- `status` — one of `queued`, `running`, `success`, `failed`, `superseded`, `cancelled`. Read the
+  outcome here; never grep the log text for `deploy success`.
+- `superseded_by` — set only when the status is `superseded`: a newer deploy request for this
+  channel replaced this one, and this field names it, so poll that id. A superseded deploy's log is
+  empty, or ends where a control-plane restart paused it.
+- A `cancelled` deploy never ran: a database restore of the channel started first. Its log says so.
+  Deploy again once the restore ends.
 - `finished_at` — `null` while the status is `queued` or `running`.
 - `log_bytes` — the total size of the log. `offset` is where the returned window starts.
-- `window_bytes` — the byte length of the returned window, counted before utf-8 decoding (`len(log)` is not byte-exact when a window boundary splits a multibyte character). The next page starts at `offset + window_bytes`; `offset + window_bytes` equal to `log_bytes` means the reply reaches the end of the log.
+- `window_bytes` — the byte length of the returned window, counted before utf-8 decoding (`len(log)`
+  is not byte-exact when a window boundary splits a multibyte character). The next page starts at
+  `offset + window_bytes`; `offset + window_bytes` equal to `log_bytes` means the reply reaches the
+  end of the log.
 - A queued deploy with no log yet answers 200 with an empty `log` and `log_bytes: 0`, not 404.
 
 **Errors:**
@@ -587,8 +725,11 @@ stdout+stderr comes back in `output`, capped at ~256 KiB.
 It is a POST, not a GET, so the command never lands in an access log.
 
 **Body:**
-- `command` (optional) — the shell pipeline to run, e.g. `"tail -n 200 app.log"` or `"grep -i error app.log | tail -20"`. Max 4096 chars. **Omit it** and no container is started at all: the reply is the status header only.
-- `container_index` (optional) — read a specific (usually already-replaced) container; default is the newest.
+- `command` (optional) — the shell pipeline to run, e.g. `"tail -n 200 app.log"` or
+  `"grep -i error app.log | tail -20"`. Max 4096 chars. **Omit it** and no container is started at
+  all: the reply is the status header only.
+- `container_index` (optional) — read a specific (usually already-replaced) container; default is
+  the newest.
 
 **Response (200):**
 ```json
@@ -613,12 +754,16 @@ It is a POST, not a GET, so the command never lands in an access log.
 }
 ```
 
-- `source` — `live` (the container still exists) or `archive` (it was removed; this is the saved copy).
+- `source` — `live` (the container still exists) or `archive` (it was removed; this is the saved
+  copy).
 - `oom_killed` — true means the app exceeded the plan's memory limit.
 - `available_indices` — every container index readable for this channel, live or archived.
-- `exit_code` is **your app's** exit code; `command_exit_code` is your `command`'s (`null` when no command ran or the 30 s limit killed it).
-- `log_bytes` — size of the whole `/log/app.log` your command saw, so you know how much you did not read.
-- `timed_out` / `truncated` — the command hit the 30 s limit (partial output is still returned), or its output was cut at ~256 KiB.
+- `exit_code` is **your app's** exit code; `command_exit_code` is your `command`'s (`null` when no
+  command ran or the 30 s limit killed it).
+- `log_bytes` — size of the whole `/log/app.log` your command saw, so you know how much you did not
+  read.
+- `timed_out` / `truncated` — the command hit the 30 s limit (partial output is still returned), or
+  its output was cut at ~256 KiB.
 
 Only stdout/stderr is captured. An app that writes its logs to a file inside
 the container has nothing here. A line reaches this log when the app writes it
@@ -656,10 +801,13 @@ Live built-image inventory for one channel (docker-template apps), newest first.
 }
 ```
 
-- `charged_size_bytes` — the charged size the build recorded: the size counted against the plan cap (total minus warm-base layers); `null` when the platform holds no build record for the image. `matched_base` names the exempt warm base, or `null` if none matched.
+- `charged_size_bytes` — the charged size the build recorded: the size counted against the plan cap
+  (total minus warm-base layers); `null` when the platform holds no build record for the image.
+  `matched_base` names the exempt warm base, or `null` if none matched.
 - `current` — whether the image corresponds to the channel's currently deployed SHA.
 - `image_cap_bytes` — the owner plan's charged-image-size cap.
-- `images` is `null` (never an error) when the channel's host agent is unreachable, so callers can always render the rest.
+- `images` is `null` (never an error) when the channel's host agent is unreachable, so callers can
+  always render the rest.
 
 **Errors:**
 - `not_found` (404) — app or channel not found or not accessible
@@ -668,13 +816,16 @@ Live built-image inventory for one channel (docker-template apps), newest first.
 
 ## GET /apps/{app_id}/tree
 
-List all files in the repo at the given ref. Lets a stateless agent see the current contents before editing.
+List all files in the repo at the given ref. Lets a stateless agent see the current contents before
+editing.
 
 **Required scope:** `repo:*`
 
 **Query parameters:**
 
-- `ref` (string, optional) — Branch name or 40-char SHA. Omit it to read the branch `prod` deploys; if `prod` has no branch yet, the repo's own default branch (`master` for a repo xhostd created, the source repository's default for an app with a connected source repository).
+- `ref` (string, optional) — Branch name or 40-char SHA. Omit it to read the branch `prod` deploys;
+  if `prod` has no branch yet, the repo's own default branch (`master` for a repo xhostd created,
+  the source repository's default for an app with a connected source repository).
 
 **Response (200):**
 ```json
@@ -689,20 +840,23 @@ List all files in the repo at the given ref. Lets a stateless agent see the curr
 ```
 
 **Errors:**
-- `ref_required` (400) — no `ref`, and an app with a connected source repository that never synced has no branch to default to
+- `ref_required` (400) — no `ref`, and an app with a connected source repository that never synced
+  has no branch to default to
 - `not_found` (404) — app not found, or ref does not exist (e.g. empty repo with no commits yet)
 
 ---
 
 ## GET /apps/{app_id}/blob
 
-Return the raw bytes of a single file at the given ref. Useful when an agent needs to read existing content before modifying it.
+Return the raw bytes of a single file at the given ref. Useful when an agent needs to read existing
+content before modifying it.
 
 **Required scope:** `repo:*`
 
 **Query parameters:**
 
-- `ref` (string, optional) — Branch name or 40-char SHA. Omitted, it resolves as on `GET /apps/{app_id}/tree`.
+- `ref` (string, optional) — Branch name or 40-char SHA. Omitted, it resolves as on
+  `GET /apps/{app_id}/tree`.
 - `path` (string, required) — Repository-relative file path.
 
 **Response (200):** Raw file bytes (`application/octet-stream`).
@@ -714,7 +868,14 @@ Return the raw bytes of a single file at the given ref. Useful when an agent nee
 
 ## POST /apps/{app_id}/changeset
 
-Apply a sparse changeset to the repo and create one real git commit on top of `ref`'s current HEAD (or as the initial commit on an empty branch). Designed for agents without shell access or local git. Three write fields mix freely in one commit: `changes` (whole content — string values upsert, `null` deletes), `edits` (`{path: [{old_string, new_string, replace_all}]}` — `old_string` must occur exactly once unless `replace_all`), and `patches` (`{path: hunk-text}` — headers are `@@` or `@@ anchor`, body lines begin with a space, `-`, or `+`, and there are no line numbers). Absent paths are unchanged, a path belongs to exactly one field, matching is byte-exact, and any failure fails the whole commit.
+Apply a sparse changeset to the repo and create one real git commit on top of `ref`'s current HEAD
+(or as the initial commit on an empty branch). Designed for agents without shell access or local
+git. Three write fields mix freely in one commit: `changes` (whole content — string values upsert,
+`null` deletes), `edits` (`{path: [{old_string, new_string, replace_all}]}` — `old_string` must
+occur exactly once unless `replace_all`), and `patches` (`{path: hunk-text}` — headers are `@@` or
+`@@ anchor`, body lines begin with a space, `-`, or `+`, and there are no line numbers). Absent
+paths are unchanged, a path belongs to exactly one field, matching is byte-exact, and any failure
+fails the whole commit.
 
 **Required scope:** `repo:*`
 
@@ -737,13 +898,25 @@ Apply a sparse changeset to the repo and create one real git commit on top of `r
 }
 ```
 
-- `ref` (string, optional) — Target branch. Must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. Created if it does not yet exist. Omitted, it resolves as on `GET /apps/{app_id}/tree`.
+- `ref` (string, optional) — Target branch. Must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. Created if
+  it does not yet exist. Omitted, it resolves as on `GET /apps/{app_id}/tree`.
 - `message` (string, required) — Commit message. Must be non-empty.
-- `changes` (object, optional) — Map of repo-relative path → string (upsert) or `null` (delete). Paths must be relative and must not contain `..` segments.
-- `edits` (object, optional) — Map of path → a list of `{old_string, new_string, replace_all}`. `old_string` must be non-empty and must occur exactly once in the file unless `replace_all` is `true`. Edits apply in list order, each against the result of the previous one. The path must already exist on `ref`.
-- `patches` (object, optional) — Map of path → hunk text. A hunk header is `@@`, or `@@ anchor` where the anchor is a line or unique substring copied from the file. Put the anchor on a line the hunk covers, or on the line just above it: matching starts there and runs to the end of the file. Body lines begin with a space (context), `-` (remove), or `+` (add). There are no line numbers and no line counts, and no trailing context line is required. Each hunk needs at least one context or `-` line. The path must already exist on `ref`.
+- `changes` (object, optional) — Map of repo-relative path → string (upsert) or `null` (delete).
+  Paths must be relative and must not contain `..` segments.
+- `edits` (object, optional) — Map of path → a list of `{old_string, new_string, replace_all}`.
+  `old_string` must be non-empty and must occur exactly once in the file unless `replace_all` is
+  `true`. Edits apply in list order, each against the result of the previous one. The path must
+  already exist on `ref`.
+- `patches` (object, optional) — Map of path → hunk text. A hunk header is `@@`, or `@@ anchor`
+  where the anchor is a line or unique substring copied from the file. Put the anchor on a line the
+  hunk covers, or on the line just above it: matching starts there and runs to the end of the file.
+  Body lines begin with a space (context), `-` (remove), or `+` (add). There are no line numbers and
+  no line counts, and no trailing context line is required. Each hunk needs at least one context or
+  `-` line. The path must already exist on `ref`.
 
-Send at least one of `changes`, `edits`, or `patches`. A path belongs to exactly one of them. Matching for `edits` and `patches` is byte-exact — whitespace, indentation, and line endings all count. Any failure fails the whole commit and writes nothing.
+Send at least one of `changes`, `edits`, or `patches`. A path belongs to exactly one of them.
+Matching for `edits` and `patches` is byte-exact — whitespace, indentation, and line endings all
+count. Any failure fails the whole commit and writes nothing.
 
 **Response (200):**
 ```json
@@ -752,13 +925,18 @@ Send at least one of `changes`, `edits`, or `patches`. A path belongs to exactly
 }
 ```
 
-**Note:** This endpoint creates a commit but does not deploy. Pass the returned `sha` to `POST /apps/{app_id}/channels/{channel_id}/deploy` to ship it. Same two-step model as `git push` followed by deploy.
+**Note:** This endpoint creates a commit but does not deploy. Pass the returned `sha` to
+`POST /apps/{app_id}/channels/{channel_id}/deploy` to ship it. Same two-step model as `git push`
+followed by deploy.
 
 **Errors:**
-- `bad_request` (400) — invalid path, invalid branch name, empty message, malformed changeset, a path in more than one field, or an edit or hunk whose anchor is absent or ambiguous (the message names the path and the count)
+- `bad_request` (400) — invalid path, invalid branch name, empty message, malformed changeset, a
+  path in more than one field, or an edit or hunk whose anchor is absent or ambiguous (the message
+  names the path and the count)
 - `not_found` (404) — app not found
 - `conflict` (409) — the app has a connected source repository; push to that repository
-- `service_unavailable` (503) — the repo is busy, or the app is under scheduled maintenance; nothing was committed, so retry in a minute
+- `service_unavailable` (503) — the repo is busy, or the app is under scheduled maintenance; nothing
+  was committed, so retry in a minute
 
 ---
 
@@ -778,10 +956,25 @@ Set (upsert) an environment variable or secret on an app.
 }
 ```
 
-- `key` (string, required) — Must match `^[A-Z_][A-Z0-9_]*$`. Reserved keys (system-injected) are rejected: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`, `XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOSTD_HOSTNAME`, `XHOSTD_URL`, `XHOSTD_DOMAINS`, `XHOSTD_PROJECT`, `XHOSTD_ENVIRONMENT`, `XHOSTD_SERVICE`, `XHOST_USER`, `XHOST_SHA`, `XHOST_HTTP_PORT`, `PORT`, `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`, `DATABASE_URL`, `DATABASE_URL_READONLY`, `DATABASE_URL_DIRECT`, `DATABASE_HOST`, `DATABASE_PASSWORD`, `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`. Every other key that starts with `XHOSTD_` is reserved too.
-- `value` (string, required) — The value to set (stored encrypted). Capped at 16 KiB of UTF-8, per value.
-- `kind` (string, optional) — `env` (plain variable) or `secret`. Omitted, an existing key keeps its kind and a new key defaults to `env`. `secret` turns a plain variable into a secret. `env` over a secret in the same scope answers 409: a secret never becomes a plain variable in place. Secret values are omitted from list responses (metadata only); the single reveal path is `GET /apps/{app_id}/env/{key}/value` (the web console's reveal uses the same endpoint), and each reveal is audit-logged.
-- `channel_id` (string, optional) — Omit for an app-level default; set to a channel id for a per-channel override. At deploy time the channel override wins over the app default, and system-injected keys win over both.
+- `key` (string, required) — Must match `^[A-Z_][A-Z0-9_]*$`. Reserved keys (system-injected) are
+  rejected: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`, `XHOSTD_FORWARD_PORT`,
+  `XHOSTD_READY_FILE`, `XHOSTD_HOSTNAME`, `XHOSTD_URL`, `XHOSTD_DOMAINS`, `XHOSTD_PROJECT`,
+  `XHOSTD_ENVIRONMENT`, `XHOSTD_SERVICE`, `XHOST_USER`, `XHOST_SHA`, `XHOST_HTTP_PORT`, `PORT`,
+  `XHOST_FORWARD_PORT`, `XHOST_READY_FILE`, `DATABASE_URL`, `DATABASE_URL_READONLY`,
+  `DATABASE_URL_DIRECT`, `DATABASE_HOST`, `DATABASE_PASSWORD`, `S3_ENDPOINT`, `S3_BUCKET`,
+  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION`. Every other key that starts with
+  `XHOSTD_` is reserved too.
+- `value` (string, required) — The value to set (stored encrypted). Capped at 16 KiB of UTF-8, per
+  value.
+- `kind` (string, optional) — `env` (plain variable) or `secret`. Omitted, an existing key keeps its
+  kind and a new key defaults to `env`. `secret` turns a plain variable into a secret. `env` over a
+  secret in the same scope answers 409: a secret never becomes a plain variable in place. Secret
+  values are omitted from list responses (metadata only); the single reveal path is
+  `GET /apps/{app_id}/env/{key}/value` (the web console's reveal uses the same endpoint), and each
+  reveal is audit-logged.
+- `channel_id` (string, optional) — Omit for an app-level default; set to a channel id for a
+  per-channel override. At deploy time the channel override wins over the app default, and
+  system-injected keys win over both.
 
 **Response (200):**
 ```json
@@ -790,26 +983,34 @@ Set (upsert) an environment variable or secret on an app.
 }
 ```
 
-- `notice` — when the change reaches each affected channel, the channels whose running container is now behind, and the channels with no deploy yet. Relay it, and offer to deploy the channels it names. Every env write answers with the same field.
+- `notice` — when the change reaches each affected channel, the channels whose running container is
+  now behind, and the channels with no deploy yet. Relay it, and offer to deploy the channels it
+  names. Every env write answers with the same field.
 
 **Errors:**
 - `bad_request` (400) — invalid key format or reserved key
 - `not_found` (404) — channel not found on this app
-- `conflict` (409) — `kind` is `env` and the key holds a secret in that scope; delete it first, or upload a new secret value
+- `conflict` (409) — `kind` is `env` and the key holds a secret in that scope; delete it first, or
+  upload a new secret value
 
 ---
 
 ## PUT /apps/{app_id}/env/{key}
 
-Store one env value from the raw request body, so a secret goes from a file straight to xhostd and never through a tool call. `set_secret` returns this request.
+Store one env value from the raw request body, so a secret goes from a file straight to xhostd and
+never through a tool call. `set_secret` returns this request.
 
 **Required scope:** `deploy:*`
 
 **Query parameters:**
-- `kind` (optional) — `secret` (the default) or `env`. The default never keeps an existing kind, so an upload over a plain variable makes it a secret.
-- `channel_id` (optional) — A channel id for a per-channel override; without it, the app-level default.
+- `kind` (optional) — `secret` (the default) or `env`. The default never keeps an existing kind, so
+  an upload over a plain variable makes it a secret.
+- `channel_id` (optional) — A channel id for a per-channel override; without it, the app-level
+  default.
 
-**Request body:** the raw value, byte for byte, with `Content-Type: application/octet-stream`, `text/plain` (no charset, or `utf-8`), or none. xhostd stores a trailing newline too, so strip it from a one-line value.
+**Request body:** the raw value, byte for byte, with `Content-Type: application/octet-stream`,
+`text/plain` (no charset, or `utf-8`), or none. xhostd stores a trailing newline too, so strip it
+from a one-line value.
 
 ```bash
 printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
@@ -819,10 +1020,14 @@ printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
   "https://api.xhostd.com/apps/<app_id>/env/STRIPE_KEY?kind=secret"
 ```
 
-**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns. The response never carries the value.
+**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns. The response
+never carries the value.
 
 **Errors:**
-- `bad_request` (400) — invalid key format or reserved key, a body past 16 KiB, an empty body (an empty plain value goes through `POST /apps/{app_id}/env`), a body that is not UTF-8, or another `Content-Type` such as a form or JSON. curl's `--data-binary` sends a form type unless you set the header.
+- `bad_request` (400) — invalid key format or reserved key, a body past 16 KiB, an empty body (an
+  empty plain value goes through `POST /apps/{app_id}/env`), a body that is not UTF-8, or another
+  `Content-Type` such as a form or JSON. curl's `--data-binary` sends a form type unless you set the
+  header.
 - `scope_denied` (403) — the token lacks `deploy:*`
 - `not_found` (404) — app, or channel on this app, not found
 - `conflict` (409) — `kind=env` and the key holds a secret in that scope
@@ -831,12 +1036,14 @@ printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
 
 ## POST /apps/{app_id}/env/{key}/generate
 
-Store a new random secret under a new key: 43 URL-safe characters, 256 bits. The response never carries the value; read it with the console's audited reveal.
+Store a new random secret under a new key: 43 URL-safe characters, 256 bits. The response never
+carries the value; read it with the console's audited reveal.
 
 **Required scope:** `deploy:*`
 
 **Query parameters:**
-- `channel_id` (optional) — A channel id for a per-channel override; without it, the app-level default.
+- `channel_id` (optional) — A channel id for a per-channel override; without it, the app-level
+  default.
 
 **Request body:** none.
 
@@ -846,7 +1053,8 @@ Store a new random secret under a new key: 43 URL-safe characters, 256 bits. The
 - `bad_request` (400) — invalid key format, a reserved key, or a request body
 - `scope_denied` (403) — the token lacks `deploy:*`
 - `not_found` (404) — app, or channel on this app, not found
-- `conflict` (409) — the key already has a value in that scope. Generate creates a new key only: delete the key first to rotate it.
+- `conflict` (409) — the key already has a value in that scope. Generate creates a new key only:
+  delete the key first to rotate it.
 
 ---
 
@@ -857,9 +1065,11 @@ Delete an environment variable or a secret from an app.
 **Required scope:** `deploy:*`
 
 **Query parameters:**
-- `channel_id` (optional) — With it, deletes only that channel's override; without it, deletes the app-level default.
+- `channel_id` (optional) — With it, deletes only that channel's override; without it, deletes the
+  app-level default.
 
-**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns, led by "The deletion of KEY". A key with no value in that scope answers the same way.
+**Response (200):** `{"notice": "..."}`, the field `POST /apps/{app_id}/env` returns, led by "The
+deletion of KEY". A key with no value in that scope answers the same way.
 
 ---
 
@@ -870,7 +1080,8 @@ List an app's environment variables and secrets.
 **Required scope:** `deploy:*`
 
 **Query parameters:**
-- `channel_id` (optional) — Without it, raw rows (app-level and per-channel). With it, the resolved view for that channel: app defaults merged with the channel's overrides, the override winning.
+- `channel_id` (optional) — Without it, raw rows (app-level and per-channel). With it, the resolved
+  view for that channel: app defaults merged with the channel's overrides, the override winning.
 
 **Response (200):**
 ```json
@@ -897,20 +1108,26 @@ List an app's environment variables and secrets.
 ```
 
 - `scope` — `app` (app-level default) or `channel` (channel override).
-- `value` — Cleartext for `kind: "env"`; **always `null` for secrets** in list responses. The only read path for a secret's value is `GET /apps/{app_id}/env/{key}/value` (audit-logged); MCP has no reveal tool.
+- `value` — Cleartext for `kind: "env"`; **always `null` for secrets** in list responses. The only
+  read path for a secret's value is `GET /apps/{app_id}/env/{key}/value` (audit-logged); MCP has no
+  reveal tool.
 
 ---
 
 ## GET /apps/{app_id}/env/{key}/value
 
-Reveal one env value — the only read path for `kind: "secret"`. Every call records an `env.reveal` journal event (visible in `GET /apps/{app_id}/events`) before the value is returned. The web console's click-to-reveal uses this same endpoint.
+Reveal one env value — the only read path for `kind: "secret"`. Every call records an `env.reveal`
+journal event (visible in `GET /apps/{app_id}/events`) before the value is returned. The web
+console's click-to-reveal uses this same endpoint.
 
-**A protected action.** An agent credential gets `protected_action` (403) until the app owner turns agent access on. No MCP tool wraps this route.
+**A protected action.** An agent credential gets `protected_action` (403) until the app owner turns
+agent access on. No MCP tool wraps this route.
 
 **Required scope:** `deploy:*`
 
 **Query parameters:**
-- `channel_id` (optional) — With it, resolved semantics: that channel's override wins, and the app-level row applies when the channel has no override. Without it, the app-level row only.
+- `channel_id` (optional) — With it, resolved semantics: that channel's override wins, and the
+  app-level row applies when the channel has no override. Without it, the app-level row only.
 
 **Response (200):**
 ```json
@@ -925,7 +1142,8 @@ Reveal one env value — the only read path for `kind: "secret"`. Every call rec
 - `scope` — `app` or `channel`, the scope the value resolved from.
 
 **Errors:**
-- `protected_action` (403) — the app owner has agent access off; the message names the project settings URL
+- `protected_action` (403) — the app owner has agent access off; the message names the project
+  settings URL
 - `not_found` (404) — key not set at the requested scope, or value unavailable
 
 ---
@@ -949,7 +1167,8 @@ Return the env snapshot recorded when a deploy started — what the app actually
 ```
 
 - `source` — `app` or `channel`, the scope the value resolved from.
-- Secret values are masked (`null`); system-injected keys are listed by name only (their values are credentials and are not stored in the snapshot).
+- Secret values are masked (`null`); system-injected keys are listed by name only (their values are
+  credentials and are not stored in the snapshot).
 
 **Errors:**
 - `not_found` (404) — deploy not found, or it predates env snapshots
@@ -958,7 +1177,9 @@ Return the env snapshot recorded when a deploy started — what the app actually
 
 ## GET /apps/{app_id}/channels/{channel_id}/postgres/snapshots
 
-List a channel's pre-deploy Postgres snapshots, newest first. A snapshot is taken automatically before every non-static deploy. Retention follows the current account entitlement; plugin workflows read the current count and retention window from `get_stats(view="overview")`.
+List a channel's pre-deploy Postgres snapshots, newest first. A snapshot is taken automatically
+before every non-static deploy. Retention follows the current account entitlement; plugin workflows
+read the current count and retention window from `get_stats(view="overview")`.
 
 **Request body:** None
 
@@ -1001,7 +1222,9 @@ replaced the channel's database, and is null unless the restore succeeded.
 
 ## POST /apps/{app_id}/channels/{channel_id}/postgres/restore
 
-Start a restore of the channel's database from a snapshot. The call answers 202 at once, and the restore runs in the background. A restore can take up to an hour; for databases under 10 GB it typically takes minutes. A failed restore leaves the database unchanged.
+Start a restore of the channel's database from a snapshot. The call answers 202 at once, and the
+restore runs in the background. A restore can take up to an hour; for databases under 10 GB it
+typically takes minutes. A failed restore leaves the database unchanged.
 
 **Request body:**
 ```json
@@ -1014,15 +1237,21 @@ Start a restore of the channel's database from a snapshot. The call answers 202 
 }
 ```
 
-- `confirm_db_name` (string, required) — Must exactly match the channel's `db_name` (from `GET .../postgres`); mismatches are rejected.
+- `confirm_db_name` (string, required) — Must exactly match the channel's `db_name` (from
+  `GET .../postgres`); mismatches are rejected.
 - `snapshot_id` (string, required) — A snapshot id from the snapshots list.
 - `during_restore` (string, optional) — What the app can do while the restore runs:
-  - `read_only`, the default: the app stays online and reads its database, and every write fails until the restore ends.
-  - `maintenance`: the app's addresses show a maintenance page, and every write fails until the restore ends. xhostd's page answers HTTP 503, so an uptime monitor reports the app as down during the restore.
+  - `read_only`, the default: the app stays online and reads its database, and every write fails
+    until the restore ends.
+  - `maintenance`: the app's addresses show a maintenance page, and every write fails until the
+    restore ends. xhostd's page answers HTTP 503, so an uptime monitor reports the app as down
+    during the restore.
   - `live`: the app keeps writing, and the switch to the restored database discards those writes.
 
   In every mode, a write made while the restore still waits to start is discarded at the switch.
-- `maintenance_channel_id` (string, optional) — `maintenance` only: a deployed channel of a `static` app of the same owner, whose site the app's addresses serve in place of xhostd's page. Its pages answer with their own status codes. Null for xhostd's page.
+- `maintenance_channel_id` (string, optional) — `maintenance` only: a deployed channel of a `static`
+  app of the same owner, whose site the app's addresses serve in place of xhostd's page. Its pages
+  answer with their own status codes. Null for xhostd's page.
 - `request_id` (string, optional) — A retry with the same id answers the recorded restore.
 
 **Response (202):** The restore's status, with `Location: /postgres/restores/{restore_id}`:
@@ -1050,38 +1279,53 @@ Start a restore of the channel's database from a snapshot. The call answers 202 
 }
 ```
 
-`notice` states what the chosen mode means for the app: relay it. `cancelled_deploys` lists the channel's queued deploys and rewinds that the start cancelled: deploy again once the restore ends. A deploy that already runs finishes first, and the restore waits for it. Until the restore ends, a deploy of the channel answers 409 `restore_in_flight`.
+`notice` states what the chosen mode means for the app: relay it. `cancelled_deploys` lists the
+channel's queued deploys and rewinds that the start cancelled: deploy again once the restore ends. A
+deploy that already runs finishes first, and the restore waits for it. Until the restore ends, a
+deploy of the channel answers 409 `restore_in_flight`.
 
 **Errors:**
-- `bad_request` (400) — `invalid_confirmation` (`db_name` mismatch); `maintenance_channel_needs_maintenance` (a page channel with another mode); `maintenance_channel_not_found`, `maintenance_channel_not_static`, or `maintenance_channel_not_deployed` (the page channel)
-- `protected_action` (403) — restoring the `prod` channel is a protected action: an agent credential gets 403 `protected_action` until the app owner turns agent access on in the console
+- `bad_request` (400) — `invalid_confirmation` (`db_name` mismatch);
+  `maintenance_channel_needs_maintenance` (a page channel with another mode);
+  `maintenance_channel_not_found`, `maintenance_channel_not_static`, or
+  `maintenance_channel_not_deployed` (the page channel)
+- `protected_action` (403) — restoring the `prod` channel is a protected action: an agent credential
+  gets 403 `protected_action` until the app owner turns agent access on in the console
 - `not_found` (404) — `snapshot_not_found`; `snapshot_host_gone` (permanent)
-- `snapshot_out_of_window` (409) — the snapshot is older than the backups xhostd keeps; pick a newer one
+- `snapshot_out_of_window` (409) — the snapshot is older than the backups xhostd keeps; pick a newer
+  one
 - `restore_in_flight` (409) — a restore of the channel is already active; the message names it
 - `conflict` (409) — the database is not ready, or the app is undergoing scheduled maintenance
-- `conflict` (409) — "the project changed owner; try the restore again": an ownership transfer of the project committed while the request ran; try the restore again
+- `conflict` (409) — "the project changed owner; try the restore again": an ownership transfer of
+  the project committed while the request ran; try the restore again
 - `service_unavailable` (503) — `postgres_unavailable`
 
 ---
 
 ## GET /postgres/restores/{restore_id}
 
-Read one restore's status. A member of the restore's channel reads it; any other caller gets 404 `restore_not_found`. Poll it about every 10 seconds.
+Read one restore's status. A member of the restore's channel reads it; any other caller gets 404
+`restore_not_found`. Poll it about every 10 seconds.
 
 **Response (200):** The same shape as the 202 above, without `cancelled_deploys`.
 
-- `status` — `queued`, `extracting`, `loading`, `swapping`, `succeeded`, or `failed`. `queued` also covers the first moments after the restore starts, while it makes the app's database read-only. During that time, `activity` states what the restore does: show it to the user.
+- `status` — `queued`, `extracting`, `loading`, `swapping`, `succeeded`, or `failed`. `queued` also
+  covers the first moments after the restore starts, while it makes the app's database read-only.
+  During that time, `activity` states what the restore does: show it to the user.
 - `activity` — One plain sentence on what the restore does now. Null once it ends.
-- `waiting` — Why an active restore waits: `deploy_running`, `host_queue`, `starting`, `extraction_busy`, or `snapshot_not_yet_archived`. Null while it works.
+- `waiting` — Why an active restore waits: `deploy_running`, `host_queue`, `starting`,
+  `extraction_busy`, or `snapshot_not_yet_archived`. Null while it works.
 - `queue_ahead` — For a restore that has not started, the restores before it on its database server.
-- `progress` — `phase` (`fetch`, `refetch`, `replay`, or `dump`), `bytes`, and `segments` while extracting; `items_done` of `items_total` while loading. A field the step does not report is null.
+- `progress` — `phase` (`fetch`, `refetch`, `replay`, or `dump`), `bytes`, and `segments` while
+  extracting; `items_done` of `items_total` while loading. A field the step does not report is null.
 - `error_code` and `message` — Set on a failed restore. `message` says why in plain words.
 
 ---
 
 ## POST /apps/{app_id}/channels/{channel_id}/blob/credentials
 
-Return the S3-compatible credentials for the channel's object store — the only payload carrying the decrypted secret. Each read is audit-logged. Note this is a POST with no body.
+Return the S3-compatible credentials for the channel's object store — the only payload carrying the
+decrypted secret. Each read is audit-logged. Note this is a POST with no body.
 
 **Required scope:** `blob:*`
 
@@ -1130,7 +1374,9 @@ Return the channel's object-store status and usage.
 
 ## POST /apps/{app_id}/channels/{channel_id}/domains
 
-Attach a custom domain to a channel (max 5 per channel; domains are globally unique across xhostd). Idempotent for the same channel — re-POSTing the same domain returns the existing row with its token preserved. Returns the DNS records the user must create at their registrar.
+Attach a custom domain to a channel (max 5 per channel; domains are globally unique across xhostd).
+Idempotent for the same channel — re-POSTing the same domain returns the existing row with its token
+preserved. Returns the DNS records the user must create at their registrar.
 
 **Required scope:** `deploy:*`
 
@@ -1159,23 +1405,37 @@ Attach a custom domain to a channel (max 5 per channel; domains are globally uni
 }
 ```
 
-- `dns_records` — Create the TXT record with `txt_value`, plus a routing record: `CNAME` → `cname_target` for subdomains, or `A` → `a_values` at an apex. `a_values` may be empty if platform IP resolution transiently failed. `dns_records.cname_target` is the platform's generic target. A CNAME to the channel's own hostname also verifies.
+- `dns_records` — Create the TXT record with `txt_value`, plus a routing record: `CNAME` →
+  `cname_target` for subdomains, or `A` → `a_values` at an apex. `a_values` may be empty if platform
+  IP resolution transiently failed. `dns_records.cname_target` is the platform's generic target. A
+  CNAME to the channel's own hostname also verifies.
 
 **Errors:**
-- `bad_request` (400) — `invalid domain: <reason>` (`is_ip_address`, `invalid_idna`, `too_long`, `invalid_label`, `platform_domain_forbidden`, `needs_dot`) or `domain_limit_reached`
+- `bad_request` (400) — `invalid domain: <reason>` (`is_ip_address`, `invalid_idna`, `too_long`,
+  `invalid_label`, `platform_domain_forbidden`, `needs_dot`) or `domain_limit_reached`
 - `conflict` (409) — `domain_taken` (another channel owns this domain)
 
 ---
 
 ## POST /apps/{app_id}/channels/{channel_id}/domains/{domain}/verify
 
-Re-run the TXT + routing DNS check for an attached domain and update its status. Idempotent and retryable — DNS propagation takes minutes, so a `pending` status with a transient reason is normal at first.
+Re-run the TXT + routing DNS check for an attached domain and update its status. Idempotent and
+retryable — DNS propagation takes minutes, so a `pending` status with a transient reason is normal
+at first.
 
 **Required scope:** `deploy:*`
 
-**Response (200):** Same shape as the attach response, with updated `status`, `reason`, and `verified_at`. `status` flips `pending → verified` on a passing check. `reason` uses a closed vocabulary: `txt_nxdomain`, `txt_token_mismatch`, `dns_not_pointing`, `domain_nxdomain` (the four definitive failures — the only ones that downgrade a verified domain), plus the transient `txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`.
+**Response (200):** Same shape as the attach response, with updated `status`, `reason`, and
+`verified_at`. `status` flips `pending → verified` on a passing check. `reason` uses a closed
+vocabulary: `txt_nxdomain`, `txt_token_mismatch`, `dns_not_pointing`, `domain_nxdomain` (the four
+definitive failures — the only ones that downgrade a verified domain), plus the transient
+`txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`.
 
-`notice` is a string when this call moved the domain into or out of `verified`, and `null` otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a verify does not restart the container. When the call verified the domain, it also says that a sign-in there carries the domain as the identity cookie's `aud`, so the app must check `aud` against the request's host. Relay it, and deploy the channel when the app checks the `Host` header.
+`notice` is a string when this call moved the domain into or out of `verified`, and `null`
+otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a
+verify does not restart the container. When the call verified the domain, it also says that a
+sign-in there carries the domain as the identity cookie's `aud`, so the app must check `aud` against
+the request's host. Relay it, and deploy the channel when the app checks the `Host` header.
 
 **Errors:**
 - `not_found` (404) — app/channel/domain not found
@@ -1199,7 +1459,8 @@ Each item has the same shape as the attach response.
 
 ## DELETE /apps/{app_id}/channels/{channel_id}/domains/{domain}
 
-Detach a custom domain. Removes the routing and stops certificate renewals; the existing cert expires on its own.
+Detach a custom domain. Removes the routing and stops certificate renewals; the existing cert
+expires on its own.
 
 **Required scope:** `deploy:*`
 
@@ -1211,7 +1472,8 @@ Detach a custom domain. Removes the routing and stops certificate renewals; the 
 }
 ```
 
-- `notice` — a string when the removed domain was verified, and `null` otherwise. The app's `XHOSTD_DOMAINS` drops the domain at the channel's next deploy.
+- `notice` — a string when the removed domain was verified, and `null` otherwise. The app's
+  `XHOSTD_DOMAINS` drops the domain at the channel's next deploy.
 
 **Errors:**
 - `not_found` (404) — app/channel/domain not found
@@ -1220,9 +1482,16 @@ Detach a custom domain. Removes the routing and stops certificate renewals; the 
 
 ## POST /apps/{app_id}/channels/{channel_id}/forward
 
-Give a channel a public `host:port` that carries raw TCP into its container. Idempotent per channel: a channel that already has an endpoint comes back **200** with the same `host`/`port` and its `allow_cidrs` replaced by the submitted list; a fresh allocation is **201**. The address is stable for the life of the exposure, so it is safe to hand out.
+Give a channel a public `host:port` that carries raw TCP into its container. Idempotent per channel:
+a channel that already has an endpoint comes back **200** with the same `host`/`port` and its
+`allow_cidrs` replaced by the submitted list; a fresh allocation is **201**. The address is stable
+for the life of the exposure, so it is safe to hand out.
 
-Inside the container the process must listen on `0.0.0.0` at the port in `$XHOSTD_FORWARD_PORT` (a fixed platform-wide port injected into every non-`static` container). xhostd pumps the bytes through unmodified — no TLS is added and nothing is authenticated. Requires the app's **admin** role: a member gets `not_found`, never `permission_denied`, so a member cannot tell "this channel has no endpoint" from "I may not manage it". No redeploy is needed either way.
+Inside the container the process must listen on `0.0.0.0` at the port in `$XHOSTD_FORWARD_PORT` (a
+fixed platform-wide port injected into every non-`static` container). xhostd pumps the bytes through
+unmodified — no TLS is added and nothing is authenticated. Requires the app's **admin** role: a
+member gets `not_found`, never `permission_denied`, so a member cannot tell "this channel has no
+endpoint" from "I may not manage it". No redeploy is needed either way.
 
 **Required scope:** `channel:*`
 
@@ -1233,7 +1502,9 @@ Inside the container the process must listen on `0.0.0.0` at the port in `$XHOST
 }
 ```
 
-- `allow_cidrs` (array of strings, optional, default `[]`) — Source-address allowlist: IPv4/IPv6 networks or bare addresses (`203.0.113.7` is accepted and normalized to `203.0.113.7/32`), at most 16 entries. **Empty or omitted means the whole internet may connect.**
+- `allow_cidrs` (array of strings, optional, default `[]`) — Source-address allowlist: IPv4/IPv6
+  networks or bare addresses (`203.0.113.7` is accepted and normalized to `203.0.113.7/32`), at most
+  16 entries. **Empty or omitted means the whole internet may connect.**
 
 **Response (201 on a fresh allocation, 200 when the channel was already exposed):**
 ```json
@@ -1248,12 +1519,21 @@ Inside the container the process must listen on `0.0.0.0` at the port in `$XHOST
 }
 ```
 
-- `active` — Whether the endpoint is actually carrying traffic. The row existing is not enough: `false` means the project's port-forwarding toggle is off or the owner's current entitlement no longer includes port forwarding.
+- `active` — Whether the endpoint is actually carrying traffic. The row existing is not enough:
+  `false` means the project's port-forwarding toggle is off or the owner's current entitlement no
+  longer includes port forwarding.
 
 **Errors:**
-- `bad_request` (400) — more than 16 `allow_cidrs`, an entry that is not a valid IP address or range, or a `static` app (it runs no process that could accept a connection; use `app` or `docker`)
-- `plan_limit_exceeded` (402) — the current account entitlement does not include public TCP endpoints; plugin workflows explain that the feature is unavailable, omit any purchase or plan-change URL, and do not retry
-- `permission_denied` (403) — the project's port-forwarding toggle is off. The toggle itself (`POST /apps/{app_id}/forwarding`) is a protected action — there is no MCP tool for it, it answers `protected_action` to an agent credential, and the message here names the URL a project admin must use
+- `bad_request` (400) — more than 16 `allow_cidrs`, an entry that is not a valid IP address or
+  range, or a `static` app (it runs no process that could accept a connection; use `app` or
+  `docker`)
+- `plan_limit_exceeded` (402) — the current account entitlement does not include public TCP
+  endpoints; plugin workflows explain that the feature is unavailable, omit any purchase or
+  plan-change URL, and do not retry
+- `permission_denied` (403) — the project's port-forwarding toggle is off. The toggle itself
+  (`POST /apps/{app_id}/forwarding`) is a protected action — there is no MCP tool for it, it answers
+  `protected_action` to an agent credential, and the message here names the URL a project admin must
+  use
 - `not_found` (404) — app/channel not found, or the caller is below the admin role
 - `conflict` (409) — no forward node has a free port right now
 
@@ -1261,7 +1541,8 @@ Inside the container the process must listen on `0.0.0.0` at the port in `$XHOST
 
 ## GET /apps/{app_id}/forwards
 
-List every exposed channel of the app, in channel-name order. App-scoped on purpose: one round trip covers the whole project, and there is no per-channel variant. Readable by any member.
+List every exposed channel of the app, in channel-name order. App-scoped on purpose: one round trip
+covers the whole project, and there is no per-channel variant. Readable by any member.
 
 **Response (200):**
 ```json
@@ -1276,20 +1557,35 @@ Each item has the same shape as the expose response.
 
 ## DELETE /apps/{app_id}/channels/{channel_id}/forward
 
-Release the channel's public endpoint. New connections are refused immediately and the address returns to the pool, so anything that reconnects breaks and re-exposing later allocates a **new** address. Connections already established keep running until they close on their own — this does not cut off a session in progress. To drop those as well, `POST /apps/{app_id}/channels/{channel_id}/deploy` for the same channel **after** the release: cutover replaces the container, ending every session into the old one. The container otherwise keeps running and keeps serving its HTTPS URL. Requires the app's **admin** role (a member gets `not_found`).
+Release the channel's public endpoint. New connections are refused immediately and the address
+returns to the pool, so anything that reconnects breaks and re-exposing later allocates a **new**
+address. Connections already established keep running until they close on their own — this does not
+cut off a session in progress. To drop those as well,
+`POST /apps/{app_id}/channels/{channel_id}/deploy` for the same channel **after** the release:
+cutover replaces the container, ending every session into the old one. The container otherwise keeps
+running and keeps serving its HTTPS URL. Requires the app's **admin** role (a member gets
+`not_found`).
 
 **Required scope:** `channel:*`
 
 **Response:** 204 No Content
 
 **Errors:**
-- `not_found` (404) — app/channel not found, the channel has no endpoint, or the caller is below the admin role
+- `not_found` (404) — app/channel not found, the channel has no endpoint, or the caller is below the
+  admin role
 
 ---
 
 ## POST /apps/{app_id}/source/sync
 
-For an app with a connected source repository: fetch the latest commits of that repository into the app's internal xhostd mirror without deploying. The MCP tool is `sync_git_from_remote`. Each deploy fetches first anyway; use this to refresh the mirror or surface sync errors on their own. Requires the admin role (or higher) on the app, and a credential holding `repo:*`. Not a protected action — it pulls the remote the owner already chose, so it never answers `protected_action`. Connecting and disconnecting a source repository ARE protected actions, and neither has an MCP tool. `POST /apps/{app_id}/github/sync` runs the same sync for a `deploy_key` source, and answers the GitHub status fields only.
+For an app with a connected source repository: fetch the latest commits of that repository into the
+app's internal xhostd mirror without deploying. The MCP tool is `sync_git_from_remote`. Each deploy
+fetches first anyway; use this to refresh the mirror or surface sync errors on their own. Requires
+the admin role (or higher) on the app, and a credential holding `repo:*`. Not a protected action —
+it pulls the remote the owner already chose, so it never answers `protected_action`. Connecting and
+disconnecting a source repository ARE protected actions, and neither has an MCP tool.
+`POST /apps/{app_id}/github/sync` runs the same sync for a `deploy_key` source, and answers the
+GitHub status fields only.
 
 **Request body:** None
 
@@ -1314,12 +1610,25 @@ For an app with a connected source repository: fetch the latest commits of that 
 }
 ```
 
-- `kind` — `deploy_key`, a repository connected with a read-only deploy key, or `installation`, a repository connected through an app installation on its git host. `host` and `label` name the git host.
-- `default_branch` — the source repository's default branch, `null` until a sync reads it. A hint only: it binds no channel. Deploy it with `ref` to bind `prod` to it.
-- `public_key` and `notify_url` — set for a `deploy_key` source only. `notify_url` is the app's push ping URL, `POST /webhooks/github/{app_id}`. `last_ping_at` — when the last push request arrived, or `null`.
-- `installation` — set for an `installation` source only: `{id, host, label, account_slug, status}`, where `status` is `active`, `suspended`, `removed`, or `disabled`.
+- `kind` — `deploy_key`, a repository connected with a read-only deploy key, or `installation`, a
+  repository connected through an app installation on its git host. `host` and `label` name the git
+  host.
+- `default_branch` — the source repository's default branch, `null` until a sync reads it. A hint
+  only: it binds no channel. Deploy it with `ref` to bind `prod` to it.
+- `public_key` and `notify_url` — set for a `deploy_key` source only. `notify_url` is the app's push
+  ping URL, `POST /webhooks/github/{app_id}`. `last_ping_at` — when the last push request arrived,
+  or `null`.
+- `installation` — set for an `installation` source only: `{id, host, label, account_slug, status}`,
+  where `status` is `active`, `suspended`, `removed`, or `disabled`.
 
-**Deploy on push.** Each push request syncs the mirror and deploys the new branch head of each channel with `follows_branch` (see `PATCH /apps/{app_id}/channels/{channel_id}`). For an `installation` source, the git host sends each push to xhostd, and no setup is needed. For a `deploy_key` source, a `POST` to `notify_url` is the push request: it needs no auth and always answers 202, and xhostd reads no body and fetches the repo from GitHub itself. Set the ping up in one of two ways. **A GitHub Action:** commit `.github/workflows/notify-xhostd.yml` to every branch that should ping. It holds no secret; over HTTPS, the push of a workflow file needs a GitHub token with the `workflow` scope.
+**Deploy on push.** Each push request syncs the mirror and deploys the new branch head of each
+channel with `follows_branch` (see `PATCH /apps/{app_id}/channels/{channel_id}`). For an
+`installation` source, the git host sends each push to xhostd, and no setup is needed. For a
+`deploy_key` source, a `POST` to `notify_url` is the push request: it needs no auth and always
+answers 202, and xhostd reads no body and fetches the repo from GitHub itself. Set the ping up in
+one of two ways. **A GitHub Action:** commit `.github/workflows/notify-xhostd.yml` to every branch
+that should ping. It holds no secret; over HTTPS, the push of a workflow file needs a GitHub token
+with the `workflow` scope.
 
 ```yaml
 name: Notify xhostd
@@ -1331,22 +1640,30 @@ jobs:
       - run: curl -fsS --retry 5 --retry-all-errors -X POST https://api.xhostd.com/webhooks/github/<app-id>
 ```
 
-**A repo webhook:** in GitHub, Settings → Webhooks, the same URL, no secret, push events only. It needs repo admin and uses no Actions minutes. A branch whose files lack the workflow does not ping, and a repo that feeds two apps needs two `curl` lines or two webhooks. More than 300 pings in 60 seconds from one address answer 429 for 60 seconds.
+**A repo webhook:** in GitHub, Settings → Webhooks, the same URL, no secret, push events only. It
+needs repo admin and uses no Actions minutes. A branch whose files lack the workflow does not ping,
+and a repo that feeds two apps needs two `curl` lines or two webhooks. More than 300 pings in 60
+seconds from one address answer 429 for 60 seconds.
 
 **Errors:**
 - `scope_denied` (403) — the credential lacks `repo:*`
-- `not_found` (404) — app not found, or no source repository connected ("no repository source is connected")
-- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's repo, or the app is under scheduled maintenance; nothing changed, so retry in a minute
+- `not_found` (404) — app not found, or no source repository connected ("no repository source is
+  connected")
+- `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's
+  repo, or the app is under scheduled maintenance; nothing changed, so retry in a minute
 
 ---
 
 ## GET /apps/{app_id}/events
 
-List the app's activity events (attributed audit trail of project mutations: member changes, deploys, env writes and reveals, database operations, git pushes/commits), newest first. No secret values appear.
+List the app's activity events (attributed audit trail of project mutations: member changes,
+deploys, env writes and reveals, database operations, git pushes/commits), newest first. No secret
+values appear.
 
 **Query parameters:**
 - `limit` (integer, optional, default 50) — Max events to return, clamped to 1–100.
-- `before` (timestamp, optional) — Return only events created before this instant (pagination cursor).
+- `before` (timestamp, optional) — Return only events created before this instant (pagination
+  cursor).
 
 **Response (200):**
 ```json
@@ -1371,7 +1688,10 @@ List the app's activity events (attributed audit trail of project mutations: mem
 
 ## POST /exports
 
-Queue a downloadable export (takeout) of a channel's or app's data: deployed code, a Postgres dump of the channel's database, and (when small enough) the channel's object-storage files. Env variable keys are included as blank placeholders — secret values are never exported. One non-terminal export per user at a time.
+Queue a downloadable export (takeout) of a channel's or app's data: deployed code, a Postgres dump
+of the channel's database, and (when small enough) the channel's object-storage files. Env variable
+keys are included as blank placeholders — secret values are never exported. One non-terminal export
+per user at a time.
 
 **Request body:**
 ```json
@@ -1410,7 +1730,8 @@ Queue a downloadable export (takeout) of a channel's or app's data: deployed cod
 
 **Errors:**
 - `bad_request` (400) — invalid scope, missing `channel_id`, or nothing deployed to export
-- `conflict` (409) — an export is already in progress, or the app is undergoing scheduled maintenance
+- `conflict` (409) — an export is already in progress, or the app is undergoing scheduled
+  maintenance
 
 ---
 
@@ -1426,7 +1747,8 @@ List the authenticated user's exports, newest first.
 
 Poll an export's progress. Statuses: `queued`, `running`, `ready`, `failed`.
 
-**Response (200):** Same shape as the `POST /exports` response, with `progress_pct`, `size_bytes`, `error`, `blobs_included`/`blobs_reason`, and `expires_at` filled in as the build advances.
+**Response (200):** Same shape as the `POST /exports` response, with `progress_pct`, `size_bytes`,
+`error`, `blobs_included`/`blobs_reason`, and `expires_at` filled in as the build advances.
 
 **Errors:**
 - `not_found` (404) — export not found or not owned by caller
@@ -1435,7 +1757,12 @@ Poll an export's progress. Statuses: `queued`, `running`, `ready`, `failed`.
 
 ## POST /exports/{export_id}/download-token
 
-Mint a short-lived `exports:read` token for a ready, owned export. Your calling token must carry `exports:read` itself, because a mint never grants more scope, and never a longer life, than the caller holds. The token expires with the export, or with your calling token if that comes first. A unified credential already reaches the download routes, because `exports:read` is default-granted; use this route when you want a single-purpose token — for example one you paste into a `curl` command, where a full credential would expose your git and Postgres passwords.
+Mint a short-lived `exports:read` token for a ready, owned export. Your calling token must carry
+`exports:read` itself, because a mint never grants more scope, and never a longer life, than the
+caller holds. The token expires with the export, or with your calling token if that comes first. A
+unified credential already reaches the download routes, because `exports:read` is default-granted;
+use this route when you want a single-purpose token — for example one you paste into a `curl`
+command, where a full credential would expose your git and Postgres passwords.
 
 **Response (200):**
 ```json
@@ -1457,7 +1784,13 @@ Mint a short-lived `exports:read` token for a ready, owned export. Your calling 
 
 ## POST /credentials
 
-Mint a unified credential for the authenticated user. The returned token serves as your git password, Postgres password, and platform API bearer, and carries the default scopes your calling token holds — all nine of `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`, `snapshots:read` and `blobs:read` for a general credential. A mint never grants more scope, and never a longer life, than the caller holds, so a narrowed token renews itself here and keeps its narrowed scopes, and a short-lived one cannot outlive itself. It lives 30 days, or until your calling token expires if that comes first, and less when you ask for less.
+Mint a unified credential for the authenticated user. The returned token serves as your git
+password, Postgres password, and platform API bearer, and carries the default scopes your calling
+token holds — all nine of `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`,
+`exports:read`, `snapshots:read` and `blobs:read` for a general credential. A mint never grants more
+scope, and never a longer life, than the caller holds, so a narrowed token renews itself here and
+keeps its narrowed scopes, and a short-lived one cannot outlive itself. It lives 30 days, or until
+your calling token expires if that comes first, and less when you ask for less.
 
 **Request body (optional):**
 ```json
@@ -1466,7 +1799,12 @@ Mint a unified credential for the authenticated user. The returned token serves 
   "expires_in": 3600
 }
 ```
-`scopes`, when supplied, must be a non-empty subset of the default scopes your calling token holds, and mints a least-privilege credential. `expires_in` is a lifetime in seconds, at most `2592000` (30 days) and at most what your calling token has left; omit it for the shorter of those two. The two compose, so a credential for one job can be both least-privilege and short-lived — `{"scopes": ["repo:*"], "expires_in": 3600}` is an hour of git access and nothing else. When you know the job, mint only the scopes it needs.
+`scopes`, when supplied, must be a non-empty subset of the default scopes your calling token holds,
+and mints a least-privilege credential. `expires_in` is a lifetime in seconds, at most `2592000` (30
+days) and at most what your calling token has left; omit it for the shorter of those two. The two
+compose, so a credential for one job can be both least-privilege and short-lived —
+`{"scopes": ["repo:*"], "expires_in": 3600}` is an hour of git access and nothing else. When you
+know the job, mint only the scopes it needs.
 
 **Response (200):**
 ```json
@@ -1479,19 +1817,46 @@ Mint a unified credential for the authenticated user. The returned token serves 
 ```
 
 **Errors:**
-- `bad_request` (400) — `scopes` empty, unknown, or naming a scope your calling token does not hold; `expires_in` not positive or above the ceiling. The message names the scopes you can ask for
+- `bad_request` (400) — `scopes` empty, unknown, or naming a scope your calling token does not hold;
+  `expires_in` not positive or above the ceiling. The message names the scopes you can ask for
 
-**With a shell, push over SSH, which needs no token** — see `POST /ssh-keys` below. This token stays required for the HTTPS push, for Postgres and for the platform API.
+**With a shell, push over SSH, which needs no token** — see `POST /ssh-keys` below. This token stays
+required for the HTTPS push, for Postgres and for the platform API.
 
-To push over HTTPS, send the token as a header that git reads from its environment, never in the remote URL: `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push https://git.xhostd.com/<username>/<app>.git <branch>` (git 2.31 or later; the per-app `repo_url` from `GET /apps/{app_id}` is that URL). The token then reaches no process's argv, and the URL-scoped key sends it to the git host alone. A minted token works the same way from a variable of its own. The token is valid for up to 30 days; read `expires_at` for the exact time and re-mint after expiry.
+To push over HTTPS, send the token as a header that git reads from its environment, never in the
+remote URL:
+`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push https://git.xhostd.com/<username>/<app>.git <branch>`
+(git 2.31 or later; the per-app `repo_url` from `GET /apps/{app_id}` is that URL). The token then
+reaches no process's argv, and the URL-scoped key sends it to the git host alone. A minted token
+works the same way from a variable of its own. The token is valid for up to 30 days; read
+`expires_at` for the exact time and re-mint after expiry.
 
 ---
 
 ## POST /ssh-keys
 
-Register one OpenSSH public key on the authenticated user's account, for git over SSH. A key belongs to the account, not to one app. Send the PUBLIC half only — the content of a `.pub` file; the platform stores no private key. A key reaches every repository on the account, so your calling token must carry `repo:*`; `api_login` asks for all nine default scopes, because that is what the key goes on to mint, and it asks for one more thing: the account holds a verified address, or your own token carries `email:bind`. A token from `POST /registrations` or `POST /auth/ssh-key` carries that scope, so an agent registers a replacement key for itself.
+Register one OpenSSH public key on the authenticated user's account, for git over SSH. A key belongs
+to the account, not to one app. Send the PUBLIC half only — the content of a `.pub` file; the
+platform stores no private key. A key reaches every repository on the account, so your calling token
+must carry `repo:*`; `api_login` asks for all nine default scopes, because that is what the key goes
+on to mint, and it asks for one more thing: the account holds a verified address, or your own token
+carries `email:bind`. A token from `POST /registrations` or `POST /auth/ssh-key` carries that scope,
+so an agent registers a replacement key for itself.
 
-**With a shell, push over SSH.** The private half never enters a tool call, and one registration covers every app on the machine. Before you call this route, compare the fingerprint (`ssh-keygen -lf`) of every existing `~/.ssh/xhost_ed25519*.pub` — the default key and every `~/.ssh/xhost_ed25519_*` key — with `GET /ssh-keys`, which lists the calling account's keys, and push with the key whose `.pub` file it lists. A file name proves nothing about the account; only a match does. If none is listed, make `~/.ssh/xhost_ed25519` if it is absent, and register it. If the route answers 409 for that key, make `~/.ssh/xhost_ed25519_<username>` if it is absent, and register it. If that also answers 409, the machine holds no usable SSH key for this account; make no key under any other name. Never put a key in the project directory, and never add a per-project, per-app or per-tool suffix, which would only mint a second key on the account. Where the network blocks outbound port 22, or after an SSH push fails, push over HTTPS with the token sent as a header from git's environment: run `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push <repo_url> <branch>`. With no usable SSH key and no `$XHOSTD_TOKEN`, use `commit_files`.
+**With a shell, push over SSH.** The private half never enters a tool call, and one registration
+covers every app on the machine. Before you call this route, compare the fingerprint
+(`ssh-keygen -lf`) of every existing `~/.ssh/xhost_ed25519*.pub` — the default key and every
+`~/.ssh/xhost_ed25519_*` key — with `GET /ssh-keys`, which lists the calling account's keys, and
+push with the key whose `.pub` file it lists. A file name proves nothing about the account; only a
+match does. If none is listed, make `~/.ssh/xhost_ed25519` if it is absent, and register it. If the
+route answers 409 for that key, make `~/.ssh/xhost_ed25519_<username>` if it is absent, and register
+it. If that also answers 409, the machine holds no usable SSH key for this account; make no key
+under any other name. Never put a key in the project directory, and never add a per-project, per-app
+or per-tool suffix, which would only mint a second key on the account. Where the network blocks
+outbound port 22, or after an SSH push fails, push over HTTPS with the token sent as a header from
+git's environment: run
+`GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" git push <repo_url> <branch>`.
+With no usable SSH key and no `$XHOSTD_TOKEN`, use `commit_files`.
 
 **Request body:**
 ```json
@@ -1504,9 +1869,12 @@ Register one OpenSSH public key on the authenticated user's account, for git ove
 
 - `public_key` (string, required) — one OpenSSH public-key line.
 - `label` (string, optional) — your own name for the key; max 64 characters.
-- `api_login` (boolean, optional, default false) — true lets the key sign in through `POST /auth/ssh-key`; a registration key has it set already. True needs an `ssh-ed25519` key, and a verified address on the account or a calling token carrying `email:bind`.
+- `api_login` (boolean, optional, default false) — true lets the key sign in through
+  `POST /auth/ssh-key`; a registration key has it set already. True needs an `ssh-ed25519` key, and
+  a verified address on the account or a calling token carrying `email:bind`.
 
-Unknown fields are refused: this route answers **422** for a body that holds a field it does not declare (e.g. `name` in place of `label`).
+Unknown fields are refused: this route answers **422** for a body that holds a field it does not
+declare (e.g. `name` in place of `label`).
 
 **Response (200):**
 ```json
@@ -1521,13 +1889,29 @@ Unknown fields are refused: this route answers **422** for a body that holds a f
 }
 ```
 
-Then push: `git remote add xhostd-ssh "git@git.xhostd.com:<username>/<app>.git"` and `GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master`, where `<key>` is `~/.ssh/xhost_ed25519` or a `~/.ssh/xhost_ed25519_<username>` key, and `-o IdentitiesOnly=yes` stops ssh from offering another key it finds first. The platform also notifies the user about the new key, with its label and fingerprint.
+Then push: `git remote add xhostd-ssh "git@git.xhostd.com:<username>/<app>.git"` and
+`GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master`, where
+`<key>` is `~/.ssh/xhost_ed25519` or a `~/.ssh/xhost_ed25519_<username>` key, and
+`-o IdentitiesOnly=yes` stops ssh from offering another key it finds first. The platform also
+notifies the user about the new key, with its label and fingerprint.
 
 **Errors:**
-- `bad_request` (400) — the line is no valid OpenSSH public key, the label is longer than 64 characters, or you asked for `api_login` on a key that is not `ssh-ed25519`, the one type `POST /auth/ssh-key` accepts
-- `scope_denied` (403) — your calling token does not carry `repo:*`, or asks for `api_login` without all nine default scopes
-- `conflict` (409) — the platform holds that fingerprint already; a fingerprint is unique platform-wide. For a key that `GET /ssh-keys` does not list, this means a different xhostd account holds it. For the default `~/.ssh/xhost_ed25519`, make and register `~/.ssh/xhost_ed25519_<username>` for this account. If that key also answers 409, the machine holds no usable SSH key for this account: push over HTTPS with `$XHOSTD_TOKEN`, or else use `commit_files`, and make no key under any other name. Never mint a second keypair for the same account, or one to clear a 409 for a key that `GET /ssh-keys` lists.
-- `conflict` (409) — you asked for `api_login`, the account holds no verified address, and your token carries no `email:bind`. Sign the login message with an `api_login` key the account already holds and retry with the token `POST /auth/ssh-key` answers, verify an address on the account, or register the key without `api_login` for git alone.
+- `bad_request` (400) — the line is no valid OpenSSH public key, the label is longer than 64
+  characters, or you asked for `api_login` on a key that is not `ssh-ed25519`, the one type
+  `POST /auth/ssh-key` accepts
+- `scope_denied` (403) — your calling token does not carry `repo:*`, or asks for `api_login` without
+  all nine default scopes
+- `conflict` (409) — the platform holds that fingerprint already; a fingerprint is unique
+  platform-wide. For a key that `GET /ssh-keys` does not list, this means a different xhostd account
+  holds it. For the default `~/.ssh/xhost_ed25519`, make and register
+  `~/.ssh/xhost_ed25519_<username>` for this account. If that key also answers 409, the machine
+  holds no usable SSH key for this account: push over HTTPS with `$XHOSTD_TOKEN`, or else use
+  `commit_files`, and make no key under any other name. Never mint a second keypair for the same
+  account, or one to clear a 409 for a key that `GET /ssh-keys` lists.
+- `conflict` (409) — you asked for `api_login`, the account holds no verified address, and your
+  token carries no `email:bind`. Sign the login message with an `api_login` key the account already
+  holds and retry with the token `POST /auth/ssh-key` answers, verify an address on the account, or
+  register the key without `api_login` for git alone.
 
 ---
 
@@ -1552,13 +1936,15 @@ List the authenticated user's SSH keys, newest first. Metadata only — no route
 }
 ```
 
-`last_used_at` is null while the key served no git command yet. `api_login` is true for a key that can sign in through `POST /auth/ssh-key`: the registration key, or a key posted with the field set.
+`last_used_at` is null while the key served no git command yet. `api_login` is true for a key that
+can sign in through `POST /auth/ssh-key`: the registration key, or a key posted with the field set.
 
 ---
 
 ## DELETE /ssh-keys/{key_id}
 
-Delete one SSH key the caller owns. The delete is the whole revoke, so a push with that key fails at once.
+Delete one SSH key the caller owns. The delete is the whole revoke, so a push with that key fails at
+once.
 
 **Response:** `204 No Content`
 
@@ -1569,7 +1955,12 @@ Delete one SSH key the caller owns. The delete is the whole revoke, so a push wi
 
 ## POST /registrations
 
-Open a `starter` account for the holder of an `ssh-ed25519` key, with no person and no browser. **No bearer**: the signed message is the proof. The response holds a 30-day token with the default scopes plus `email:bind`, the scope that binds an address to the account, and the key is registered on the account with `api_login`, so it renews the token through `POST /auth/ssh-key` and pushes over SSH with no further call. Full recipe: [Register as an agent](https://docs.xhostd.com/guides/register-as-agent).
+Open a `starter` account for the holder of an `ssh-ed25519` key, with no person and no browser. **No
+bearer**: the signed message is the proof. The response holds a 30-day token with the default scopes
+plus `email:bind`, the scope that binds an address to the account, and the key is registered on the
+account with `api_login`, so it renews the token through `POST /auth/ssh-key` and pushes over SSH
+with no further call. Full recipe: [Register as an
+agent](https://docs.xhostd.com/guides/register-as-agent).
 
 **Request body:**
 ```json
@@ -1584,13 +1975,17 @@ Open a `starter` account for the holder of an `ssh-ed25519` key, with no person 
 
 - `public_key` (string, required) — one OpenSSH public-key line; `ssh-ed25519` only.
 - `timestamp` (integer, required) — Unix seconds; within 300 seconds of the platform clock.
-- `signature` (string, required) — the armored block `ssh-keygen -Y sign -n xhostd-register` wrote over the message.
-- `username` (string, optional) — `^agent[a-z0-9]{5,35}$`; absent means the platform allocates `agent` plus 8 random characters.
+- `signature` (string, required) — the armored block `ssh-keygen -Y sign -n xhostd-register` wrote
+  over the message.
+- `username` (string, optional) — `^agent[a-z0-9]{5,35}$`; absent means the platform allocates
+  `agent` plus 8 random characters.
 - `label` (string, optional) — the key's label, 64 characters or fewer; default `registration`.
 
 Unknown fields answer **422**.
 
-**The message** is three lines of UTF-8 text, each with a trailing newline, signed under the namespace `xhostd-register`. The second line is empty when the platform allocates the name, and it must equal `username` when you send one:
+**The message** is three lines of UTF-8 text, each with a trailing newline, signed under the
+namespace `xhostd-register`. The second line is empty when the platform allocates the name, and it
+must equal `username` when you send one:
 
 ```
 xhostd-register\n<username or empty>\n<timestamp>\n
@@ -1618,24 +2013,40 @@ xhostd-register\n<username or empty>\n<timestamp>\n
 }
 ```
 
-`limits` is the complete `starter` row. Never print `token`; [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) shows where to keep it.
+`limits` is the complete `starter` row. Never print `token`; [Register as an
+agent](https://docs.xhostd.com/guides/register-as-agent) shows where to keep it.
 
 **Errors:**
-- `bad_request` (400) — a key line the parser refuses; a key of another type (`only ssh-ed25519 keys can register or sign in`); `timestamp is outside the 300-second window; check the clock and sign again`; a block that does not verify (`invalid signature`, `signature namespace mismatch`, `the signature was made with a different key`); a requested name outside the rule; a label over 64 characters
-- `conflict` (409) — `username is taken`; `this ssh key is registered already; sign in with it through POST /auth/ssh-key` (never make a second key: renew with this one); `could not allocate a username; retry`
+- `bad_request` (400) — a key line the parser refuses; a key of another type
+  (`only ssh-ed25519 keys can register or sign in`);
+  `timestamp is outside the 300-second window; check the clock and sign again`; a block that does
+  not verify (`invalid signature`, `signature namespace mismatch`,
+  `the signature was made with a different key`); a requested name outside the rule; a label over 64
+  characters
+- `conflict` (409) — `username is taken`;
+  `this ssh key is registered already; sign in with it through POST /auth/ssh-key` (never make a
+  second key: renew with this one); `could not allocate a username; retry`
 - *(no code)* (422) — an unknown or missing field
-- `too_many_requests` (429) — `agent registration budget reached (global); retry later` or `(this source)`; retry the next day
+- `too_many_requests` (429) — `agent registration budget reached (global); retry later` or
+  `(this source)`; retry the next day
 - `service_unavailable` (503) — `agent registration is closed`
 
 ---
 
 ## POST /auth/ssh-key
 
-Mint a fresh 30-day token for a key registered with `api_login`, carrying the default scopes plus `email:bind`. **No bearer**: the signed message is the proof. This is also the one request that answers a token able to bind an address, so a caller that reads 403 from `POST /me/email-verifications` comes here. The registration key qualifies; a key `POST /ssh-keys` stored with `api_login: true` qualifies too, and so does a key a person added in the console with the box that lets it create API tokens.
+Mint a fresh 30-day token for a key registered with `api_login`, carrying the default scopes plus
+`email:bind`. **No bearer**: the signed message is the proof. This is also the one request that
+answers a token able to bind an address, so a caller that reads 403 from
+`POST /me/email-verifications` comes here. The registration key qualifies; a key `POST /ssh-keys`
+stored with `api_login: true` qualifies too, and so does a key a person added in the console with
+the box that lets it create API tokens.
 
-**Request body:** `public_key`, `timestamp`, `signature`, as for `POST /registrations`; no other field (**422** otherwise).
+**Request body:** `public_key`, `timestamp`, `signature`, as for `POST /registrations`; no other
+field (**422** otherwise).
 
-**The message**, signed under the namespace `xhostd-login`. The fingerprint is the `SHA256:...` value `ssh-keygen -lf` prints, prefix included:
+**The message**, signed under the namespace `xhostd-login`. The fingerprint is the `SHA256:...`
+value `ssh-keygen -lf` prints, prefix included:
 
 ```
 xhostd-login\n<fingerprint_sha256>\n<timestamp>\n
@@ -1651,17 +2062,28 @@ xhostd-login\n<fingerprint_sha256>\n<timestamp>\n
 }
 ```
 
-An account holds at most 20 tokens from this route. After a renewal, store the new token in its file. An MCP server registered as the [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) guide shows reads the file at its next connection, so reconnect it or start a new session.
+An account holds at most 20 tokens from this route. After a renewal, store the new token in its
+file. An MCP server registered as the [Register as an
+agent](https://docs.xhostd.com/guides/register-as-agent) guide shows reads the file at its next
+connection, so reconnect it or start a new session.
 
 **Errors:**
-- `bad_request` (400) — a bad key line, a stale timestamp, or a block that does not verify, as for `POST /registrations`
-- `not_found` (404) — `no api-login ssh key matches this fingerprint`: an unknown key, or one without `api_login`; register the key through `POST /registrations`
+- `bad_request` (400) — a bad key line, a stale timestamp, or a block that does not verify, as for
+  `POST /registrations`
+- `not_found` (404) — `no api-login ssh key matches this fingerprint`: an unknown key, or one
+  without `api_login`; register the key through `POST /registrations`
 
 ---
 
 ## POST /me/email-verifications
 
-Mail one confirmation link for the caller's account. Bearer required, scope `email:bind`. Only `POST /registrations` and `POST /auth/ssh-key` grant that scope, because the address becomes the account's sign-in email; a credential from `POST /credentials` or `POST /tokens` reads 403. The platform mails the address a link that works once for 60 minutes; the person who reads the mail opens it and presses Confirm in the console. Confirming enables person-present account access. A new request replaces the account's previous link. An account whose email nobody confirms may be deleted after 7 days. No MCP tool calls this route.
+Mail one confirmation link for the caller's account. Bearer required, scope `email:bind`. Only
+`POST /registrations` and `POST /auth/ssh-key` grant that scope, because the address becomes the
+account's sign-in email; a credential from `POST /credentials` or `POST /tokens` reads 403. The
+platform mails the address a link that works once for 60 minutes; the person who reads the mail
+opens it and presses Confirm in the console. Confirming enables person-present account access. A new
+request replaces the account's previous link. An account whose email nobody confirms may be deleted
+after 7 days. No MCP tool calls this route.
 
 **Request body:**
 ```json
@@ -1677,33 +2099,48 @@ The response repeats no address and carries no link.
 
 **Errors:**
 - `bad_request` (400) — `enter a valid email address`
-- `scope_denied` (403) — the token holds no `email:bind`; sign the login message with the account's SSH key and call `POST /auth/ssh-key`
+- `email_domain_refused` (400) — the address is on a disposable email service. Ask the person for an
+  address they will keep; relay addresses, such as Apple Hide My Email and DuckDuckGo Email
+  Protection, are accepted
+- `scope_denied` (403) — the token holds no `email:bind`; sign the login message with the account's
+  SSH key and call `POST /auth/ssh-key`
 - `conflict` (409) — `this account already has a verified email`
 - *(no code)* (422) — an unknown or missing field
-- `too_many_requests` (429) — `a confirmation link was sent less than 60 seconds ago; wait before you ask again`
-- `too_many_requests` (429) — `this address was sent 3 confirmation links in the last hour; wait an hour before you ask again`
-- `too_many_requests` (429) — `xhostd sends at most 9 confirmation links to one address, and this address has had them all; use another address`
+- `too_many_requests` (429) —
+  `a confirmation link was sent less than 60 seconds ago; wait before you ask again`
+- `too_many_requests` (429) —
+  `this address was sent 3 confirmation links in the last hour; wait an hour before you ask again`
+- `too_many_requests` (429) —
+  `xhostd sends at most 9 confirmation links to one address, and this address has had them all; use another address`
 
 ---
 
 ## GET /me/email-verifications
 
-Read where the account's email verification stands. Bearer required, no scope. Call it once, after the person says they pressed Confirm; do not poll. No MCP tool calls this route.
+Read where the account's email verification stands. Bearer required, no scope. Call it once, after
+the person says they pressed Confirm; do not poll. No MCP tool calls this route.
 
 **Response (200):**
 ```json
 { "status": "verified", "expires_at": null, "plan": "basic" }
 ```
 
-`status` is `verified` (the account holds an address), `none` (no link was requested), `conflict` (the newest link met an address another account holds; ask for another address), `expired` (request a new link), or `pending` (nobody has confirmed the live link yet). `expires_at` is the newest link's expiry, and `null` for `verified` and `none`. The response never carries the address or the link.
+`status` is `verified` (the account holds an address), `none` (no link was requested), `conflict`
+(the newest link met an address another account holds; ask for another address), `expired` (request
+a new link), or `pending` (nobody has confirmed the live link yet). `expires_at` is the newest
+link's expiry, and `null` for `verified` and `none`. The response never carries the address or the
+link.
 
-`POST /me/email-verifications/complete`, the retired code route, answers `gone` (410) with a message that names this route and `POST /me/email-verifications`.
+`POST /me/email-verifications/complete`, the retired code route, answers `gone` (410) with a message
+that names this route and `POST /me/email-verifications`.
 
 ---
 
 ## POST /feedback
 
-Submit free-text feedback to the xhostd team about platform friction (many iterations, an unclear tool/error, a missing capability). Attributed to the authenticated user. Plugin workflows call this route only after an explicit user request or consent.
+Submit free-text feedback to the xhostd team about platform friction (many iterations, an unclear
+tool/error, a missing capability). Attributed to the authenticated user. Plugin workflows call this
+route only after an explicit user request or consent.
 
 **Request body:**
 ```json
@@ -1714,9 +2151,12 @@ Submit free-text feedback to the xhostd team about platform friction (many itera
 }
 ```
 
-- `message` (string, required) — The feedback text. Must be non-empty after trimming; max 4000 characters.
-- `subject` (string, required) — A short title for the report; max 120 characters. It is the line the team reads first in the queue. An omitted, empty or whitespace-only value is refused.
-- `app_id` (string, optional) — Id of the app being worked on, for context. An unknown or inaccessible id is silently dropped (stored as null); the feedback still lands.
+- `message` (string, required) — The feedback text. Must be non-empty after trimming; max 4000
+  characters.
+- `subject` (string, required) — A short title for the report; max 120 characters. It is the line
+  the team reads first in the queue. An omitted, empty or whitespace-only value is refused.
+- `app_id` (string, optional) — Id of the app being worked on, for context. An unknown or
+  inaccessible id is silently dropped (stored as null); the feedback still lands.
 
 **Response (200):**
 ```json
@@ -1727,18 +2167,23 @@ Submit free-text feedback to the xhostd team about platform friction (many itera
 ```
 
 **Errors:**
-- `bad_request` (400) — empty message, message longer than 4000 characters, subject longer than 120 characters, or the account reached its report limit (1000 by default; an operator raises or lowers it per account, and the message names the limit that applies)
-- `bad_request` (400) — no subject. The message reads "a feedback report needs a subject." Send a `subject`.
+- `bad_request` (400) — empty message, message longer than 4000 characters, subject longer than 120
+  characters, or the account reached its report limit (1000 by default; an operator raises or lowers
+  it per account, and the message names the limit that applies)
+- `bad_request` (400) — no subject. The message reads "a feedback report needs a subject." Send a
+  `subject`.
 
 ---
 
 ## GET /feedback
 
-List the authenticated user's feedback reports, newest first, each with the xhostd team's answers. One call answers one page of the account's reports, whichever surface filed them.
+List the authenticated user's feedback reports, newest first, each with the xhostd team's answers.
+One call answers one page of the account's reports, whichever surface filed them.
 
 **Query parameters:**
 - `limit` (integer, optional) — how many reports to return, 1–200. Default 50.
-- `cursor` (string, optional) — the `next_cursor` of the previous call (pagination cursor). Omit it on the first call. A cursor the route cannot read answers `bad_request` (400).
+- `cursor` (string, optional) — the `next_cursor` of the previous call (pagination cursor). Omit it
+  on the first call. A cursor the route cannot read answers `bad_request` (400).
 
 **Response (200):**
 ```json
@@ -1768,13 +2213,19 @@ List the authenticated user's feedback reports, newest first, each with the xhos
 }
 ```
 
-- `subject` — the title the reporter wrote. It is null only on a report filed before the subject became required.
-- `title` — the line that names the report: its `subject`, or the opening of its `message` when it has no subject. Never null and never empty, so render it as it is.
-- `status` — one of `Received` (not acted on yet), `Resolved` (the team did the work), `Closed` (the team will not act on it).
+- `subject` — the title the reporter wrote. It is null only on a report filed before the subject
+  became required.
+- `title` — the line that names the report: its `subject`, or the opening of its `message` when it
+  has no subject. Never null and never empty, so render it as it is.
+- `status` — one of `Received` (not acted on yet), `Resolved` (the team did the work), `Closed` (the
+  team will not act on it).
 - `source` — `agent` or `console`, the surface the report came from.
 - `app_name` — null when the report carries no app context.
-- `messages` — the team's answers and your own replies, oldest first. Each carries `author`: `team` on the xhostd team's answer, and `you` on a reply the account wrote in the console. A message carries a `status` only when it records a status change. Internal team notes are never listed.
-- `next_cursor` — an opaque value. Pass it as `cursor` to read the next page; `null` when the account has no older report. Build no cursor of your own.
+- `messages` — the team's answers and your own replies, oldest first. Each carries `author`: `team`
+  on the xhostd team's answer, and `you` on a reply the account wrote in the console. A message
+  carries a `status` only when it records a status change. Internal team notes are never listed.
+- `next_cursor` — an opaque value. Pass it as `cursor` to read the next page; `null` when the
+  account has no older report. Build no cursor of your own.
 
 ---
 
@@ -1782,7 +2233,10 @@ List the authenticated user's feedback reports, newest first, each with the xhos
 
 Return dashboard stats for the authenticated user. No admin privileges required.
 
-The counts and the `sites` rows cover every project the caller can see: the projects the caller owns, plus every project shared with the caller. A `repo` value reads `owner/project`, so a shared row names its owner. The `resources` block is the caller's OWN memory and CPU alone, because a shared project runs under its owner's resource slice.
+The counts and the `sites` rows cover every project the caller can see: the projects the caller
+owns, plus every project shared with the caller. A `repo` value reads `owner/project`, so a shared
+row names its owner. The `resources` block is the caller's OWN memory and CPU alone, because a
+shared project runs under its owner's resource slice.
 
 **Required scope:** `stats:read`
 
@@ -1823,7 +2277,8 @@ The counts and the `sites` rows cover every project the caller can see: the proj
 
 **Notes:**
 - Returns only the calling user's own apps, channels, deploys, and resource usage.
-- Resource usage (`resources`) reflects the user's systemd cgroup slice (memory and CPU budgets). Values are zero if cgroup limits are not configured.
+- Resource usage (`resources`) reflects the user's systemd cgroup slice (memory and CPU budgets).
+  Values are zero if cgroup limits are not configured.
 
 ---
 
@@ -1831,7 +2286,9 @@ The counts and the `sites` rows cover every project the caller can see: the proj
 
 Return the account's total database storage against its SOFT plan cap, plus current-month egress.
 
-The storage cap warns and blocks nothing: no write fails and no deploy fails. Egress has no cap and the payload carries no egress limit field, because no plan states an egress figure: xhostd measures the month's bytes, reports them, counts them against nothing, and charges nothing for them.
+The storage cap warns and blocks nothing: no write fails and no deploy fails. Egress has no cap and
+the payload carries no egress limit field, because no plan states an egress figure: xhostd measures
+the month's bytes, reports them, counts them against nothing, and charges nothing for them.
 
 **Request body:** None
 
@@ -1846,7 +2303,8 @@ The storage cap warns and blocks nothing: no write fails and no deploy fails. Eg
 ```
 
 **Errors:**
-- `503 postgres_unavailable` — the account's database server is unreachable, or a database could not be measured. xhostd never reports a partial total.
+- `503 postgres_unavailable` — the account's database server is unreachable, or a database could not
+  be measured. xhostd never reports a partial total.
 
 ---
 
@@ -1885,18 +2343,23 @@ All user-facing names (app names, usernames, channel names) must be valid **DNS 
 - `success` — Deploy completed successfully
 - `failed` — Deploy failed (check logs for details)
 - `superseded` — A newer deploy request for this channel replaced this one; `superseded_by` names it
-- `cancelled` — A database restore of the channel started before this deploy ran, so it never ran; deploy again once the restore ends
+- `cancelled` — A database restore of the channel started before this deploy ran, so it never ran;
+  deploy again once the restore ends
 
 ---
 
 ## git_ref_binding Format
 
-A channel's binding is `branch:<name>`, or `null` for a channel with no branch yet. It names the branch a deploy with no `sha` and no `ref` ships. A push deploys nothing on its own.
+A channel's binding is `branch:<name>`, or `null` for a channel with no branch yet. It names the
+branch a deploy with no `sha` and no `ref` ships. A push deploys nothing on its own.
 
 - `branch:main` — a deploy with no ref ships the HEAD of `main`
 - `branch:staging` — a deploy with no ref ships the HEAD of `staging`
 
-The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `branch:*` wildcard is refused (`branch_wildcard_deprecated`), and so are names under `xhost/` (the platform's pin namespace) and `HEAD`. A deploy with `ref`, `POST /apps`'s `branch`, and `PATCH /apps/{app_id}/channels/{channel_id}` set a binding; nothing unbinds one.
+The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `branch:*` wildcard is
+refused (`branch_wildcard_deprecated`), and so are names under `xhost/` (the platform's pin
+namespace) and `HEAD`. A deploy with `ref`, `POST /apps`'s `branch`, and
+`PATCH /apps/{app_id}/channels/{channel_id}` set a binding; nothing unbinds one.
 
 ---
 
@@ -1914,6 +2377,7 @@ The `<name>` portion must match `^[A-Za-z0-9][A-Za-z0-9/_\-\.]*$`. The legacy `b
 | `not_found` | 404 | Resource does not exist or is not owned by caller |
 | `bad_request` | 400 | Validation failure (see message for details) |
 | `channel_unbound` | 400 | A deploy named neither `sha` nor `ref`, and the channel has no branch yet. Deploy with `ref`, or bind it with `PATCH /apps/{app_id}/channels/{channel_id}` |
+| `email_domain_refused` | 400 | The address on `POST /me/email-verifications` is on a disposable email service. Ask the person for an address they will keep. Relay addresses are accepted |
 | `ref_required` | 400 | A file route got no `ref`, and the app has no branch to default to: an app with a connected source repository that never synced. Pass `ref` |
 | `conflict` | 409 | State conflict (e.g. `domain_taken`, `channel_busy` on a file-storage restore while a deploy of the channel is queued or running, export already running, a registered key or a taken username on `POST /registrations`, a verified email on the verification routes) |
 | `restore_in_flight` | 409 | A database restore of the channel is active. A deploy, a rewind, a channel or app delete, an ownership transfer accept, and a second restore are refused until it ends. Read its progress with `GET /postgres/restores/{restore_id}`, then retry once it ends |
@@ -1969,13 +2433,28 @@ part there.
 
 ## Token Scopes
 
-OAuth-issued bearer tokens (used by the MCP server) carry the full default scope set: `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`, `snapshots:read`, `blobs:read`.
+OAuth-issued bearer tokens (used by the MCP server) carry the full default scope set: `repo:*`,
+`deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`, `snapshots:read`,
+`blobs:read`.
 
-Unified credentials minted via `POST /credentials` carry the default scopes your calling token holds — all nine of `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`, `snapshots:read` and `blobs:read` for a general credential — unless a narrower `scopes` subset is requested, and live 30 days, or until your calling token expires if that comes first, and less when a shorter `expires_in` is requested.
+Unified credentials minted via `POST /credentials` carry the default scopes your calling token holds
+— all nine of `repo:*`, `deploy:*`, `channel:*`, `db:*`, `blob:*`, `stats:read`, `exports:read`,
+`snapshots:read` and `blobs:read` for a general credential — unless a narrower `scopes` subset is
+requested, and live 30 days, or until your calling token expires if that comes first, and less when
+a shorter `expires_in` is requested.
 
-Tokens from `POST /registrations` and `POST /auth/ssh-key` carry the same default set and expire after 30 days.
+Tokens from `POST /registrations` and `POST /auth/ssh-key` carry the same default set and expire
+after 30 days.
 
-**A mint never grants more scope, and never a longer life, than the caller holds.** A narrowed credential can renew itself, and cannot widen itself back. A short-lived one can renew itself, and cannot outlive itself: every token you mint expires with the token you minted it from, or earlier. `POST /tokens` grants a fixed nine scopes, so a token short of that set answers `scope_denied` (403) there. Such a token mints the scopes it holds through `POST /credentials`. Each download-token route needs the one scope it mints, so a narrow download token cannot rotate into another artifact. `POST /ssh-keys` needs `repo:*`, the access a key carries by construction, and `api_login` needs all nine plus a verified address on the account or an `email:bind` token, because the key it registers mints one scope more than you hold.
+**A mint never grants more scope, and never a longer life, than the caller holds.** A narrowed
+credential can renew itself, and cannot widen itself back. A short-lived one can renew itself, and
+cannot outlive itself: every token you mint expires with the token you minted it from, or earlier.
+`POST /tokens` grants a fixed nine scopes, so a token short of that set answers `scope_denied` (403)
+there. Such a token mints the scopes it holds through `POST /credentials`. Each download-token route
+needs the one scope it mints, so a narrow download token cannot rotate into another artifact.
+`POST /ssh-keys` needs `repo:*`, the access a key carries by construction, and `api_login` needs all
+nine plus a verified address on the account or an `email:bind` token, because the key it registers
+mints one scope more than you hold.
 
 | Scope | Grants |
 |-------|--------|
