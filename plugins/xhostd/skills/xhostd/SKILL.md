@@ -135,7 +135,6 @@ If neither signal arrives in time the deploy fails regardless of whether the app
 # install.sh — runtime deps go here (build time, as root)
 #!/bin/sh
 set -e
-# uv installs the same packages as pip.
 uv pip install --system --no-cache flask gunicorn
 ```
 ```sh
