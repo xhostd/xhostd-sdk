@@ -1,6 +1,6 @@
 {
   "name": "xhostd",
-  "version": "0.80.2",
+  "version": "0.80.3",
   "description": "Deploy websites, APIs, and services to xhostd from your coding agent. Create projects, push code, deploy previews or production, inspect status, and manage environments, services, variables, storage, and domains.",
   "author": {
     "name": "xhostd",
@@ -102,7 +102,7 @@
         "commerce": false
       },
       "publication": {
-        "release_notes": "xhostd 0.80.2 for ChatGPT and Codex: create projects, commit code, deploy to HTTPS URLs, read logs, and manage variables, secrets, and custom domains. What changed in 0.80.2: the skill points to the git guide for push, token, and download commands, and no tool changes. What changed in 0.80.1: the skill's example install.sh drops a comment, and no tool changes. What changed in 0.80.0: an app is now a project, a channel is an environment, and an env var is a variable, and each tool takes the new name, such as list_projects, create_project, update_environment, and set_variable; a project can run several services, such as a web process and a worker, with create_service, update_service, delete_service, and restart; update_service can rename a service, and each old address keeps working for 30 days; rename_database and rename_bucket set the label that names a database or a bucket in listings; XHOSTD_DOMAINS also lists each environment's full address; the guides describe services and the new addresses of a transferred project; the docs name cname.xhostd.app as the CNAME value of a custom domain; and every earlier tool name and argument name still runs for now and is deprecated. Error details and deploy log lines still use the earlier names app and channel."
+        "release_notes": "xhostd 0.80.3 for ChatGPT and Codex: create projects, commit code, deploy to HTTPS URLs, read logs, and manage variables, secrets, and custom domains. What changed in 0.80.3: the lines of the skill file and two of its references are wrapped, and no text or tool changes. What changed in 0.80.2: the skill points to the git guide for push, token, and download commands, and no tool changes. What changed in 0.80.1: the skill's example install.sh drops a comment, and no tool changes. What changed in 0.80.0: an app is now a project, a channel is an environment, and an env var is a variable, and each tool takes the new name, such as list_projects, create_project, update_environment, and set_variable; a project can run several services, such as a web process and a worker, with create_service, update_service, delete_service, and restart; update_service can rename a service, and each old address keeps working for 30 days; rename_database and rename_bucket set the label that names a database or a bucket in listings; XHOSTD_DOMAINS also lists each environment's full address; the guides describe services and the new addresses of a transferred project; the docs name cname.xhostd.app as the CNAME value of a custom domain; and every earlier tool name and argument name still runs for now and is deprecated. Error details and deploy log lines still use the earlier names app and channel."
       }
     }
   }
