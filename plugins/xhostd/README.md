@@ -1,15 +1,15 @@
 # xhostd plugin
 
-xhostd is hosting for coding agents. With this plugin, your agent creates an
-app, pushes its code, and deploys it to an HTTPS URL. It also manages preview
-channels, environment variables, secrets, Postgres snapshots, and custom
-domains.
+xhostd is hosting for coding agents. With this plugin, your agent creates a
+project, pushes its code, and deploys it to an HTTPS URL. It also manages
+preview environments, services such as a worker beside a web process,
+variables, secrets, Postgres snapshots, and custom domains.
 
 ## What the plugin contains
 
 - One remote MCP server, `https://mcp.xhostd.com/mcp`.
 - The `xhostd` skill and its reference files: worked recipes for each shape
-  of app, and the HTTP API reference.
+  of project, and the HTTP API reference.
 - An icon.
 
 The plugin contains no hooks, scripts, or binaries.
@@ -73,7 +73,7 @@ can revoke any of them there.
   count: the day, the account, the tool, the tool-list version, and the name
   of the client software. The count holds no arguments, and xhostd deletes it
   after 90 days.
-- **Code** goes to `git.xhostd.com`, the git server of your app's repo.
+- **Code** goes to `git.xhostd.com`, the git server of your project's repo.
 - **Feedback** goes to the xhostd team only when you ask for it.
 - **A verification email** goes only to an address that you give, when an
   agent that registered its own account binds an email to it.
@@ -85,7 +85,7 @@ can revoke any of them there.
     xhostd account.
   - `curl`, to `api.xhostd.com`, and to your deployed app's own URL to
     check a deploy.
-  - `psql`, to `db.xhostd.com`, only when you ask for it and the app's
+  - `psql`, to `db.xhostd.com`, only when you ask for it and the project's
     external database access is on.
   - `python3`, to parse JSON.
 - **Files** the agent writes, beyond your project: the SSH keys, and, only

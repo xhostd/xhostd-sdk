@@ -6,7 +6,7 @@ This walks through what an agent does, end-to-end, when a non-technical user say
 
 - 0. Prerequisites
 - 1. Decide on a name
-- 2. Create the app
+- 2. Create the project
 - 3. Write the site
 - 4. Deploy
 - 5. Watch the build
@@ -21,17 +21,17 @@ The xhostd tools are available in the client, through a connector or a plugin th
 
 ## 1. Decide on a name
 
-Pick a DNS-label app name from the user's description — e.g. `lisbon-coffee`. Confirm the name with them in one line before creating anything. Rules: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, max 40 chars. Reserved prefixes (rejected by the API): `git`, `api`, `www`, `admin`, `preview`, `staging`.
+Pick a DNS-label project name from the user's description — e.g. `lisbon-coffee`. Confirm the name with them in one line before creating anything. Rules: `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`, max 40 chars. Reserved prefixes (rejected by the API): `git`, `api`, `www`, `admin`, `preview`, `staging`.
 
-## 2. Create the app
+## 2. Create the project
 
 ```
-create_app(name="lisbon-coffee", template="static")
+create_project(name="lisbon-coffee", template="static")
 ```
 
 Use `template="static"` for plain HTML/CSS/JS (served directly). Use `template="app"` if the user wants a dynamic backend — that template runs `install.sh` then `launch.sh` in a runtime with Node 22, Python 3.13, and common build tools. If the project is a single-page app, its server must serve `index.html` for the client-side routes — the platform proxies every path straight through and rewrites nothing.
 
-The response looks like:
+The response looks like this, shortened:
 
 ```json
 {
@@ -40,7 +40,8 @@ The response looks like:
   "role": "owner",
   "repo_url": "https://git.xhostd.com/alice/lisbon-coffee.git",
   "template": "static",
-  "channels": [
+  "services": [{"name": "web", "template": "static", "public": true, ...}],
+  "environments": [
     {
       "name": "prod",
       "hostname": "lisbon-coffee-alice.xhostd.app",
@@ -48,19 +49,22 @@ The response looks like:
       "follows_branch": false,
       "current_sha": null,
       "status": "provisioning",
-      "pending_deploy": null
+      "pending_deploy": null,
+      "services": [{"name": "web", "public": true, "enabled": true, ...}],
+      "addresses": [...]
     }
-  ]
+  ],
+  "channels": [...]
 }
 ```
 
-The result carries no id: every later tool addresses the app by name (`app_name="lisbon-coffee"`) and a channel by name (`channel="prod"`). `git_ref_binding` is `null`: `prod` has no branch until the first deploy with `ref` binds it (or pass `branch` to `create_app`).
+The result carries no id: every later tool addresses the project by name (`project="lisbon-coffee"`) and an environment by name (`environment="prod"`). `git_ref_binding` is `null`: `prod` has no branch until the first deploy with `ref` binds it (or pass `branch` to `create_project`). `channels` repeats the environments in the shape an older tool list describes.
 
 ## 3. Write the site
 
-Write the files into a working directory, then push them to the app's own repo. **With a shell, `git push`, then `deploy`**, for the first commit and every one after it: a push sends only the diff, so each later edit stays incremental.
+Write the files into a working directory, then push them to the project's own repo. **With a shell, `git push`, then `deploy`**, for the first commit and every one after it: a push sends only the diff, so each later edit stays incremental.
 
-The full step list is in **Pushing code with git** in SKILL.md. Pick the path from what the machine can do, before you push — never after a failure. With a shell, **push over SSH**: the private half of the key never enters a tool call, and one registration covers every app on the machine. First compare the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub` with `list_ssh_keys`, and push with the key whose `.pub` file the account lists. If none is listed, make the default keypair in a subprocess if the file is absent, and register the public half once:
+The full step list is in **Pushing code with git** in SKILL.md. Pick the path from what the machine can do, before you push — never after a failure. With a shell, **push over SSH**: the private half of the key never enters a tool call, and one registration covers every project on the machine. First compare the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub` with `list_ssh_keys`, and push with the key whose `.pub` file the account lists. If none is listed, make the default keypair in a subprocess if the file is absent, and register the public half once:
 
 ```
 for f in ~/.ssh/xhost_ed25519*.pub; do ssh-keygen -lf "$f"; done   # compare with list_ssh_keys; if one is listed, push with it
@@ -71,11 +75,11 @@ git remote add xhostd-ssh "git@git.xhostd.com:alice/lisbon-coffee.git"
 GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519 -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master
 ```
 
-An SSH push needs no token — the `repo_url` from step 2 gives the username and the app name. `-o IdentitiesOnly=yes` stops ssh from offering another key it finds first.
+An SSH push needs no token — the `repo_url` from step 2 gives the username and the project name. `-o IdentitiesOnly=yes` stops ssh from offering another key it finds first.
 
 If `register_ssh_key` answers `409`, the default key belongs to a different xhostd account on this machine. Make `~/.ssh/xhost_ed25519_alice` the same way if it is absent, register it, and push with `GIT_SSH_COMMAND="ssh -i ~/.ssh/xhost_ed25519_alice -o IdentitiesOnly=yes"`. If that registration also answers `409`, this machine holds no usable SSH key for this account: push over HTTPS when `XHOSTD_TOKEN` is set, else use `commit_files`, and never make a key under any other name. A file name proves nothing about the account; only a match in `list_ssh_keys` does.
 
-Use only those two key paths — never the project directory, and never a per-project, per-app or per-tool suffix. They sit in `$HOME`, so every agent session, editor window, and project on the machine reuses one key per account and registers no other.
+Use only those two key paths — never the project directory, and never a per-project or per-tool suffix. They sit in `$HOME`, so every agent session, editor window, and project on the machine reuses one key per account and registers no other.
 
 **HTTPS:** where outbound port 22 is blocked, or the SSH push fails, push over HTTPS with the user's own token from the `XHOSTD_TOKEN` environment variable — one `xh_` secret that is the git password, the Postgres password and the platform API bearer at once. If `XHOSTD_TOKEN` is unset, neither transport can push: use `commit_files`, as the **Without git** paragraph below describes, and never ask the user to paste a token. No tool result carries a token. Send it as a header that git reads from its environment (`repo_url` came back in step 2), and push:
 
@@ -93,12 +97,12 @@ You can also mint a scoped, short-lived token with the request that `get_credent
 
 `HEAD:master` on either transport: push under the branch name you then deploy with `ref`, because a fresh `git init` can name the local branch `main`. `deploy(..., ref="master")` in step 4 binds `prod` to `master`. Never write the token value into a command or into a file the user might commit. **Pushing stores the code; it does not deploy** — that is step 4.
 
-**Without git:** in a client with no shell access, or when neither git transport can push, use `commit_files(app_name, message, files)`; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. An app with a connected source repository refuses it, because its code comes from that repository: push to that repository. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
+**Without git:** in a client with no shell access, or when neither git transport can push, use `commit_files(project, message, files)`; with no `ref` it commits to the branch `prod` deploys, or `master` while `prod` has no branch. `files` is a `{path: content-or-null}` map: a string upserts, `null` deletes, and a path you don't name is left alone, so send only what is changing. It returns `{"sha": "abc123…"}`, which is what you then deploy. A project with a connected source repository refuses it, because its code comes from that repository: push to that repository. Worked example: <https://docs.xhostd.com/guides/recipes-commit-files>.
 
 For an `app`-template project the push is the same; the repo needs `install.sh` (optional) and `launch.sh` (required) at its root. The deploy only succeeds if the app signals readiness within 120s, and there are **two ways to do that** — whichever comes first. So the process must:
 
 - **Either serve HTTP:** **bind `0.0.0.0` on `$XHOSTD_HTTP_PORT`** — read `$XHOSTD_HTTP_PORT` from the environment, don't hardcode. (`$PORT` holds the same value for apps that read it; new code reads `$XHOSTD_HTTP_PORT`.) `python app.py` with Flask's default `app.run()` binds `localhost` on a fixed port and will fail the check; pass the host and `$XHOSTD_HTTP_PORT` explicitly — and **answer `/` with a 200**: an API whose routes are all under `/api` fails the check even though it runs; add a minimal `/` handler.
-- **Or create `$XHOSTD_READY_FILE`** — for a process with no HTTP surface at all (a queue consumer, a cron-style daemon), create the file at the injected path; the process needs no listener, and the file can be empty. Do it once the work loop is genuinely running, not at the top of `launch.sh`. Such a project keeps its hostname, and that URL returns 502 — expected, not a failure.
+- **Or create `$XHOSTD_READY_FILE`** — for a process with no HTTP surface at all (a queue consumer, a cron-style daemon), create the file at the injected path; the process needs no listener, and the file can be empty. Do it once the work loop is genuinely running, not at the top of `launch.sh`. Such a project keeps its hostname, and that URL returns 502 — expected, not a failure. To run such a worker beside a web process in one project, add it with `create_service`: `references/guide-services.md` shows the calls.
 - **Boot within 120s and stay within a small memory budget (~128 MB)** at run time — the cap applies to the running server, not to the build.
 - **Run as a non-root user.** The container runs as `app`; writable paths are `/app`, `$HOME`, and `/tmp`. All installation must live in `install.sh`, which runs at **build** time as root — installing from `launch.sh` fails with `Permission denied`.
 
@@ -122,60 +126,60 @@ exec gunicorn --bind "0.0.0.0:$XHOSTD_HTTP_PORT" app:app
 
 ```
 deploy(
-  app_name="lisbon-coffee",
-  channel="prod",
+  project="lisbon-coffee",
+  environment="prod",
   ref="master",
 )
 ```
 
-Returns `{"deploy_id": "d…", "channel_id": "c0a1…", "status": "queued"}`. Deploys run async. `ref` is a branch name and xhostd resolves it to that branch's current head, so after a push you never need to know the sha. The `ref` also binds `prod` to that branch. To pin an exact commit, pass `sha="abc123…"` — which is what you do with the sha `commit_files` returned; a `sha` deploy binds nothing.
+Returns `{"deploy_id": "d…", "channel_id": "c0a1…", "status": "queued"}`. Deploys run async. `ref` is a branch name and xhostd resolves it to that branch's current head, so after a push you never need to know the sha. The `ref` also binds `prod` to that branch. To pin an exact commit, pass `sha="abc123…"` — which is what you do with the sha `commit_files` returned; a `sha` deploy binds nothing. A deploy rolls out every service that is turned on in the environment.
 
 ## 5. Watch the build
 
 ```
-get_logs(app_name="lisbon-coffee", channel="prod", source="deploy", deploy_id="d…")
+get_logs(project="lisbon-coffee", environment="prod", source="deploy", deploy_id="d…")
 ```
 
-The first line of the reply states the outcome: `deploy <id> — <status> (sha <sha>)`, with status one of `queued`, `running`, `success`, or `failed`. Read the status from that header, not from the log text. Poll while the status is `queued` or `running`; on `failed` the reason is in the log tail. `static` deploys take a few seconds; the first `app`-template deploy takes 30–90 seconds because `install.sh` runs. The channel's `pending_deploy` field in `get_app` also shows the in-flight deploy (`null` once it finishes).
+The first line of the reply states the outcome: `deploy <id> — <status> (sha <sha>)`, with status one of `queued`, `running`, `success`, or `failed`. Read the status from that header, not from the log text. Poll while the status is `queued` or `running`; on `failed` the reason is in the log tail. `static` deploys take a few seconds; the first `app`-template deploy takes 30–90 seconds because `install.sh` runs. The environment's `pending_deploy` field in `get_project` also shows the in-flight deploy (`null` once it finishes).
 
 ## 6. Hand the user the URL
 
-Read `hostname` from the prod channel (it was in step 2's response, and `get_app` will return it later). Tell the user:
+Read `hostname` from the prod environment (it was in step 2's response, and `get_project` will return it later). Tell the user:
 
 > Live at https://lisbon-coffee-alice.xhostd.app
 
 ## 7. Iterate
 
-For each follow-up change — "add a section for tea shops", "fix the broken link" — edit the files in the checkout, `git commit`, push with the same command as step 3 (over SSH, `GIT_SSH_COMMAND` and `xhostd-ssh`; over HTTPS, the three `GIT_CONFIG_*` variables and `xhostd`), then `deploy` with `ref="master"`. The same `prod` channel is targeted, and the remote is already configured, so a follow-up is a couple of shell commands and one tool call. The push carries only the lines that changed. In a client with no shell access, the loop is: `commit_files` — `edits` or `patches` for a file that already exists, `files` for a new one — then `deploy` with the sha it returns.
+For each follow-up change — "add a section for tea shops", "fix the broken link" — edit the files in the checkout, `git commit`, push with the same command as step 3 (over SSH, `GIT_SSH_COMMAND` and `xhostd-ssh`; over HTTPS, the three `GIT_CONFIG_*` variables and `xhostd`), then `deploy` with `ref="master"`. The same `prod` environment is targeted, and the remote is already configured, so a follow-up is a couple of shell commands and one tool call. The push carries only the lines that changed. In a client with no shell access, the loop is: `commit_files` — `edits` or `patches` for a file that already exists, `files` for a new one — then `deploy` with the sha it returns.
 
 To preview a change without touching production:
 
 ```
-create_channel(app_name="lisbon-coffee", name="draft", git_ref_binding="branch:draft")
+create_environment(project="lisbon-coffee", name="draft", git_ref_binding="branch:draft")
 GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:draft   # <key> is the key from step 3; or the HTTPS push of step 3, with HEAD:draft
-deploy(app_name="lisbon-coffee", channel="draft", ref="draft")
+deploy(project="lisbon-coffee", environment="draft", ref="draft")
 ```
 
 The preview is live at `https://draft-lisbon-coffee-alice.xhostd.app`.
 
 ## 8. Optional extras
 
-- **Env vars & secrets:** `set_env(app_name, key="LOG_LEVEL", value="debug")` stores a plain value, which passes through the conversation, so never pass it a credential. For a credential, call `set_secret(app_name, key="STRIPE_KEY")`: it takes no value and returns the `PUT` request that uploads it from a file with your own token, sent on curl's stdin (`printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl -sS --fail-with-body -X PUT --header @- -H "Content-Type: application/octet-stream" --data-binary @<file> "<url>"`), plus a `console_url` where a user without a shell pastes it. `set_secret(..., generate=True)` generates and stores a random value. A secret is never readable back through MCP; the reveal is a protected action that answers `protected_action` to an agent credential, and it is audit-logged. Add `channel="staging"` to either tool for a per-channel override that wins over the app default at deploy time. `list_env(app_name, channel=…)` shows the resolved view. Every non-static channel automatically has `DATABASE_URL` for its own Postgres database; don't set it. A static channel has no database and no `DATABASE_URL`.
-- **Custom domain:** `add_custom_domain(app_name, channel, domain)` returns an `instructions` field with the exact TXT + CNAME/A records the user needs to add at their registrar — relay it verbatim. After they add the records, call `add_custom_domain` again with the same args and `verify=True`. HTTPS works automatically once verified.
-- **Google sign-in for parts of the site:** zero-config — no tool to call. `/xhost-auth/*` works on every channel. After sign-in the gateway sets a signed identity cookie `__Host-xhost_id` (an RS256 JWT) on the channel host; the app verifies it against the JWKS at `https://auth.xhostd.com/xhost-auth/jwks` (pin `RS256`, check `iss` and `exp`, and check `aud` against the request's host — a custom domain's cookie carries that domain) and gates its own routes. **xhostd does identity only, never edge gatekeeping — nothing is blocked at the edge, so every route stays public (anonymous visitors get `200`) until your app verifies the cookie and enforces access itself in code.** Send signed-out users to `/xhost-auth/login?return_to=<path>`. `__Host-xhost_id` is a reserved cookie name. Per-stack verify snippets: <https://docs.xhostd.com/oauth>.
+- **Variables & secrets:** `set_variable(project, key="LOG_LEVEL", value="debug")` stores a plain value, which passes through the conversation, so never pass it a credential. For a credential, call `set_secret(project, key="STRIPE_KEY")`: it takes no value and returns the `PUT` request that uploads it from a file with your own token, sent on curl's stdin (`printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" | curl -sS --fail-with-body -X PUT --header @- -H "Content-Type: application/octet-stream" --data-binary @<file> "<url>"`), plus a `console_url` where a user without a shell pastes it. `set_secret(..., generate=True)` generates and stores a random value. A secret is never readable back through MCP; the reveal is a protected action that answers `protected_action` to an agent credential, and it is audit-logged. Add `environment="staging"` to either tool for a per-environment override that wins over the project default at deploy time. `list_variables(project, environment=…)` shows the resolved view. Every environment of a project that runs code automatically has `DATABASE_URL` for its own Postgres database; don't set it. A static project has no database and no `DATABASE_URL`.
+- **Custom domain:** `add_custom_domain(project, environment, domain)` returns an `instructions` field with the exact TXT + CNAME/A records the user needs to add at their registrar — relay it verbatim. After they add the records, call `add_custom_domain` again with the same args and `verify=True`. HTTPS works automatically once verified.
+- **Google sign-in for parts of the site:** zero-config — no tool to call. `/xhost-auth/*` works on every environment. After sign-in the gateway sets a signed identity cookie `__Host-xhost_id` (an RS256 JWT) on the environment's host; the app verifies it against the JWKS at `https://auth.xhostd.com/xhost-auth/jwks` (pin `RS256`, check `iss` and `exp`, and check `aud` against the request's host — a custom domain's cookie carries that domain) and gates its own routes. **xhostd does identity only, never edge gatekeeping — nothing is blocked at the edge, so every route stays public (anonymous visitors get `200`) until your app verifies the cookie and enforces access itself in code.** Send signed-out users to `/xhost-auth/login?return_to=<path>`. `__Host-xhost_id` is a reserved cookie name. Per-stack verify snippets: <https://docs.xhostd.com/oauth>.
 
 ## Troubleshooting
 
 **Tool reports unauthenticated.** Ask the user to reconnect xhostd in the client's settings; `SKILL.md`, Authentication, lists the steps for each client. On the OAuth path there is no token to set. A registered agent renews its token with its key when the token expired, as [Register as an agent](https://docs.xhostd.com/guides/register-as-agent) describes.
 
-**"app name is already taken"** — they already own one with that name. Pick a different name or delete the old app with `delete_app`.
+**"app name is already taken"** — the API's text for a project name the user already holds. Pick a different name or delete the old project with `delete_project`.
 
-**"invalid app name"** — name violates the DNS-label rules or starts with a reserved prefix.
+**"invalid app name"** — the API's text for a project name that violates the DNS-label rules or starts with a reserved prefix.
 
-**Channel `status: provisioning` after deploy** — deploy is still running. The channel's `pending_deploy` field names it; the first line of `get_logs` with `source="deploy"` gives its status.
+**Environment `status: provisioning` after deploy** — deploy is still running. The environment's `pending_deploy` field names it; the first line of `get_logs` with `source="deploy"` gives its status.
 
 **`status: failed`** — read the deploy log; surface the failure to the user in plain language and propose a fix.
 
 **Deploy fails right after start / log says `health check failed for container …`** (app template) — neither readiness signal arrived within 120s: `/` didn't return a 2xx or 3xx on `$XHOSTD_HTTP_PORT` *and* no file was created at `$XHOSTD_READY_FILE`. Usual causes: the server bound `localhost` or a hardcoded port, not `0.0.0.0:$XHOSTD_HTTP_PORT`; there's no `/` route (an API under `/api` only); the boot was too slow; or `launch.sh` hit `Permission denied` — it runs as the non-root `app` user, so installing anything there, or writing outside `/app`/`$HOME`/`/tmp`, crashes it. Fix the bind/`$XHOSTD_HTTP_PORT`, add a `/` handler returning 200, or move the install into `install.sh`. If the project has no HTTP surface at all, create `$XHOSTD_READY_FILE` once its work loop is running; it needs no listener.
 
-**`git push` succeeded but the deploy is empty / nothing changed** — the deploy shipped a different branch from the one you pushed. Deploy with `ref` set to the branch you pushed; that also binds `prod` to it. **`channel_unbound`** — `prod` has no branch yet; deploy with `ref`, or bind it with `update_channel`.
+**`git push` succeeded but the deploy is empty / nothing changed** — the deploy shipped a different branch from the one you pushed. Deploy with `ref` set to the branch you pushed; that also binds `prod` to it. **`channel_unbound`** — `prod` has no branch yet; deploy with `ref`, or bind it with `update_environment`.

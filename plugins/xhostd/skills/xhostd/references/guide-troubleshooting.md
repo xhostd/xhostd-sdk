@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with the exact project, channel, and time of the problem. Separate a
+Start with the exact project, environment, and time of the problem. Separate a
 failed deployment attempt from the revision that is currently serving traffic.
 
 ## Contents
@@ -11,7 +11,7 @@ failed deployment attempt from the revision that is currently serving traffic.
 - The app is slow or unavailable
 - The address returns 404 or 502
 - The runtime log is unavailable or its status is unknown
-- The app doesn't see a new environment value
+- The app doesn't see a new variable
 - Data or files are missing
 - Escalate with useful context
 
@@ -41,8 +41,8 @@ Two replies have causes of their own:
 - **The reply reads only `Error executing tool <name>`, with no message after
   it.** The platform failed while it ran the call. The action might still have
   taken effect, so check before you call the tool again. For a deploy, call
-  `get_app`: the channel's `pending_deploy` names a deploy that is still queued
-  or running, and `current_sha` names the commit the channel serves. Read a
+  `get_project`: the environment's `pending_deploy` names a deploy that is still
+  queued or running, and each service's `current_sha` names the commit it serves. Read a
   pending deploy's log with `get_logs`, `source="deploy"`, and its `deploy_id`.
   If the fault repeats,
   [escalate with useful context](https://docs.xhostd.com/guides/troubleshooting#escalate-with-useful-context).
@@ -59,7 +59,7 @@ protected actions as a workaround.
 
 ## The app is slow or unavailable
 
-Check the serving channel, recent changes, and account resource measurements.
+Check the serving environment, recent changes, and account resource measurements.
 The [slow-app guide](https://docs.xhostd.com/guides/diagnose-slowness) walks
 through evidence collection. A deployment log explains a build; runtime
 metadata describes the process; traffic measurements describe requests.
@@ -73,12 +73,12 @@ the owner's aggregate resource data.
 
 The two codes point at different stages, so read the right log for each.
 
-**404: the channel has no route yet.** Either nobody has deployed the channel
-yet, or every deploy so far stopped before the app went live. A deploy gives the
-channel its address only after the app passes its health check. Read the deploy
+**404: the environment has no route yet.** Either nobody has deployed the
+environment yet, or every deploy so far stopped before the app went live. A
+deploy gives the environment its address only after the app passes its health check. Read the deploy
 log to find the step that stopped: call `get_logs` with `source="deploy"`, or select the
-deployment on the project's Activity page in the console. A failed deploy of a
-channel that is already live leaves the previous version serving, so it does
+deployment on the project's Activity page in the console. A failed deploy of an
+environment that is already live leaves the previous version serving, so it does
 not cause a 404. A 404 that your own app returns is different: the route works,
 and the app has no page at that path.
 
@@ -124,7 +124,7 @@ these messages:
   read. Retry in a minute.
 
 If a message stays for more than a few minutes,
-[contact support](mailto:support@xhostd.com) with the project, channel, and
+[contact support](mailto:support@xhostd.com) with the project, environment, and
 time.
 
 **The console's Logs view shows a notice.** The Logs view on a project's
@@ -137,41 +137,40 @@ Activity page can show one of these:
 - `Logs are unavailable right now.` The central log store did not answer.
   Reload the page in a minute.
 
-## The app doesn't see a new environment value
+## The app doesn't see a new variable
 
-A running container keeps the environment variables and secrets it started
-with. A new value, a changed value, or a deletion reaches a channel's
-container at that channel's next deploy, and saving the value restarts
-nothing.
+A running container keeps the variables and secrets it started with. A new
+value, a changed value, or a deletion reaches an environment's containers at
+that environment's next deploy, and saving the value restarts nothing.
 
-To check whether a channel still runs with the previous values, use one of
+To check whether an environment still runs with the previous values, use one of
 these:
 
-- Call `get_app`. A channel whose container is behind the stored values has
-  `env_pending: true`.
-- Read the notice that came with the change. `set_env`, `delete_env`, and
-  `set_secret` with `generate` return it. When you upload a secret with the
-  `PUT` request that `set_secret` returns, the upload's response carries it.
-  The notice names the channels whose container is now behind, and the
-  channels with no deploy yet.
-- Open the project's Env page in the
-  [console](https://console.xhostd.com/projects). A channel whose container is
-  behind shows "pending next deploy".
+- Call `get_project`. An environment whose containers are behind the stored
+  values has `env_pending: true`, and so does each service that is behind.
+- Read the notice that came with the change. `set_variable`,
+  `delete_variable`, and `set_secret` with `generate` return it. When you
+  upload a secret with the `PUT` request that `set_secret` returns, the
+  upload's response carries it. The notice names the environments whose
+  containers are now behind, and the environments with no deploy yet.
+- Open the project's Variables page in the
+  [console](https://console.xhostd.com/projects). An environment whose
+  containers are behind shows "pending next deploy".
 
-Deploy each channel that the notice or the flag names. After the deploy, the
-app reads the stored values. To see the values a past deploy ran with, call
-`list_env` with `channel` and `deploy_id`.
+Deploy each environment that the notice or the flag names. After the deploy,
+the app reads the stored values. To see the values a past deploy ran with, call
+`list_variables` with `environment` and `deploy_id`.
 
 ## Data or files are missing
 
-Check the target channel and which store the application uses. Review available
+Check the target environment and which store the application uses. Review available
 recovery points before attempting a restore. See
 [Data and recovery](https://docs.xhostd.com/guides/data-and-recovery) for the
 distinction between code, database, and file recovery.
 
 ## Escalate with useful context
 
-Include the project owner/name, channel, deployment identifier if relevant,
+Include the project owner/name, environment, deployment identifier if relevant,
 time and timezone, expected result, actual result, and sanitized error text.
 Do not include tokens, environment secrets, or customer data. Use console
 feedback or [contact support](mailto:support@xhostd.com).

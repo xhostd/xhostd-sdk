@@ -1,7 +1,7 @@
 # xhostd SDK
 
 This repository publishes the [xhostd](https://xhostd.com) plugin for coding
-agents. xhostd is hosting for coding agents: your agent creates an app, pushes
+agents. xhostd is hosting for coding agents: your agent creates a project, pushes
 its code, and deploys it to an HTTPS URL.
 
 The plugin works in Claude Code, Codex, Cursor, and ChatGPT. It carries one
@@ -21,7 +21,7 @@ remote MCP server and the `xhostd` skill.
 ## Documentation
 
 The [xhostd guides](https://docs.xhostd.com/guides) hold one complete recipe
-for each shape of app. The plugin carries the same recipes under
+for each shape of project. The plugin carries the same recipes under
 `plugins/xhostd/skills/xhostd/references/`.
 
 ## License

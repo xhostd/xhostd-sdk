@@ -103,7 +103,7 @@ root. The boot then only runs `exec`.
 
 ## The deploy
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Every project owns a git repo. **With git, push the code, then call `deploy`.**
 A push sends only the diff. Use `commit_files` where the machine has no
 git, or where neither git transport can push. **A push stores
 your code, but it does not deploy it.** `deploy` is a separate call, so the
@@ -111,13 +111,13 @@ commit that goes live is the commit that you name.
 
 Four steps. The
 [static site recipe](https://docs.xhostd.com/guides/recipes-static) covers the
-same four steps in detail, for your first app.
+same four steps in detail, for your first project.
 
-**1. Create the app.** This call makes the `prod` channel, its hostname and its
-git repo.
+**1. Create the project.** This call makes the `prod` environment, its
+hostname, and its git repo.
 
 ```text
-create_app(name="recipe-node", template="app")
+create_project(name="recipe-node", template="app")
 → {"name": "recipe-node",
    "owner_username": "docs",
    "role": "owner",
@@ -133,7 +133,8 @@ create_app(name="recipe-node", template="app")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`.
+Later calls take the project's name and the environment's name, such as
+`prod`.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
 platform API. Use your own
@@ -147,7 +148,7 @@ commands.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -196,8 +197,8 @@ Never write the token value itself into a command, a commit, or pasted text.
 **4. Deploy the branch.**
 
 ```text
-deploy(app_name="recipe-node",
-       channel="prod",
+deploy(project="recipe-node",
+       environment="prod",
        ref="master")
 → {"deploy_id": "57c7a687-81a7-46bc-a666-7202594a44aa",
    "channel_id": "937e4d14-965c-4959-9adb-effc1555b5b7",
@@ -214,8 +215,8 @@ its reply states the outcome, and you poll while the status is `queued` or
 ## Verify it
 
 ```text
-get_logs(app_name="recipe-node",
-         channel="prod",
+get_logs(project="recipe-node",
+         environment="prod",
          source="deploy",
          deploy_id="57c7a687-81a7-46bc-a666-7202594a44aa")
 ```
@@ -290,7 +291,7 @@ To find out if the app is alive, and to read no log, call `get_logs` with
 `source="runtime"` and **no** `command`:
 
 ```text
-get_logs(app_name="recipe-node", channel="prod", source="runtime")
+get_logs(project="recipe-node", environment="prod", source="runtime")
 ```
 
 A call with no command starts no container on the host, and it returns only the

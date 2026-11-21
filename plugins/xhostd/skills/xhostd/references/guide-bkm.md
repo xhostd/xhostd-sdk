@@ -14,7 +14,7 @@ reason. A rule without a reason is easy to forget when it is not convenient.
 - How to debug: the order to check
 - Stack choices
 - OAuth: know who the visitor is
-- Put code onto the app
+- Put code onto the project
 - Upgrade-safe code
 - Migration discipline
 - Secrets and environment variables
@@ -28,22 +28,22 @@ reason. A rule without a reason is easy to forget when it is not convenient.
 Do these checks in the given order. Each check answers a question that the
 next check depends on.
 
-**1. Did the deploy finish?** `get_logs(app_name, channel, source="deploy", deploy_id)`
+**1. Did the deploy finish?** `get_logs(project, environment, source="deploy", deploy_id)`
 answers in its first line: `deploy <id> — <status> (sha <sha>)`, with a
 status of `queued`, `running`, `success`, `failed`, `superseded`, or
 `cancelled`. Read the status from that header, not from the log text. Poll
 while the status is `queued` or `running`. On `superseded`, a newer deploy
-request for this channel replaced this one, and the header names it: poll that
-id. On `cancelled`, a database restore of the channel started before
+request for this environment replaced this one, and the header names it: poll
+that id. On `cancelled`, a database restore of the environment started before
 the deploy ran, so it never ran: deploy again once the restore ends. The rest of the reply is the record of the build, the health check
 and the route swap. On `failed`, the reason is in the log tail, and no other
 check helps. The old container still serves the traffic, and the URL that you
-test gives you the previous version. `get_app` shows an in-flight deploy too:
-the channel's `pending_deploy` field holds `{deploy_id, sha, status}` until
+test gives you the previous version. `get_project` shows an in-flight deploy too:
+the environment's `pending_deploy` field holds `{deploy_id, sha, status}` until
 the deploy finishes, so an old `current_sha` next to a non-null
 `pending_deploy` means the deploy has not finished, not that it failed.
 
-**2. Is the container alive now?** Call `get_logs(app_name, channel, source="runtime")`
+**2. Is the container alive now?** Call `get_logs(project, environment, source="runtime")`
 with **no** `command`. The platform starts no container to answer this call. It
 returns the status header only:
 
@@ -63,7 +63,7 @@ limit)`. Read the header before you read one log line.
 the log itself:
 
 ```
-get_logs(app_name="...", channel="prod", source="runtime", command="tail -n 200 app.log")
+get_logs(project="...", environment="prod", source="runtime", command="tail -n 200 app.log")
 ```
 
 The command runs in a temporary Debian container. The platform copies the
@@ -89,7 +89,7 @@ the fault worse, you can still read why the old container was correct. You can
 also read why the new container is not correct:
 
 ```
-get_logs(app_name="...", channel="prod", source="runtime",
+get_logs(project="...", environment="prod", source="runtime",
          command="tail -n 200 app.log", container_index=1)
 ```
 
@@ -114,7 +114,7 @@ follow:
   not a terminal, and the platform does not set `PYTHONUNBUFFERED`. Thus a
   process that stops with a fault can lose its last lines, which often name the fault.
   Set the variable yourself:
-  `set_env(app_name, key="PYTHONUNBUFFERED", value="1")`. Node does not have this
+  `set_variable(project, key="PYTHONUNBUFFERED", value="1")`. Node does not have this
   problem. `PYTHONUNBUFFERED` is not a reserved key, so the platform accepts
   the write.
 
@@ -249,9 +249,9 @@ signature. Cache the JWKS response; do not get it again for each request.
 The full example is
 [Recipe: Sign in with Google](https://docs.xhostd.com/guides/recipes-oauth).
 
-## Put code onto the app
+## Put code onto the project {#put-code-onto-the-app}
 
-Every app owns a git repo. **With git, push the code onto that repo, then call
+Every project owns a git repo. **With git, push the code onto that repo, then call
 `deploy`.** Use `commit_files` in two situations: git is not available on the
 machine that you work on, or neither git transport can push, because there is
 no usable SSH key and no `XHOSTD_TOKEN`.
@@ -265,16 +265,16 @@ whole file.
 
 **A push stores your code; it does not deploy the code.** These are two
 separate operations, and the separation lets you name the commit that goes
-live. After a push, call `deploy(app_name, channel, ref="master")`. The `ref`
+live. After a push, call `deploy(project, environment, ref="master")`. The `ref`
 value is a branch name, and xhostd finds the current head of that branch. Thus
-you never need to know the sha. The ref binds the channel. Pass `sha` when you
+you never need to know the sha. The ref binds the environment. Pass `sha` when you
 want an exact commit; a `sha` binds nothing. If you pass both, `sha` takes
 precedence.
 
-**`sync_git_from_remote` has no part in this path.** It refreshes an app's
+**`sync_git_from_remote` has no part in this path.** It refreshes a project's
 mirror of a *connected source repository*. It has no relation to a push to the
-app's own repo. If
-an app has a connected source repository, the platform refuses `commit_files`,
+project's own repo. If
+a project has a connected source repository, the platform refuses `commit_files`,
 and you put the code in that repository.
 
 Your credential is your own token in the `XHOSTD_TOKEN` environment variable:
@@ -295,12 +295,12 @@ same on every template.
 ## Upgrade-safe code
 
 The platform changes below your app. It builds the images again, it replaces
-the containers, and it can move a channel's database. Code that expects no
+the containers, and it can move an environment's database. Code that expects no
 change fails on a day when you changed nothing.
 
 **Read the injected environment; never build it again yourself.** The platform
 makes `DATABASE_URL` at every deploy from the current database endpoint of the
-channel. The `S3_*` values give the gateway that your container must use. If
+environment. The `S3_*` values give the gateway that your container must use. If
 you build a connection string from values that you kept, it is correct only
 until the platform moves something.
 
@@ -327,12 +327,12 @@ name.
 | `XHOSTD_FORWARD_PORT` | `XHOST_FORWARD_PORT` | The container-side raw TCP port, `7000`. Not set on `static`. |
 | `XHOSTD_USER` | `XHOST_USER` | The username of the project owner. |
 | `XHOSTD_SHA` | `XHOST_SHA` | The commit that the deploy runs. |
-| `XHOSTD_HOSTNAME` | — | The channel's platform hostname. The deploy health probe sends it as the `Host` header. |
-| `XHOSTD_URL` | — | `https://` plus the channel's platform hostname, with no trailing slash. It never names a custom domain. |
-| `XHOSTD_DOMAINS` | — | The channel's platform hostname and its verified custom domains, comma-separated. Treat the value as a set: don't infer a primary domain from its position, and read the platform hostname from `XHOSTD_HOSTNAME` or `XHOSTD_URL`. Deploy again after you verify or remove a domain. |
-| `XHOSTD_PROJECT` | — | The project's name. Set only when the project uses the services deploy path. |
-| `XHOSTD_ENVIRONMENT` | — | The environment's name. Set only when the project uses the services deploy path. |
-| `XHOSTD_SERVICE` | — | The service's name. Set only when the project uses the services deploy path. |
+| `XHOSTD_HOSTNAME` | — | The environment's platform hostname. The deploy health probe sends it as the `Host` header. |
+| `XHOSTD_URL` | — | `https://` plus the environment's platform hostname, with no trailing slash. It never names a custom domain. |
+| `XHOSTD_DOMAINS` | — | The environment's short address (its platform hostname), then its full addresses, then its verified custom domains, comma-separated. Treat the value as a set: don't infer a primary domain from its position, and read the platform hostname from `XHOSTD_HOSTNAME` or `XHOSTD_URL`. Deploy again after you verify or remove a domain. |
+| `XHOSTD_PROJECT` | — | The project's name. |
+| `XHOSTD_ENVIRONMENT` | — | The environment's name. |
+| `XHOSTD_SERVICE` | — | The service's name. |
 
 `PORT` is a deprecated alias of `XHOSTD_HTTP_PORT`, with the same value. The
 platform injects `PORT`, but it will remove the alias. New code must never read
@@ -390,16 +390,16 @@ deploy leaves the old container serving the traffic.
 
 ## Secrets and environment variables
 
-Set a secret with `set_secret(app_name, key)`. It takes no value: it returns
+Set a secret with `set_secret(project, key)`. It takes no value: it returns
 the request that uploads the value from a file with your own token, and a
 console link where a person pastes it. `set_secret(..., generate=True)` stores
 a generated random value. So a secret never passes through the conversation.
-The MCP tools can never read a secret back, and `list_env` returns the
-metadata only. `set_env` stores a plain variable: its value passes through the
-conversation, and the tools can read it back. Never give `set_env` a
+The MCP tools can never read a secret back, and `list_variables` returns the
+metadata only. `set_variable` stores a plain variable: its value passes through the
+conversation, and the tools can read it back. Never give `set_variable` a
 credential. The platform encrypts both kinds at rest. A secret is still an
-environment variable: `delete_env` deletes it, a channel override works the
-same way, and the app reads it at its next deploy.
+variable: `delete_variable` deletes it, an environment override works the same
+way, and the app reads it at its next deploy.
 
 **Never commit a secret to the repo.** The build copies your repository into
 the image. On the `app` template, the Dockerfile that the platform makes does
@@ -408,7 +408,7 @@ you commit one time stays in a layer while that image exists. The next commit
 cannot remove the key from that layer.
 
 **The platform rejects a reserved key; it does not ignore the key without a
-message.** The platform injects these keys, and `set_env` refuses to write
+message.** The platform injects these keys, and `set_variable` refuses to write
 them: `XHOSTD_USER`, `XHOSTD_SHA`, `XHOSTD_HTTP_PORT`,
 `XHOSTD_FORWARD_PORT`, `XHOSTD_READY_FILE`, `XHOSTD_HOSTNAME`, `XHOSTD_URL`,
 `XHOSTD_DOMAINS`, `XHOSTD_PROJECT`, `XHOSTD_ENVIRONMENT`, `XHOSTD_SERVICE`,
@@ -423,20 +423,21 @@ want a different database, use a variable with a different name.
 immediately.** The platform fixed the environment of the live container when it
 created that container. Set the value, then deploy.
 
-**A channel override has priority over an app default.** `set_env` without
-`channel` sets the default that every channel shares. `set_env` with
-`channel="prod"` sets an override for that channel only. Use the app level for
-the values that are the same everywhere. Use the channel level for the few
-values that are different.
+**An environment override has priority over a project default.**
+`set_variable` without `environment` sets the default that every environment
+shares. `set_variable` with `environment="prod"` sets an override for that
+environment only. Use the project level for the values that are the same
+everywhere. Use the environment level for the few values that are different.
+Every service of an environment receives the same variables.
 
 ## Blob storage
 
-If a channel has object storage, the platform injects `S3_ENDPOINT`,
+If an environment has object storage, the platform injects `S3_ENDPOINT`,
 `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_REGION`. Point
 an S3-compatible client at these values.
 
 **Use plain keys with no prefix.** Write `avatars/u123.png`, not
-`myapp/prod/avatars/u123.png`. Each channel already has its own private prefix.
+`myapp/prod/avatars/u123.png`. Each environment already has its own private prefix.
 The gateway adds that prefix for you, and removes it for you. Your own
 namespace adds characters to each key and no isolation.
 
@@ -458,7 +459,7 @@ the object.
 Each limit fails in a different way. Thus you must know which limit you are
 near.
 
-The platform counts blob storage for the full account, across every channel.
+The platform counts blob storage for the full account, across every environment.
 It applies the other limits per container or per image. Call
 `get_stats(view="overview")` for the current account's limits and remaining
 headroom; do not infer them from a subscription catalog.
@@ -497,7 +498,7 @@ The platform makes its errors different on purpose, because each error needs a
 different response. Do not retry all of them.
 
 **402 `plan_limit_exceeded` — the current entitlement does not permit this
-operation.** There are too many channels, or the entitlement does not carry
+operation.** The plan has no free service slot, or the entitlement does not carry
 the feature. A retry never works. Explain which feature or limit is
 unavailable, omit any purchase or plan-change URL from the error, and continue
 with an available alternative when possible.
@@ -523,8 +524,8 @@ a Cursor Origin account, on the console's account page. The console alone does
 each of them, and no setting changes that.
 
 **409 `channel_busy`, `restore_in_flight`, or a conflict — another operation
-is active.** `channel_busy` means a deploy holds the channel. `restore_in_flight`
-means a database restore of the channel is active: a deploy, a rewind, and a
+is active.** `channel_busy` means a deploy holds the environment. `restore_in_flight`
+means a database restore of the environment is active: a deploy, a rewind, and a
 second restore are refused until it ends. You can retry these errors. Wait for the active
 operation to end, then try again. `get_restore_status` shows how far a restore
 got.
@@ -544,9 +545,9 @@ Read this section before you need it.
 deploy log shows `channel snapshot marker recorded`. You prepare nothing in
 advance.
 
-**To roll the data back:** call `list_channel_snapshots(app_name, channel)` to
+**To roll the data back:** call `list_snapshots(project, environment)` to
 see the snapshots. Then call
-`restore_channel_snapshot(app_name, channel, snapshot_id, part="database")`.
+`restore_snapshot(project, environment, snapshot_id, part="database")`.
 
 The call returns at once, and the restore runs in the background. A restore can
 take up to an hour; for databases under 10 GB it typically takes minutes. Tell
@@ -559,38 +560,39 @@ fail; `maintenance` shows a maintenance page and makes the writes fail; `live`
 keeps the app writing, and the restore discards those writes. In every mode, a
 write made while the restore still waits to start is discarded. xhostd's
 maintenance page answers HTTP 503, so the user's uptime monitors report the app
-as down. For the user's own page, deploy a static app first, then pass its app
-and channel as `maintenance_app` and `maintenance_channel`. That site answers
+as down. For the user's own page, deploy a static project first, then pass its
+project and environment as `maintenance_project` and `maintenance_environment`. That site answers
 with its own status codes.
 
-The restore loads the snapshot into a new database, and switches the channel to
-it only once the load succeeds. A failed restore leaves the database
+The restore loads the snapshot into a new database, and switches the environment
+to it only once the load succeeds. A failed restore leaves the database
 unchanged, and loses nothing.
 
 A restore of `prod` is a protected action. An agent credential gets 403
-`protected_action` until the app owner turns agent access on in the console.
+`protected_action` until the project owner turns agent access on in the console.
 That control is deliberate, and it is not a formality. The database restore
-cancels the deploys still queued on the channel and lists them as
+cancels the deploys still queued on the environment and lists them as
 `cancelled_deploys`: deploy again once the restore ends. A deploy that already
 runs finishes first, and the restore waits for it.
 
-**To roll the code back:** call `rewind_channel(app_name, channel)`. It moves
-the channel to the image of the last successful deploy with a commit that is
+**To roll the code back:** call `rewind_deploy(project, environment)`. It moves
+each service to the image of its last successful deploy with a commit that is
 different from the live commit. It boots an image that the platform keeps, with
-no new build and no git sync. `rewind_channel` is not available on a channel
-that deployed one commit only. To go back more than one step, `deploy` the
+no new build and no git sync. Pass `service` to rewind one service.
+`rewind_deploy` is not available on an environment that deployed one commit
+only. To go back more than one step, `deploy` the
 older sha.
 
 **The two operations are separate, and the difference is important.**
-`rewind_channel` changes the live image and nothing more. It does not reverse
+`rewind_deploy` changes the live image and nothing more. It does not reverse
 a migration. If the bad deploy changed the schema, a rewind leaves the old code
 with a new schema. Restore the database as well, or deploy a correction.
-`rewind_channel` is not available on the `static` template, because that
+`rewind_deploy` is not available on the `static` template, because that
 template keeps no image.
 
-**Restore the blob storage with `restore_channel_snapshot` and
-`part="files"`.** The tool rolls a channel's object storage back to a
-checkpoint and takes the same prod guard as the database restore. Pass the checkpoint id from `list_channel_snapshots`
+**Restore the blob storage with `restore_snapshot` and
+`part="files"`.** The tool rolls an environment's object storage back to a
+checkpoint and takes the same prod guard as the database restore. Pass the checkpoint id from `list_snapshots`
 whose `aligned_blob` flag is true; a checkpoint with no aligned blob leg
 answers `no_aligned_blob_snapshot` (409). You can also restore from the web
 console.

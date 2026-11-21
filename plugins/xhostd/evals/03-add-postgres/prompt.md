@@ -1,5 +1,5 @@
 ---
-description: Should trigger. The user asks for a Postgres database on an existing xhostd app.
+description: Should trigger. The user asks for a Postgres database on an existing xhostd project.
 tags: [trigger, should-trigger]
 max_turns: 15
 timeout_seconds: 300

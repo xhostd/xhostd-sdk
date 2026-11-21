@@ -13,9 +13,9 @@
 
 You get the same kind of static site as
 [Recipe: static site](https://docs.xhostd.com/guides/recipes-static). Here
-`commit_files` puts the whole site onto the app. `commit_files` is a tool
+`commit_files` puts the whole site onto the project. `commit_files` is a tool
 call with a `{path: contents}` map. The platform turns that map into one
-ordinary commit on the app's own repo. There is no shell, no clone and no
+ordinary commit on the project's own repo. There is no shell, no clone and no
 push.
 
 **Use this recipe in two cases.** The first is a client with no shell
@@ -60,7 +60,7 @@ leaves the stylesheet as it is.
   <p>
     Every file on this page arrived through <code>commit_files</code> — a
     single tool call carrying a <code>{path: contents}</code> map, which the
-    platform turns into one ordinary commit on the app's own repo.
+    platform turns into one ordinary commit on the project's own repo.
   </p>
   <p>
     With a shell, <code>git push</code> sends only what changed. Without
@@ -107,11 +107,11 @@ two of them.
 
 Do these five steps in order.
 
-**1. Create the app.** This call makes the `prod` channel, its hostname and
-its git repo. You get a repo even if you never push to it.
+**1. Create the project.** This call makes the `prod` environment, its
+hostname, and its git repo. You get a repo even if you never push to it.
 
 ```text
-create_app(name="recipe-commit-files", template="static")
+create_project(name="recipe-commit-files", template="static")
 → {"name": "recipe-commit-files",
    "owner_username": "docs",
    "role": "owner",
@@ -127,7 +127,8 @@ create_app(name="recipe-commit-files", template="static")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`. This recipe has no credential step.
+Later calls take the project's name and the environment's name, such as
+`prod`. This recipe has no credential step.
 `commit_files` uses the same authenticated tool session as every other call.
 You thus make no token, store no token and paste no token.
 
@@ -136,7 +137,7 @@ You thus make no token, store no token and paste no token.
 replaces the file if the file exists.
 
 ```text
-commit_files(app_name="recipe-commit-files",
+commit_files(project="recipe-commit-files",
              message="the whole site, in one changeset",
              files={"index.html": "<!doctype html>\n<html lang=\"en\">\n...",
                     "style.css": ":root { color-scheme: light dark; }\n..."})
@@ -152,7 +153,7 @@ both files went through the model's context in full, for one commit.
 path is familiar to you:
 
 ```text
-list_source_files(app_name="recipe-commit-files")
+list_source_files(project="recipe-commit-files")
 → {"ref": "master", "sha": "0bf2770b0ab04b119bc4138faf2d9b1a270ab095",
    "files": [{"path": "index.html", "kind": "blob", "size": 815},
              {"path": "style.css", "kind": "blob", "size": 563}]}
@@ -161,8 +162,8 @@ list_source_files(app_name="recipe-commit-files")
 **3. Deploy that commit.**
 
 ```text
-deploy(app_name="recipe-commit-files",
-       channel="prod",
+deploy(project="recipe-commit-files",
+       environment="prod",
        sha="0bf2770b0ab04b119bc4138faf2d9b1a270ab095")
 → {"deploy_id": "df8750a5-ada3-45fe-b3b1-1543ec14873d",
    "channel_id": "17a905c3-9365-4c1e-be98-7823f83a2647",
@@ -170,9 +171,9 @@ deploy(app_name="recipe-commit-files",
 ```
 
 Use `sha` on this path, not `ref`. `commit_files` returns the exact commit
-that it wrote, so you deploy that commit. `ref` binds the channel; `sha`
-deploys once. `ref="master"` deploys the branch's current head and binds the
-channel to `master`, so a later deploy can omit both. `sha` wins if you give
+that it wrote, so you deploy that commit. `ref` binds the environment;
+`sha` deploys once. `ref="master"` deploys the branch's current head and binds
+the environment to `master`, so a later deploy can omit both. `sha` wins if you give
 both. `deploy`
 returns as soon as it queues the deploy, and the work runs asynchronously.
 Follow it with `get_logs` and `source="deploy"`: the first line of its reply states the
@@ -182,14 +183,14 @@ outcome.
 path that the map does not name. This changeset names one new path:
 
 ```text
-commit_files(app_name="recipe-commit-files",
+commit_files(project="recipe-commit-files",
              message="add robots.txt",
              files={"robots.txt": "User-agent: *\nDisallow:\n"})
 → {"sha": "9664363b9339eec27087c819f49c14c977799134"}
 ```
 
 ```text
-list_source_files(app_name="recipe-commit-files")
+list_source_files(project="recipe-commit-files")
 → {"ref": "master", "sha": "9664363b9339eec27087c819f49c14c977799134",
    "files": [{"path": "index.html", "kind": "blob", "size": 815},
              {"path": "robots.txt", "kind": "blob", "size": 24},
@@ -206,14 +207,14 @@ it is. It never deletes the file.** Send only the paths that change.
 **5. Delete it again.** A `null` value removes the path.
 
 ```text
-commit_files(app_name="recipe-commit-files",
+commit_files(project="recipe-commit-files",
              message="drop robots.txt again",
              files={"robots.txt": null})
 → {"sha": "c16fdc6adcc7b64b72603a674c05aef8ca708972"}
 ```
 
 ```text
-list_source_files(app_name="recipe-commit-files")
+list_source_files(project="recipe-commit-files")
 → {"ref": "master", "sha": "c16fdc6adcc7b64b72603a674c05aef8ca708972",
    "files": [{"path": "index.html", "kind": "blob", "size": 815},
              {"path": "style.css", "kind": "blob", "size": 563}]}
@@ -225,8 +226,8 @@ different forms, and a map holds one value per path. Then comes the second
 deploy, of `c16fdc6a`:
 
 ```text
-deploy(app_name="recipe-commit-files",
-       channel="prod",
+deploy(project="recipe-commit-files",
+       environment="prod",
        sha="c16fdc6adcc7b64b72603a674c05aef8ca708972")
 → {"deploy_id": "2acbf6ad-91b6-40ce-9e43-c3d1840ffb3b",
    "channel_id": "17a905c3-9365-4c1e-be98-7823f83a2647",
@@ -249,7 +250,7 @@ belongs to exactly one of them.
 `edits` replaces an anchored region:
 
 ```text
-commit_files(app_name="recipe-commit-files",
+commit_files(project="recipe-commit-files",
              message="widen the card",
              edits={"style.css": [
                {"old_string": "  max-width: 40rem;",
@@ -265,7 +266,7 @@ tells you the count. Add the lines around it until the anchor is unique, or set
 `patches` takes hunks, which suit several scattered changes to one file:
 
 ```text
-commit_files(app_name="recipe-commit-files",
+commit_files(project="recipe-commit-files",
              message="bump the version banner",
              patches={"index.html": "@@ <footer>\n-  <p>v1.4</p>\n+  <p>v1.5</p>\n"})
 ```
@@ -283,15 +284,15 @@ count. Copy anchors from `read_source_file` output, and do not retype them.
 ## Verify it
 
 ```text
-get_logs(app_name="recipe-commit-files",
-         channel="prod",
+get_logs(project="recipe-commit-files",
+         environment="prod",
          source="deploy",
          deploy_id="df8750a5-ada3-45fe-b3b1-1543ec14873d")
 ```
 
 That is the first deploy. The reply starts with a status header, then the
 log. The transcript shows short ids. It omits the nginx entrypoint lines and
-the routine per-channel lines for the network and the channel row:
+the routine per-environment lines for the network and the environment's row:
 
 ```text
 deploy df8750a5 — success (sha 0bf2770b0ab0)
@@ -367,27 +368,27 @@ you clone that repo and continue your work.
 
 ## When it goes wrong
 
-### The app has a connected source repository {#the-app-is-connected-to-github}
+### The project has a connected source repository {#the-app-is-connected-to-github}
 
-`commit_files` is refused outright. On an app connected to a GitHub repo
+`commit_files` is refused outright. On a project connected to a GitHub repo
 with a deploy key, the refusal reads:
 
 ```text
 this app's code comes from its connected GitHub repository, and its xhostd repository is a read-only mirror of it, so commit_files writes nothing here. A change reaches this app when someone pushes it to the GitHub repository: each push syncs once the repository pings xhostd (sync_git_from_remote shows the setup), and each deploy fetches from GitHub first.
 ```
 
-On an app connected to a Cursor Origin repository, the refusal reads:
+On a project connected to a Cursor Origin repository, the refusal reads:
 
 ```text
 this app's code comes from its connected Cursor Origin repository, and its xhostd repository is a read-only mirror of it, so commit_files writes nothing here. A change reaches this app when someone pushes it to the Cursor Origin repository: each push syncs, and each deploy fetches first.
 ```
 
-There is no way around this refusal. On a connected app, the source
+There is no way around this refusal. On a connected project, the source
 repository is the source, and the xhostd repo is a read-only mirror of it.
 Send the code to the source repository, and xhostd syncs it from there. This
-guide describes the message and does not capture it. The demo app has no
+guide describes the message and does not capture it. The demo project has no
 connected source, and a connection would stay in place.
-`sync_git_from_remote` does not put code onto an app either: it refreshes
+`sync_git_from_remote` does not put code onto a project either: it refreshes
 that mirror.
 
 ### The commit succeeded but the site did not change
@@ -395,9 +396,9 @@ that mirror.
 `commit_files` returned a `sha` and did no more. It stores code, but it does
 not deploy code. Call `deploy` with that `sha`. A push to git with no deploy
 gives the same result, so this failure occurs on both paths. If you do not
-know which commit is live, call `get_app` for the channel's `current_sha`.
+know which commit is live, call `get_project` for the environment's `current_sha`.
 Call `list_source_files` for the content of the repo. If the two disagree, the repo
-is ahead and a deploy is absent. A non-null `pending_deploy` on the channel
+is ahead and a deploy is absent. A non-null `pending_deploy` on the environment
 means the deploy is in flight and `current_sha` has not caught up yet — poll
 `get_logs` with `source="deploy"`, and do not start another deploy.
 

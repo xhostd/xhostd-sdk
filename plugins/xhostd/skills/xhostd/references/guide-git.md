@@ -1,8 +1,8 @@
 # Push code with git
 
-Every app on xhostd owns a git repo at
-`https://git.xhostd.com/<username>/<app>.git`. A push to that repo puts
-code onto an app. This applies to the first commit, and to every commit
+Every project on xhostd owns a git repo at
+`https://git.xhostd.com/<username>/<project>.git`. A push to that repo puts
+code onto a project. This applies to the first commit, and to every commit
 after it. A push sends only the diff, so each edit stays small. A push stores
 your code; it does not deploy the code. Start a build separately with
 `deploy`, or with the console.
@@ -45,8 +45,8 @@ token. HTTPS needs a token in the environment, and that token expires.
 
 The SSH path costs no extra step in the steady state. Your tool makes a
 keypair only when the machine holds no key for the account. A key
-belongs to the account and not to one app, so one `register_ssh_key`
-call serves every app on that machine.
+belongs to the account and not to one project, so one `register_ssh_key`
+call serves every project on that machine.
 
 ## Mint credentials
 
@@ -54,7 +54,7 @@ You use one **unified credential**. A single `xh_` token is your git
 password over HTTPS, your Postgres password, and your platform API
 bearer. It carries the full default scopes: repo, deploy, channel, db,
 blob, and stats read. Thus the same token can push code, deploy code,
-and manage your apps. An SSH push needs no token; read **Push over SSH**
+and manage your projects. An SSH push needs no token; read **Push over SSH**
 below.
 
 Keep the token in the `XHOSTD_TOKEN` environment variable, and never
@@ -85,7 +85,7 @@ XHOSTD_GIT_TOKEN="$(printf 'Authorization: Bearer %s\n' "$XHOSTD_TOKEN" \
   && GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
   GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_GIT_TOKEN" \
-  git push https://git.xhostd.com/<username>/<app>.git HEAD:master
+  git push https://git.xhostd.com/<username>/<project>.git HEAD:master
 ```
 
 Neither token appears on a process's command line, where any user of the
@@ -116,14 +116,14 @@ The git host answers SSH, and both transports reach the same repo. This
 is the first path on a machine that runs commands. A private SSH key
 never enters a tool call, so a content filter has nothing to refuse.
 
-**An SSH push needs no token.** It needs your username and the app name
-only. `get_app` and `GET /apps/{app_id}` return the `repo_url` of each
-app, and that URL holds both values.
+**An SSH push needs no token.** It needs your username and the project
+name only. `get_project` and `GET /apps/{app_id}` return the `repo_url` of each
+project, and that URL holds both values.
 
 A machine can hold keys for more than one xhostd account, so first
 check that the key belongs to the account you are connected as:
 
-1. Get the `repo_url` and `<username>` of the app from `get_app`.
+1. Get the `repo_url` and `<username>` of the project from `get_project`.
 2. Read the fingerprint of every existing `~/.ssh/xhost_ed25519*.pub`
    with `ssh-keygen -lf <file>`: the default `~/.ssh/xhost_ed25519.pub`
    and every `~/.ssh/xhost_ed25519_*.pub`. Compare each with the
@@ -161,7 +161,7 @@ which lists the keys of your account and deletes one.
 
 **Keep every key at `~/.ssh/xhost_ed25519` or
 `~/.ssh/xhost_ed25519_<username>`.** Do not put a key in the project
-directory. Do not add a suffix for a project, an app, or a tool. Those
+directory. Do not add a suffix for a project or a tool. Those
 paths are in your home directory, so every tool and every project on the
 machine reads one key per account.
 
@@ -170,8 +170,8 @@ second keypair. Each new keypair adds a key to your account, and the
 platform sends you a notification. Your account then collects keys that
 no tool uses.
 
-**A key belongs to the account, not to one app.** Thus one
-`register_ssh_key` call serves every app that you push to from that
+**A key belongs to the account, not to one project.** Thus one
+`register_ssh_key` call serves every project that you push to from that
 machine. Repeat this step on a new machine, or for a new account, only.
 
 Then set the SSH remote and push. Replace `<key>` with the private key
@@ -179,13 +179,13 @@ that the steps chose, `~/.ssh/xhost_ed25519` or a
 `~/.ssh/xhost_ed25519_<username>` key:
 
 ```sh
-git remote add xhostd-ssh "git@git.xhostd.com:<username>/<app>.git"
+git remote add xhostd-ssh "git@git.xhostd.com:<username>/<project>.git"
 GIT_SSH_COMMAND="ssh -i <key> -o IdentitiesOnly=yes" git push xhostd-ssh HEAD:master
 ```
 
 The `HEAD:master` refspec is deliberate. Push under the name you will
 deploy: `deploy(..., ref="master")` deploys that branch and binds the
-channel to it. A new local repo often uses `main` as its default branch.
+environment to it. A new local repo often uses `main` as its default branch.
 `HEAD:master` pushes the current branch to `master`, whatever its local
 name is. `GIT_SSH_COMMAND` names the private half. The key
 sits outside a default path, so every SSH push needs that variable.
@@ -224,7 +224,7 @@ environment:
 GIT_CONFIG_COUNT=1 \
   GIT_CONFIG_KEY_0=http.https://git.xhostd.com/.extraHeader \
   GIT_CONFIG_VALUE_0="Authorization: Bearer $XHOSTD_TOKEN" \
-  git push https://git.xhostd.com/<username>/<app>.git HEAD:master
+  git push https://git.xhostd.com/<username>/<project>.git HEAD:master
 ```
 
 git reads the three variables as one configuration entry. The token value
@@ -239,10 +239,10 @@ A scoped token that you mint works the same way from its own variable,
 as **Mint credentials** shows.
 
 The `HEAD:master` refspec is deliberate here too. Push under the name you
-will deploy, because `deploy(..., ref="master")` binds the channel to that
-branch, and a new local repo often uses `main` as its default branch.
+will deploy, because `deploy(..., ref="master")` binds the environment to
+that branch, and a new local repo often uses `main` as its default branch.
 
-`get_app` and `GET /apps/{app_id}` return the exact `repo_url` of each app.
+`get_project` and `GET /apps/{app_id}` return the exact `repo_url` of each project.
 
 ### Interactive form (no token in the URL)
 
@@ -250,7 +250,7 @@ If you do not want the token in the remote, clone with a plain URL. git
 then asks you for the credential:
 
 ```sh
-git clone https://git.xhostd.com/<username>/<app>.git
+git clone https://git.xhostd.com/<username>/<project>.git
 ```
 
 git asks for a username; type any value. git then asks for a password;
@@ -323,7 +323,7 @@ Origin. The owner of a project connects its repository.
    account.
 4. Choose the repository. Select **Connect** to connect it to a project,
    or **Create a project from this repository**.
-5. Turn following on for each channel that deploys on push, as
+5. Turn following on for each environment that deploys on push, as
    [Follow the branch](#follow-the-branch) shows.
 
 When your xhostd account already holds an active Cursor Origin account,
@@ -365,18 +365,18 @@ to reply on a pull request.
 
 `sync_git_from_remote` returns `kind: "installation"` and
 `host: "origin"` for a Cursor Origin repository. The repository needs no
-setup. Turn following on for each channel that deploys on push:
+setup. Turn following on for each environment that deploys on push:
 
 ```text
-update_channel(app_name="shop", channel="prod", follows_branch=True)
+update_environment(project="shop", environment="prod", follows_branch=True)
 ```
 
 ### Disconnect the repository
 
 On the project's Git page, type the project's name and select
 **Disconnect the repository**. The project keeps the last mirrored state,
-and `commit_files` and `git push` to xhostd work again. Every channel of
-the project stops following its branch. The Cursor Origin account stays
+and `commit_files` and `git push` to xhostd work again. Every environment
+of the project stops following its branch. The Cursor Origin account stays
 connected to your xhostd account.
 
 To remove the Cursor Origin account, select **Remove** in its row on the
@@ -436,7 +436,7 @@ do it, because the connection needs that person's approval on GitHub.
 4. In the console, choose the repository.
 5. Select **Connect** to connect the repository to a project, or
    **Create a project from this repository**.
-6. Turn following on for each channel that deploys on push, as
+6. Turn following on for each environment that deploys on push, as
    [Follow the branch](#follow-the-branch) shows.
 
 While the project is connected, you push to the GitHub repository.
@@ -446,11 +446,11 @@ While the project is connected, you push to the GitHub repository.
 
 `sync_git_from_remote` returns `kind: "installation"` and
 `host: "github"` for a repository connected through the app. The
-repository needs no setup. Turn following on for each channel that
+repository needs no setup. Turn following on for each environment that
 deploys on push:
 
 ```text
-update_channel(app_name="shop", channel="prod", follows_branch=True)
+update_environment(project="shop", environment="prod", follows_branch=True)
 ```
 
 ### Add repositories later
@@ -476,7 +476,7 @@ organization.
 
 1. On the project's Git page, select **Disconnect GitHub**.
 2. Connect the repository with the xhostd GitHub app.
-3. Turn following on again for each channel, because the disconnect
+3. Turn following on again for each environment, because the disconnect
    turns it off.
 4. On GitHub, delete the project's deploy key, and delete the ping: the
    workflow file or the repo webhook.
@@ -492,8 +492,8 @@ organization.
 
 ## Deploy on each push {#deploy-on-each-github-push}
 
-A channel that follows its branch deploys each push to the app's
-connected source repository. Turn following on as
+An environment that follows its branch deploys each push to the
+project's connected source repository. Turn following on as
 [Follow the branch](#follow-the-branch) shows. A Cursor Origin repository
 needs no other step: Cursor Origin tells xhostd about each push. A GitHub
 repo connected with a deploy key also needs a ping, as
@@ -501,29 +501,29 @@ repo connected with a deploy key also needs a ping, as
 
 ### The push ping of a deploy key
 
-This section applies to an app whose source is a GitHub repo connected
+This section applies to a project whose source is a GitHub repo connected
 with a deploy key, on the Repository source card of the console's Git
 page. A repo connected through the xhostd GitHub app needs no ping; read
 [Connect a GitHub repository with the xhostd GitHub app](#connect-a-github-repository-with-the-xhostd-github-app).
-On such an app you push to GitHub, not to xhostd. A push to GitHub can
+On such a project you push to GitHub, not to xhostd. A push to GitHub can
 deploy on its own, with two steps:
 
 1. The repo tells xhostd that it changed. This is a **ping**: one
-   `POST` to the app's notify URL. The ping carries no secret, because
-   xhostd trusts nothing in it. xhostd fetches the repo from GitHub
-   itself, with the app's read-only deploy key.
-2. A channel **follows its branch**. Each ping syncs the mirror. A
-   channel that follows its branch then deploys the branch's new head.
-   A channel that does not follow keeps its deploys as its own call.
+   `POST` to the project's notify URL. The ping carries no secret,
+   because xhostd trusts nothing in it. xhostd fetches the repo from
+   GitHub itself, with the project's read-only deploy key.
+2. An environment **follows its branch**. Each ping syncs the mirror. An
+   environment that follows its branch then deploys the branch's new head.
+   An environment that does not follow keeps its deploys as its own call.
 
 Find the notify URL with `sync_git_from_remote`, which returns it as `notify_url`, or
 on the console's Git page. It has the form
-`https://api.xhostd.com/webhooks/github/<app-id>`.
+`https://api.xhostd.com/webhooks/github/<project-id>`.
 
 #### Send the ping with a GitHub Action
 
 Commit this file as `.github/workflows/notify-xhostd.yml`, with your
-app's id in the URL:
+project's id in the URL:
 
 ```yaml
 name: Notify xhostd
@@ -532,7 +532,7 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
-      - run: curl -fsS --retry 5 --retry-all-errors -X POST https://api.xhostd.com/webhooks/github/<app-id>
+      - run: curl -fsS --retry 5 --retry-all-errors -X POST https://api.xhostd.com/webhooks/github/<project-id>
 ```
 
 The file holds no secret, so an agent with push access can add it alone.
@@ -555,30 +555,32 @@ access to the repo, and it uses no GitHub Actions minutes.
 
 ### Follow the branch
 
-Turn following on for each channel that should deploy on push:
+Turn following on for each environment that should deploy on push:
 
 ```text
-update_channel(app_name="shop", channel="prod", follows_branch=True)
+update_environment(project="shop", environment="prod", follows_branch=True)
 ```
 
-The console has the same switch under each channel on the project's
+The console has the same switch under each environment on the project's
 Overview page. Its label names the host of the source: **Deploy each
 GitHub push** or **Deploy each Cursor Origin push**. Turning it on needs
-a connected source repository and a channel bound to a branch. A token
-that turns it on needs the `deploy:*` scope too. Turning it off is always
-allowed.
+a connected source repository and an environment bound to a branch. A
+token that turns it on needs the `deploy:*` scope too. Turning it off is
+always allowed.
 
-How a following channel behaves:
+How a following environment behaves:
 
 - A push to its branch deploys the new head. A push to another branch
-  deploys nothing to it.
-- After a rewind, the channel keeps the rewound version until its branch
+  deploys nothing to it. In a project with several services, a push
+  deploys only the services whose directory changed, as
+  [Services](https://docs.xhostd.com/guides/services) explains.
+- After a rewind, the environment keeps the rewound version until its branch
   moves again. The next push to the branch deploys over the rewind.
 - A commit that is already queued, building, or serving does not deploy
   twice.
-- A failed push deploy, or a push xhostd cannot fetch, sends the app's
-  owner a notice on the console and by mail.
-- A push made while the app is under maintenance deploys when the
+- A failed push deploy, or a push xhostd cannot fetch, sends the
+  project's owner a notice on the console and by mail.
+- A push made while the project is under maintenance deploys when the
   maintenance ends.
 - A commit you force-push away before its deploy fetched it does not
   deploy, and sends no notice.
@@ -588,7 +590,7 @@ request arrived. If a push did not deploy, check that time first. For a
 deploy key, a ping that never arrived means the workflow file is missing
 from that branch, or the webhook is missing.
 
-One notify URL names one app. A repo that feeds two apps needs two
+One notify URL names one project. A repo that feeds two projects needs two
 `curl` lines in its workflow, or two webhooks.
 
 ## Notes
@@ -602,5 +604,5 @@ One notify URL names one app. A repo that feeds two apps needs two
   `403` means that the token is valid, but it gives no access to that
   repo.
 - The username in the URL path only locates the repo. The token's role
-  on the app decides your access. Thus you can push to every app that
-  you own, and to every app where you are a member.
+  on the project decides your access. Thus you can push to every project
+  that you own, and to every project where you are a member.

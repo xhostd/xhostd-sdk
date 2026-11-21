@@ -14,6 +14,21 @@ Use S3-compatible object storage for uploads and durable app files. Follow the
 [file upload recipe](https://docs.xhostd.com/guides/recipes-blob). Do not treat a
 container's writable layer as a backup of your data.
 
+## Name a database or a bucket
+
+Each environment's database and bucket carry a label, which names it in
+listings. A new one takes `<project>.<environment>`, and keeps that label
+when the project or the environment is renamed. A label is unique in your
+account for its kind: when your account already holds the label, the platform
+adds a number, such as `shop-2.prod`, and mails the account's owner.
+
+The project's owner can rename a label on the project's Database or Storage
+page, with the `rename_database` and `rename_bucket` tools, or with
+`xhostctl database rename` and `xhostctl bucket rename`. A label is 1 to 60
+lowercase letters, digits, hyphens, or underscores. No connection string,
+variable, endpoint, or credential uses a label, so a rename changes nothing
+that runs.
+
 ## Read usage at the right scope
 
 The console's Usage area shows account resource measurements. Database usage
@@ -23,10 +38,10 @@ resource totals. An unavailable measurement is not zero.
 
 ## Review recovery points
 
-Open the project's Data & recovery section. Check the channel and timestamp,
-whether code was recorded, and whether the file checkpoint is aligned with
-the database checkpoint. A checkpoint without an aligned file marker does not
-represent an atomic restore of the whole app.
+Open the project's Data & recovery section. Check the environment and
+timestamp, whether code was recorded, and whether the file checkpoint is aligned
+with the database checkpoint. A checkpoint without an aligned file marker does
+not represent an atomic restore of the whole environment.
 
 Nightly snapshot retention differs by plan. Pre-deploy recovery points use a
 separate count policy. Read the current values from `get_stats(view="overview")` and the
@@ -54,14 +69,14 @@ is discarded at that switch.
 
 To show your own maintenance page, with its own pages, images, and styles,
 deploy a static site first. Then choose it as the page in the console, or pass
-its app and channel to `restore_channel_snapshot` as `maintenance_app` and
-`maintenance_channel` with `during_restore="maintenance"`. Your site answers
+its project and environment to `restore_snapshot` as `maintenance_project` and
+`maintenance_environment` with `during_restore="maintenance"`. Your site answers
 with its own status codes: 200 for its pages, and 404 for a path it lacks.
-Don't redeploy your page channel while a restore runs: for up to a minute
+Don't redeploy your page's environment while a restore runs: for up to a minute
 after the redeploy, requests to your app's addresses fail.
 
 Database and file restores retain their own confirmation and permission rules.
-Review the project, channel, source checkpoint, and impact on current data.
+Review the project, environment, source checkpoint, and impact on current data.
 Copying a restore command is not approval to execute it.
 
 After a restore, verify the application's behavior and its data. Deploying old

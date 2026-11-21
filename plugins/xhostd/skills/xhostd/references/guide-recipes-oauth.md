@@ -52,14 +52,15 @@ do. You can decide per route, per record, or per any other unit.
 
 ## The sign-in sequence
 
-Six endpoints are available under `/xhost-auth/` on every channel hostname. A
+Six endpoints are available under `/xhost-auth/` on the hostname of every
+environment. A
 verified custom domain also has them. You do not deploy these endpoints. The
 platform mounts them in front of your app.
 
 | Endpoint | What it does |
 |---|---|
 | `/xhost-auth/login` | Mints a short-lived state token and 302s to Google. Accepts `return_to`. |
-| `/xhost-auth/callback` | Google's redirect target, on `auth.xhostd.com`. Exchanges the code, mints a 60-second transfer token, 302s to your channel's `/finalize`. |
+| `/xhost-auth/callback` | Google's redirect target, on `auth.xhostd.com`. Exchanges the code, mints a 60-second transfer token, 302s to your environment's `/finalize`. |
 | `/xhost-auth/finalize` | Verifies the transfer token, sets the identity cookie, 302s to `return_to`. |
 | `/xhost-auth/logout` | Clears the cookie. Accepts `return_to`. |
 | `/xhost-auth/whoami` | JSON identity probe. Always 200; useful from JavaScript on a static page. |
@@ -67,7 +68,7 @@ platform mounts them in front of your app.
 
 The `login`, `finalize` and `logout` endpoints accept `return_to`. The value
 must be a single local absolute path. If the value can redirect the visitor off
-the channel, the gateway uses `/`. Send a visitor to
+the environment's hostname, the gateway uses `/`. Send a visitor to
 `/xhost-auth/login?return_to=/private`. The gateway then returns the visitor to
 the gated page after the sign-in.
 
@@ -80,7 +81,7 @@ server serves every route" in
 catch-all route.
 
 You configure nothing. The platform owns the Google project, the consent screen
-and the signing key. When you created the app, you completed all the necessary
+and the signing key. When you created the project, you completed all the necessary
 steps.
 
 ## The identity cookie
@@ -101,7 +102,7 @@ The browser enforces the `__Host-` prefix. A browser accepts a cookie with that
 prefix only if the cookie is `Secure`, has `Path=/`, and has no `Domain`. A
 cookie with no `Domain` is host-only. The browser sends it back only to the
 exact hostname that set it. Thus the browser never offers a token from one
-channel to a different channel.
+environment to a different environment.
 
 The payload carries eight claims:
 
@@ -130,11 +131,11 @@ and remember its source.
 
 **`aud` is the hostname the visitor signed in on, and no environment variable
 carries it.** `XHOSTD_HOSTNAME` names only the platform hostname, and
-`XHOSTD_DOMAINS` changes only at the channel's next deploy. The correct source
+`XHOSTD_DOMAINS` changes only at the environment's next deploy. The correct source
 is the request.
 The proxy passes the browser's `Host` header through without a change. Thus
 `request.url.hostname` is the audience of the token. The same code stays
-correct when you point a custom domain at the channel, because the cookie on
+correct when you point a custom domain at the environment, because the cookie on
 that domain carries *that* hostname as `aud`. If you hardcode the
 `*.xhostd.com` name, the app fails as soon as a visitor arrives on a custom
 domain. The app then reports every signed-in visitor as signed out.
@@ -153,7 +154,7 @@ import jwt
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-# uvicorn's logger, so these lines show up in the channel's logs.
+# uvicorn's logger, so these lines show up in the environment's logs.
 logger = logging.getLogger("uvicorn.error")
 
 COOKIE_NAME = "__Host-xhost_id"
@@ -208,7 +209,7 @@ def current_user(request: Request) -> dict[str, Any] | None:
             # algorithm, or a forged token can pick one you did not intend.
             algorithms=["RS256"],
             issuer=ISSUER,
-            # `aud` is this channel's own hostname. Nothing injects that name
+            # `aud` is this environment's own hostname. Nothing injects that name
             # into the container, and the platform passes the browser's Host
             # header through untouched, so the request's host is the source —
             # and it stays correct for a custom domain too.
@@ -342,25 +343,25 @@ exec uvicorn app:app --host 0.0.0.0 --port "$XHOSTD_HTTP_PORT"
 ## The deploy
 
 No step here is specific to OAuth. The sign-in works for the whole platform.
-The identity gateway is already in front of every app on every channel
-hostname. Thus you enable no per-app toggle, and you register no client id and
+The identity gateway is already in front of every project, on the hostname
+of every environment. Thus you enable no per-project toggle, and you register no client id and
 no secret. Every step in this sequence is also in the other recipes.
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Every project owns a git repo. **With git, push the code, then call `deploy`.**
 A push sends only the diff. Use `commit_files` where git is not available
 on your machine, or where neither git transport can push. **A push stores your
 code, but it does not deploy the code.** `deploy` is a separate call, so you
 name the commit that goes live.
 
-The deploy has four steps. If this is your first app, the
+The deploy has four steps. If this is your first project, the
 [static site recipe](https://docs.xhostd.com/guides/recipes-static) covers the
 same four steps in detail.
 
-**1. Create the app.** This call creates the `prod` channel, its hostname and
-its git repo.
+**1. Create the project.** This call creates the `prod` environment, its
+hostname, and its git repo.
 
 ```text
-create_app(name="recipe-oauth", template="app")
+create_project(name="recipe-oauth", template="app")
 → {"name": "recipe-oauth",
    "owner_username": "docs",
    "role": "owner",
@@ -376,7 +377,8 @@ create_app(name="recipe-oauth", template="app")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`. Record the hostname in the response. That hostname is the
+Later calls take the project's name and the environment's name, such as
+`prod`. Record the hostname in the response. That hostname is the
 `aud` claim in your tokens.
 
 **2. Have your token ready.** The token authenticates git, Postgres, and the
@@ -391,7 +393,7 @@ commands.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -441,8 +443,8 @@ never lands in `.git/config`, in your shell history, or in the output of
 **4. Deploy the branch.**
 
 ```text
-deploy(app_name="recipe-oauth",
-       channel="prod",
+deploy(project="recipe-oauth",
+       environment="prod",
        ref="master")
 → {"deploy_id": "aee52aa8-54f8-4a29-a423-9bd4d8093c1d",
    "channel_id": "2997a56a-b7a4-4f9a-992c-2a83ff40578e",
@@ -500,7 +502,7 @@ sign-in returns a 302, and the probe accepts a 302. A root route that answers
 ### The anonymous side
 
 The two calls below are anonymous. They send no cookie, and nothing in the
-request identifies the caller. Both outputs come from the live channel.
+request identifies the caller. Both outputs come from the live environment.
 
 ```console
 $ curl -sS -o /dev/null -w '%{http_code}\n' https://recipe-oauth-docs.xhostd.app/

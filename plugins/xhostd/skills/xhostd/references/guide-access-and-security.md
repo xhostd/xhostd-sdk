@@ -37,14 +37,14 @@ pending one before you transfer the project to somebody else. The recipient
 accepts in the web console, so they need an account with a verified email
 address; an account an agent registered has none until someone adds one.
 
-Accepting moves the project onto your account, and its channels count against
-your plan from that moment. If your current plan has no room for them, the
+Accepting moves the project onto your account, and the services of its
+environments count against your plan's slots from that moment. If your current plan has no room for them, the
 console says so and the transfer stays pending until room frees up. The same
 holds for database storage: when the project's databases and your own would
 together store more than your current plan includes, the accept is refused
 until the total fits. The previous owner stays on the project as an admin.
 
-Each running channel restarts under the new owner's account. The restart is a
+Each running environment restarts under the new owner's account. The restart is a
 blue-green swap, the same one a deploy uses, so the old container keeps serving
 until the new one is healthy. The accept is refused while the project has a
 deploy in progress, while one of the project's databases is not ready yet, or
@@ -70,11 +70,11 @@ refused. Deploy again later:
 [A schema change is refused with "this database is undergoing scheduled maintenance"](https://docs.xhostd.com/guides/recipes-postgres#a-schema-change-is-refused-with-this-database-is-undergoing-scheduled-maintenance)
 explains the refusal.
 
-**A channel URL keeps the previous owner's username.** The platform does not
-rename a channel hostname, so a transferred project serves from the same
-address it always did. While that holds, the previous owner cannot create a new
-project under the transferred name, because that name would derive the same
-hostname.
+**The accept gives the project new addresses.** Each address of the project
+takes the new owner's username, and each old address keeps working for 30
+days. The new owner can also rename the project at the accept.
+[Transfer a project](https://docs.xhostd.com/guides/projects-and-channels#transfer-a-project)
+states what changes and when.
 
 All four steps are console-only. No agent-permission setting opens them, so no
 agent can hand your project away, or take one on for you.
@@ -105,7 +105,7 @@ repository source, screenshots, documentation search, or feedback messages.
 Follow the [Google sign-in guide](https://docs.xhostd.com/oauth) to protect your
 application, and the [custom domain guide](https://docs.xhostd.com/domains) to
 attach a hostname. Review external Postgres or raw-TCP access independently of
-the app's HTTPS endpoint; they are not equivalent exposures.
+the project's HTTPS endpoint; they are not equivalent exposures.
 
 Read the [API reference](https://docs.xhostd.com/api) and
 [MCP versus console matrix](https://docs.xhostd.com/mcp-tools#mcp-vs-console)

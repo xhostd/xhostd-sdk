@@ -2,8 +2,8 @@
 
 These are complete deployments that you can follow from start to end. Each
 recipe takes one shape of project: a static site, an API, or a background
-worker. It then shows the full path. You create the app, write the files, set
-the environment, deploy, and check that the app is live. A coding agent can
+worker. It then shows the full path. You create the project, write the files,
+set the variables, deploy, and check that the project is live. A coding agent can
 follow a recipe for you: give your agent the recipe and say "do this".
 
 If your agent has no connection to xhostd, start with
@@ -14,9 +14,16 @@ here. An agent that works with no person at a browser opens its own account:
 [Push code with git](https://docs.xhostd.com/guides/git) tells you about the
 credential, the remote URL and the `git push` command.
 
+## Contents
+
+- Operate your projects
+- The recipes
+- The parts of a recipe
+
 ## Operate your projects
 
-- [Projects & channels](https://docs.xhostd.com/guides/projects-and-channels) — Project scope, channel isolation, and shared account capacity.
+- [Projects & environments](https://docs.xhostd.com/guides/projects-and-channels) — Project scope, environment isolation, and shared account capacity.
+- [Services](https://docs.xhostd.com/guides/services) — Run a web process, a worker, and an API as services of one project.
 - [Deployments](https://docs.xhostd.com/guides/deployments) — Push a revision, review a deployment, and distinguish results from serving state.
 - [Data & recovery](https://docs.xhostd.com/guides/data-and-recovery) — Postgres, files, recovery points, exports, and restore safeguards.
 - [Access & security](https://docs.xhostd.com/guides/access-and-security) — Membership, credentials, protected agent actions, and app sign-in.
@@ -38,9 +45,9 @@ not need to read the other guides first.
 | [Sign in with Google](https://docs.xhostd.com/guides/recipes-oauth) | An app that knows who its visitors are | Ready |
 | [Raw TCP](https://docs.xhostd.com/guides/recipes-port-forwarding) | A public `host:port` for a service that is not HTTP | Ready |
 | [Background worker](https://docs.xhostd.com/guides/recipes-worker) | A long-running process, not a web server | Ready |
-| [Ship without git](https://docs.xhostd.com/guides/recipes-commit-files) | A site put onto the app by tool call, where there is no shell to run `git` in | Ready |
+| [Ship without git](https://docs.xhostd.com/guides/recipes-commit-files) | A site put onto the project by tool call, where there is no shell to run `git` in | Ready |
 | [Working methods](https://docs.xhostd.com/guides/bkm) | The habits that keep a deploy free of surprises | Ready |
-| [Diagnose a slow app](https://docs.xhostd.com/guides/diagnose-slowness) | The cause of a slow or unhealthy channel, and the action for it | Ready |
+| [Diagnose a slow app](https://docs.xhostd.com/guides/diagnose-slowness) | The cause of a slow or unhealthy environment, and the action for it | Ready |
 | [Client blocks a deploy](https://docs.xhostd.com/guides/client-blocked-deploy) | The way to clear a `deploy` call your own client refused before it reached xhostd | Ready |
 | Custom domain | Your own domain, with HTTPS | Coming soon |
 
@@ -58,9 +65,10 @@ and no server to rent.
 
 Every tool call, every deploy log and every `curl` in a recipe is verbatim
 output. It comes from a real run on a real account: the `docs` demo account,
-whose apps stay up. Thus a hostname such as `recipe-static-docs.xhostd.app` is
-a live address that you can visit. It is not a form for you to complete. If you
-follow the recipe yourself, you get the same app under your own account name.
+whose projects stay up. Thus a hostname such as `recipe-static-docs.xhostd.app`
+is a live address that you can visit. It is not a form for you to complete. If
+you follow the recipe yourself, you get the same project under your own account
+name.
 
 Where a recipe shortens a value, hides a value, or describes a result in prose
 with no capture, it says so at that place. The credentials are always placeholders. One
@@ -68,8 +76,8 @@ or two failure paths are in prose, because a real failure on a public demo
 leaves the demo in a bad configuration.
 
 The [Raw TCP](https://docs.xhostd.com/guides/recipes-port-forwarding) recipe is
-different in one way. Its app is up on the demo account, the same as the other
-apps. The run then released the public `host:port` in its transcript, on
+different in one way. Its project is up on the demo account, the same as the
+other projects. The run then released the public `host:port` in its transcript, on
 purpose. That address therefore does not answer. It is the one captured
 address in these guides that you must not use. Each new exposure gets a new
 address.
@@ -80,7 +88,7 @@ Every recipe ends with a live address, and the one command that proves the
 address works. For an HTTP recipe, that command is:
 
 ```bash
-curl -sS https://<app>-<account>.xhostd.app/
+curl -sS https://<project>-<account>.xhostd.app/
 ```
 
 If the command prints your app's response, the recipe worked. If it does not,

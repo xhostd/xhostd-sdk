@@ -19,10 +19,15 @@ signal that arrives. The first signal is an HTTP 2xx or 3xx response from
 `GET /` on `$XHOSTD_HTTP_PORT`. The second signal is the file with the name in
 `$XHOSTD_READY_FILE`. A worker binds no port, so only the second signal is
 available to it. Most recipes teach the first signal. This one teaches the
-second, and it shows how to verify a channel that has no URL.
+second, and it shows how to verify an environment that has no URL.
 
-The app is `recipe-worker`, the template is `app`, and the channel is `prod`.
-The channel keeps its HTTPS hostname, `recipe-worker-docs.xhostd.app`, and that
+This recipe runs the worker as the project's only service. To run a worker
+beside a web process in one project, add it as a second service: the
+[Services](https://docs.xhostd.com/guides/services) guide shows the calls, and
+the same readiness signal applies there.
+
+The project is `recipe-worker`, the template is `app`, and the environment is
+`prod`. The environment keeps its HTTPS hostname, `recipe-worker-docs.xhostd.app`, and that
 hostname returns 502. That is correct, and
 [The HTTPS hostname returns 502](#the-https-hostname-returns-502) explains why.
 
@@ -46,10 +51,10 @@ none.
 ### worker.py
 
 ```python
-"""A worker channel that runs a loop and serves no HTTP.
+"""A worker service that runs a loop and serves no HTTP.
 
 The work is a toy: a counter that prints one JSON line per tick. The shape
-around it is the part to copy. This channel serves no HTTP at all, so the
+around it is the part to copy. This service serves no HTTP at all, so the
 deploy's HTTP probe can never pass. The worker creates $XHOSTD_READY_FILE
 after it reads a valid configuration, which is the other signal the health
 check accepts.
@@ -94,7 +99,7 @@ def main():
 
     # Create the ready file HERE, not before. setup() can fail, and that
     # failure must fail the deploy. A worker that creates the file first
-    # reports a healthy channel, then dies and restarts without end.
+    # reports a healthy service, then dies and restarts without end.
     Path(os.environ["XHOSTD_READY_FILE"]).touch()
     emit({"event": "ready", "interval_s": interval})
 
@@ -164,10 +169,10 @@ stays PID 1, and every stop takes the full stop timeout.
 
 Three steps.
 
-### Step 1 — create the app
+### Step 1 — create the project {#step-1-create-the-app}
 
 ```text
-create_app(name="recipe-worker", template="app")
+create_project(name="recipe-worker", template="app")
 → {"name": "recipe-worker",
    "owner_username": "docs",
    "role": "owner",
@@ -183,22 +188,23 @@ create_app(name="recipe-worker", template="app")
    ...}
 ```
 
-Later calls take the app's name and the channel's name, such as `prod`. `status: "provisioning"` is the normal state of a new channel, and
+Later calls take the project's name and the environment's name, such as
+`prod`. `status: "provisioning"` is the normal state of a new environment, and
 the hostname is already allocated. This recipe needs no public TCP port. The
 [Raw TCP recipe](https://docs.xhostd.com/guides/recipes-port-forwarding)
-shows where the plan and the project toggle decide whether a channel can have
-one.
+shows where the plan and the project toggle decide whether an environment can
+have one.
 
 ### Step 2 — push the files
 
-Every app owns a git repo. **With git, push the code, then call `deploy`.**
+Every project owns a git repo. **With git, push the code, then call `deploy`.**
 Use `commit_files` when the machine has no git, or when neither git
 transport can push. A deploy reads a commit
 from the repo, and it does not know the source of that commit.
 
 **This recipe shows the HTTPS steps.** With a shell, push over SSH: the
 private half of the key never enters a tool call, and one registration covers
-every app on that machine. The
+every project on that machine. The
 [git guide](https://docs.xhostd.com/guides/git) holds the transport branch and
 the SSH commands.
 
@@ -262,8 +268,8 @@ Never write the token value itself into a command, a commit, or pasted text.
 ### Step 3 — start the deploy
 
 ```text
-deploy(app_name="recipe-worker",
-       channel="prod",
+deploy(project="recipe-worker",
+       environment="prod",
        ref="master")
 → {"deploy_id": "521e2723-bfdb-44e0-843e-6170e48752a9",
    "channel_id": "98a26f59-607f-45f3-b8b2-741ca5054902",
@@ -278,7 +284,7 @@ no deploy. `deploy` is always its own call.
 
 ### The deploy log
 
-`get_logs(app_name, channel, source="deploy", deploy_id)` returns the record: a status
+`get_logs(project, environment, source="deploy", deploy_id)` returns the record: a status
 header first, then the log. The first line states the outcome — poll while
 the status is `queued` or `running`. Below is the end of deploy
 `521e2723-bfdb-44e0-843e-6170e48752a9`. The `...` mark stands for the
@@ -326,10 +332,10 @@ worker's `ready` line share the second `06:16:26`.
 
 **The `ready` line and the first `tick` line.** These two lines are the worker's
 own output, and the `[container]` prefix marks them. `interval_s: 5.0` is the
-default value from `setup`, because the channel set no `TICK_SECONDS`.
+default value from `setup`, because the environment set no `TICK_SECONDS`.
 
-**`traffic switched to the new container`.** The channel's HTTPS hostname now
-reaches this container, the same as for every other channel. Nothing listens
+**`traffic switched to the new container`.** The environment's HTTPS hostname
+now reaches this container, the same as for every other environment. Nothing listens
 behind it, so the hostname answers 502.
 
 ### The status header
@@ -338,7 +344,7 @@ behind it, so the hostname answers 502.
 and it reads nothing. The platform starts no container to answer it:
 
 ```text
-get_logs(app_name="recipe-worker", channel="prod", source="runtime")
+get_logs(project="recipe-worker", environment="prod", source="runtime")
 → container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
@@ -356,7 +362,7 @@ container, so an older container stays readable.
 Give the call a `command`, and it returns the log:
 
 ```text
-get_logs(..., channel="prod", source="runtime", command="tail -n 5 app.log")
+get_logs(..., environment="prod", source="runtime", command="tail -n 5 app.log")
 → container #1 (xhost-6aa59e3b-98a26f59-00000001, id 8c41e07b2d9a) — running
   started: 2026-10-04T06:16:26.185806453Z
   readable containers: #1 (pass container_index to read an older one)
@@ -382,7 +388,7 @@ An HTTP recipe proves itself with `curl`. A worker has no URL. To prove its
 progress, count its work:
 
 ```text
-get_logs(..., channel="prod", source="runtime", command="grep -c '\"event\": \"tick\"' app.log")
+get_logs(..., environment="prod", source="runtime", command="grep -c '\"event\": \"tick\"' app.log")
 → ...
   62
 ```
@@ -395,8 +401,8 @@ that a worker works, and it is the one check to give a user.
 
 ### A fatal setup error stops the deploy
 
-The transcript below comes from a deliberate fault. `set_env` wrote
-`TICK_SECONDS=0` on the channel, and the channel got a new deploy. `setup`
+The transcript below comes from a deliberate fault. `set_variable` wrote
+`TICK_SECONDS=0` on the environment, and the environment got a new deploy. `setup`
 refuses a value that is not positive, so the worker stopped before the ready
 file existed:
 
@@ -415,7 +421,7 @@ file existed:
 [2026-10-04T06:21:39+00:00] [container] ValueError: TICK_SECONDS must be positive, not 0.0
 [2026-10-04T06:21:42+00:00] boot failed — removing new container b75c0894f4c55fcdd1dac4250842063acbdecae42730b8809cc5fae1be18eacc; previous container keeps serving its own image — this failed deploy did not change its content
 [2026-10-04T06:21:43+00:00] deploy failed (host agent): remote agent error (health_check_error): container xhost-6aa59e3b-98a26f59-00000002 exited during boot (exit code 1)
-[2026-10-04T06:21:43+00:00] pre-deploy DB snapshot 394f07cf-23b6-4183-b3cf-ed702bfa1fdb was taken before this failure; if the failed deploy changed the database, restore it with restore_channel_snapshot (part="database") or the Restore action on the project's Database page in the console
+[2026-10-04T06:21:43+00:00] pre-deploy DB snapshot 394f07cf-23b6-4183-b3cf-ed702bfa1fdb was taken before this failure; if the failed deploy changed the database, restore it with restore_snapshot (part="database") or the Restore action on the project's Database page in the console
 ```
 
 The real log carries that traceback four times, because the platform started
@@ -440,9 +446,9 @@ is alive before it tests the ready file, by design. A file that a dead process
 left behind must not certify that process.
 
 **`pre-deploy DB snapshot ... was taken before this failure`.** Every non-static
-channel gets a database, and the platform takes a snapshot of it before each
+environment gets a database, and the platform takes a snapshot of it before each
 deploy. This worker uses no database, so the line changes nothing here. For a
-worker that uses a database, `restore_channel_snapshot` with `part="database"`
+worker that uses a database, `restore_snapshot` with `part="database"`
 rolls the database back to that snapshot.
 
 ### The crashed container is readable, and the old one still runs
@@ -452,7 +458,7 @@ describes the dead container, and its second line names the container that
 still runs:
 
 ```text
-get_logs(app_name="recipe-worker", channel="prod", source="runtime")
+get_logs(project="recipe-worker", environment="prod", source="runtime")
 → container #2 (xhost-6aa59e3b-98a26f59-00000002, id d2f7a3910c5e) — exited
   running now: container #1 — this reply shows #2; pass container_index=1 to read it
   exit code: 1
@@ -501,7 +507,7 @@ replaces it.
 ### The ready file at the top of `launch.sh`
 
 A `launch.sh` that creates `$XHOSTD_READY_FILE` before it starts the worker
-always passes the health check. The channel then reports healthy and does no
+always passes the health check. The environment then reports healthy and does no
 work. `worker.py` states the reason at the `Path(...).touch()` call: `setup` can
 fail, and that failure must fail the deploy. The file is the signal that the
 worker is able to work. Create it only when that is true.
@@ -538,7 +544,7 @@ stop timeout.
 ### A crash loop after the deploy passed
 
 The restart policy is `unless-stopped`, so a worker that dies one hour after a
-successful deploy starts again. The deploy stays successful, the channel stays
+successful deploy starts again. The deploy stays successful, the environment stays
 healthy, and nothing tells you. The `restarts:` count in the status header is
 where you see it. Read the header, wait some minutes, and read it again. A
 count that grows between the two reads is a crash loop.
@@ -558,7 +564,7 @@ Two different causes give an empty log.
 **Buffered stdout.** Python buffers stdout in blocks when stdout is not a
 terminal. A worker without a flush shows nothing for a long time, and then a
 block of lines at once. `emit` uses `print(..., flush=True)` for this reason.
-For code that you do not own, `set_env(app_name, key="PYTHONUNBUFFERED",
+For code that you do not own, `set_variable(project, key="PYTHONUNBUFFERED",
 value="1")` gives the same result.
 
 **A log file inside the container.** The platform captures the stdout and the
@@ -575,10 +581,10 @@ $ curl -sS -o /dev/null -w '%{http_code}\n' https://recipe-worker-docs.xhostd.ap
 502
 ```
 
-The channel gets `recipe-worker-docs.xhostd.app`, and the platform routes that
+The environment gets `recipe-worker-docs.xhostd.app`, and the platform routes that
 hostname. No process listens on the health port, so the proxy has no upstream.
 A 404 from the hostname is different: it tells you that no container serves
-the channel, because the deploy did not reach `traffic switched to the new
+the environment, because the deploy did not reach `traffic switched to the new
 container`.
 
 To get a worker **and** a URL, serve HTTP on `$XHOSTD_HTTP_PORT` from the same
