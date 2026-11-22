@@ -11,7 +11,14 @@ description: >-
 # Troubleshoot xhostd deploys and running apps
 
 Diagnosis reads and changes nothing. A fix that deploys, restarts, or rewinds is a write operation:
-perform it when the user asks for it.
+propose it, and run it when the user asks.
+
+## Rules for every xhostd task
+
+1. **Write only on request** (create, delete, push, deploy, restore, expose, change); ask if unsure.
+2. **No credential in a plain variable**: store it with `set_secret`, never `set_variable`.
+3. **No token value in a command**, URL, file you might commit, or chat: read it from a variable.
+4. **No plan advice** or purchase link unasked. On `plan_limit_exceeded`, state the limit; no retry.
 
 ## A failed deploy
 

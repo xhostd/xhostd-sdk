@@ -12,13 +12,20 @@ description: >-
 # xhostd variables and secrets
 
 A variable is a key and a value that a project's containers read from their environment. A secret is
-a kind of variable whose value no tool returns. Change a variable only when the user asks for it.
+a kind of variable whose value no tool returns.
+
+## Rules for every xhostd task
+
+1. **Write only on request** (create, delete, push, deploy, restore, expose, change); ask if unsure.
+2. **No credential in a plain variable**: store it with `set_secret`, never `set_variable`.
+3. **No token value in a command**, URL, file you might commit, or chat: read it from a variable.
+4. **No plan advice** or purchase link unasked. On `plan_limit_exceeded`, state the limit; no retry.
 
 ## Plain values and secrets
 
 `set_variable` stores a **plain** value, and `delete_variable` deletes a plain variable or a secret.
-**Never pass a credential to `set_variable`**: its value passes through the conversation, and the
-tool warns when the key reads like a credential. A key that holds a secret refuses a plain value.
+A plain value passes through the conversation, and `set_variable` warns when the key reads like a
+credential. A key that holds a secret refuses a plain value.
 
 For an API key, a token, or a password, call **`set_secret`**. It takes no value: it returns the
 `PUT` request that uploads the value, which you run from a shell with the value in a file, as its

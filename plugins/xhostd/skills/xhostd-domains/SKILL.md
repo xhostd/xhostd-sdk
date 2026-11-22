@@ -10,8 +10,12 @@ description: >-
 
 # xhostd custom domains, raw TCP ports, and visitor sign-in
 
-Changing a domain and exposing a port are write operations: perform them when the user asks for that
-operation on that environment. Never expose a port without the user's explicit direction.
+## Rules for every xhostd task
+
+1. **Write only on request** (create, delete, push, deploy, restore, expose, change); ask if unsure.
+2. **No credential in a plain variable**: store it with `set_secret`, never `set_variable`.
+3. **No token value in a command**, URL, file you might commit, or chat: read it from a variable.
+4. **No plan advice** or purchase link unasked. On `plan_limit_exceeded`, state the limit; no retry.
 
 ## Custom domains
 

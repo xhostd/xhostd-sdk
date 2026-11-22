@@ -13,8 +13,14 @@ description: >-
 
 An environment is a deployment target with its own URL, such as `prod` or a preview. A service is
 one process of the project, such as a web process or a worker; every environment runs the services
-that are turned on in it. Creating, deleting, turning off, and restarting are write operations:
-perform them when the user asks for that operation on that target.
+that are turned on in it.
+
+## Rules for every xhostd task
+
+1. **Write only on request** (create, delete, push, deploy, restore, expose, change); ask if unsure.
+2. **No credential in a plain variable**: store it with `set_secret`, never `set_variable`.
+3. **No token value in a command**, URL, file you might commit, or chat: read it from a variable.
+4. **No plan advice** or purchase link unasked. On `plan_limit_exceeded`, state the limit; no retry.
 
 ## Environments
 
@@ -53,7 +59,8 @@ starts at each environment's next deploy. **`update_service`** renames a service
 service on or off in one environment. A turn-off stops the service at once and frees its slot; the
 environment keeps its database and backups. **`delete_service`** removes a service that is not
 public. **`restart`** starts services again with their current image and no build, which applies a
-changed setting or variable.
+changed setting or variable. Restarting a service, turning one off, and deleting an environment are
+write operations: run them only when the user asks for that operation on that target.
 
 Services of one environment reach each other by service name, such as `http://api:8000`, so a
 service listens on `0.0.0.0`. A service that is not public is ready when it creates
