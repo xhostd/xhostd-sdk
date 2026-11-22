@@ -13,8 +13,17 @@ description: >-
 
 Every xhostd project owns a git repo, and a push to it puts code onto the project, for every project
 whatever its size, from the first commit on. **A push stores code; it does not deploy.** Start the
-build with `deploy` afterwards. Push only when the user asked for the change. Full guide:
-`references/guide-git.md` (<https://docs.xhostd.com/guides/git>).
+build with `deploy` afterwards. Full guide: `references/guide-git.md`
+(<https://docs.xhostd.com/guides/git>).
+
+## Rules for every xhostd task
+
+1. **Write only on request** (create, delete, push, deploy, restore, expose, change); ask if unsure.
+2. **No credential in a plain variable**: store it with `set_secret`, never `set_variable`.
+3. **No token value in a command**, URL, file you might commit, or chat: read it from a variable.
+4. **No plan advice** or purchase link unasked. On `plan_limit_exceeded`, state the limit; no retry.
+
+## Choose a transport
 
 **Pick the path from what the machine can do, before you push — never after a failure:**
 
@@ -81,8 +90,8 @@ H3. Add the remote with no token in it:
 H4. Push `HEAD:master` (or `HEAD:<your-branch>`) to the `xhostd` remote, and send `$XHOSTD_TOKEN` as
 an `Authorization: Bearer` header that git reads from three `GIT_CONFIG_*` variables in its
 environment, under a key scoped to `git.xhostd.com` (git 2.31 or later). The token then never
-appears on a process's argv, in `.git/config`, or in the transcript; never write the token value
-itself into a command. `references/guide-git.md` gives the exact command.
+appears on a process's argv, in `.git/config`, or in the transcript. `references/guide-git.md`
+gives the exact command.
 
 H5. Trigger the build with **`deploy`**. Pass `ref: "master"` (or the branch name) so xhostd
 resolves to HEAD; the `ref` binds the environment to that branch. Or pass an explicit `sha`, which
