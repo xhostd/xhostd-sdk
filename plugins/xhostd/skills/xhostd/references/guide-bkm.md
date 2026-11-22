@@ -145,6 +145,10 @@ Work down this list:
   whatever port that server took. Bind `0.0.0.0`.
 - **The server binds the wrong port.** Read `XHOSTD_HTTP_PORT`. Never write the
   port into the code.
+- **The framework's own default binds `localhost` or a fixed port.** Flask's
+  `app.run()`, `next dev`, and Vite's preview server do this, and each fails
+  the check until you pass `0.0.0.0` and `$XHOSTD_HTTP_PORT` to it. `$PORT`
+  holds the same value for a framework that reads it.
 - **There is no route at `GET /`.** An API with all its routes below `/api`
   answers 404 at `/`. Add a simple route at `/`, or use the other signal. For
   the other signal, create the file `$XHOSTD_READY_FILE` when your app can

@@ -5,7 +5,8 @@ agents. xhostd is hosting for coding agents: your agent creates a project, pushe
 its code, and deploys it to an HTTPS URL.
 
 The plugin works in Claude Code, Codex, Cursor, and ChatGPT. It carries one
-remote MCP server and the `xhostd` skill.
+remote MCP server and eight skills: the core `xhostd` skill and one skill for
+each topic, such as git, data, and custom domains.
 
 ## Contents
 
@@ -21,8 +22,8 @@ remote MCP server and the `xhostd` skill.
 ## Documentation
 
 The [xhostd guides](https://docs.xhostd.com/guides) hold one complete recipe
-for each shape of project. The plugin carries the same recipes under
-`plugins/xhostd/skills/xhostd/references/`.
+for each shape of project. Each guide's raw Markdown is at its address with
+`.md` added, and the plugin's skills link to the recipes there.
 
 ## License
 

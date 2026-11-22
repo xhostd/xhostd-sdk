@@ -1,6 +1,6 @@
 {
   "name": "xhostd-sdk",
-  "description": "Plugins for xhostd — agent-first hosting. Install to get the xhostd plugin: MCP tools, skill, and OAuth-mediated auth for create-project/commit/deploy flows.",
+  "description": "Plugins for xhostd — agent-first hosting. Install to get the xhostd plugin: MCP tools, skills, and OAuth-mediated auth for create-project/commit/deploy flows.",
   "owner": {
     "name": "xhostd",
     "email": "support@xhostd.com"
@@ -10,7 +10,7 @@
       "name": "xhostd",
       "source": "./plugins/xhostd",
       "description": "Deploy applications, sites, and services with xhostd. Push code, get HTTPS URLs.",
-      "version": "0.80.3",
+      "version": "0.81.0",
       "author": {
         "name": "xhostd",
         "url": "https://xhostd.com"

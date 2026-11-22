@@ -8,8 +8,11 @@ variables, secrets, Postgres snapshots, and custom domains.
 ## What the plugin contains
 
 - One remote MCP server, `https://mcp.xhostd.com/mcp`.
-- The `xhostd` skill and its reference files: worked recipes for each shape
-  of project, and the HTTP API reference.
+- Eight skills, one per topic: `xhostd` for deploys, and `xhostd-git`,
+  `xhostd-environments`, `xhostd-variables`, `xhostd-data`, `xhostd-domains`,
+  `xhostd-account`, and `xhostd-troubleshooting`. Their reference files hold
+  the guides of each topic and the HTTP API reference; the skills link the
+  worked recipes on `docs.xhostd.com`.
 - An icon.
 
 The plugin contains no hooks, scripts, or binaries.
@@ -48,11 +51,11 @@ repository as a local plugin instead, follow the Cursor guide to
 
 Find **xhostd** in the ChatGPT plugin directory and connect it.
 
-## Start the skill
+## Start the skills
 
-Your agent loads the skill on its own when you ask it to deploy or host
-something.
-To start it by hand:
+Your agent loads the skill for a topic on its own when you ask for that work,
+such as a deploy, a custom domain, or a secret.
+To start the core `xhostd` skill by hand:
 
 - Claude Code: type `/xhostd:xhostd`.
 - Codex: type `$xhostd`.
@@ -92,7 +95,7 @@ can revoke any of them there.
   when you ask for object-storage credentials, a file with mode 0600 under
   `~/.xhostd/`.
 - **Pages** the agent fetches: `docs.xhostd.com` pages, when it follows a
-  link from the skill, and your deployed app's own URL, to check a deploy.
+  link from a skill, such as a recipe, and your deployed app's own URL, to check a deploy.
 
 ## The XHOSTD_TOKEN variable
 
@@ -103,7 +106,7 @@ environment variable. You create the token on the console
 
 - The token goes only to `api.xhostd.com`, `git.xhostd.com`, and
   `db.xhostd.com`.
-- The skill's own commands read the variable by name, so the token value
+- The skills' own commands read the variable by name, so the token value
   never appears in those commands, and no tool result carries it.
 - The commands send the token on curl's standard input and in git's
   environment, so it appears on no process's command line, where any user

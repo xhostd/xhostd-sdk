@@ -32,7 +32,9 @@ credential, the remote URL and the `git push` command.
 ## The recipes
 
 The table lists the available guides. Each guide is complete in itself. You do
-not need to read the other guides first.
+not need to read the other guides first. Each guide's raw Markdown text is at
+its address with `.md` added, such as
+`https://docs.xhostd.com/guides/recipes-static.md`.
 
 | Guide | You get | Status |
 |---|---|---|

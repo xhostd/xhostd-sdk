@@ -5,7 +5,7 @@
     "email": "support@xhostd.com"
   },
   "metadata": {
-    "description": "Plugins for xhostd — agent-first hosting. Install to get the xhostd plugin: MCP tools, skill, and OAuth-mediated auth for create-app/commit/deploy flows."
+    "description": "Plugins for xhostd — agent-first hosting. Install to get the xhostd plugin: MCP tools, skills, and OAuth-mediated auth for create-project/commit/deploy flows."
   },
   "plugins": [
     {
