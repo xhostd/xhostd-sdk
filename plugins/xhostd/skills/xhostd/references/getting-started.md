@@ -137,7 +137,7 @@ the URL-scoped key sends it to `git.xhostd.com` alone. Put the three variables i
 command that reaches the repo over HTTPS. This form needs git 2.31 or later.
 
 You can also mint a scoped, short-lived token with the request that `get_credential_request`
-describes, and send it the same way from a variable of its own; `references/guide-git.md` shows the
+describes, and send it the same way from a variable of its own; the `xhostd-git` skill shows the
 commands.
 
 `HEAD:master` on either transport: push under the branch name you then deploy with `ref`, because a
@@ -168,7 +168,7 @@ For an `app`-template project the push is the same; the repo needs `install.sh` 
   file can be empty. Do it once the work loop is genuinely running, not at the top of `launch.sh`.
   Such a project keeps its hostname, and that URL returns 502 — expected, not a failure. To run such
   a worker beside a web process in one project, add it with `create_service`:
-  `references/guide-services.md` shows the calls.
+  the `xhostd-environments` skill shows the calls.
 - **Boot within 120s and stay within a small memory budget (~128 MB)** at run time — the cap applies
   to the running server, not to the build.
 - **Run as a non-root user.** The container runs as `app`; writable paths are `/app`, `$HOME`, and
