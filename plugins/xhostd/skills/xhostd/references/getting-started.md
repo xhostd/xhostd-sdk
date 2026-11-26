@@ -262,9 +262,9 @@ The preview is live at `https://draft-lisbon-coffee-alice.xhostd.app`.
   Every environment of a project that runs code automatically has `DATABASE_URL` for its own
   Postgres database; don't set it. A static project has no database and no `DATABASE_URL`.
 - **Custom domain:** `add_custom_domain(project, environment, domain)` returns an `instructions`
-  field with the exact TXT + CNAME/A records the user needs to add at their registrar — relay it
-  verbatim. After they add the records, call `add_custom_domain` again with the same args and
-  `verify=True`. HTTPS works automatically once verified.
+  field with the exact TXT record and routing record the user needs to add at their DNS provider —
+  relay it verbatim. After they add the records, call `add_custom_domain` again with the same args
+  and `verify=True`. HTTPS works automatically once verified.
 - **Google sign-in for parts of the site:** zero-config — no tool to call. `/xhost-auth/*` works on
   every environment. After sign-in the gateway sets a signed identity cookie `__Host-xhost_id` (an
   RS256 JWT) on the environment's host; the app verifies it against the JWKS at
@@ -284,7 +284,8 @@ set. A registered agent renews its token with its key when the token expired, as
 agent](https://docs.xhostd.com/guides/register-as-agent) describes.
 
 **"app name is already taken"** — the API's text for a project name the user already holds. Pick a
-different name or delete the old project with `delete_project`.
+different name, or delete the old project with `delete_project` and wait until `list_projects` no
+longer shows it: the delete runs after the call answers, and the name stays taken until then.
 
 **"invalid app name"** — the API's text for a project name that violates the DNS-label rules or
 starts with a reserved prefix.

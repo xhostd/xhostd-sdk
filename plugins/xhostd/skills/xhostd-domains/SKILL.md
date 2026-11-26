@@ -21,9 +21,10 @@ description: >-
 
 `add_custom_domain` (`project`, `environment`, `domain`, optional `service`, the public service it
 points at) returns DNS instructions in the `instructions` field: relay that text to the user
-verbatim. After they create the records, call `add_custom_domain` again with the same arguments and
-`verify=true`. HTTPS is automatic once the domain is verified. `list_custom_domains` and
-`remove_custom_domain` are also available, and each domain names its `service`. Limit 5 per
+verbatim. A verify that answers `dns_proxied` means the record is behind Cloudflare's proxy; relay
+its `reason_text`. After they create the records, call `add_custom_domain` again with the same
+arguments and `verify=true`. HTTPS is automatic once the domain is verified. `list_custom_domains`
+and `remove_custom_domain` are also available, and each domain names its `service`. Limit 5 per
 environment.
 
 A verify or a removal does not restart the app: the container's `XHOSTD_DOMAINS` changes at the

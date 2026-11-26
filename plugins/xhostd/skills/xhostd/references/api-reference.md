@@ -94,6 +94,7 @@ through `POST /registrations`; read `## POST /registrations`.
 - GET /feedback
 - GET /api/user/stats
 - GET /me/usage
+- GET /me/usage/resources
 - Hostname Rules
 - Channel Status Values
 - Deploy Status Values
@@ -133,7 +134,8 @@ List all apps owned by the authenticated user.
           "current_sha": "abc1234567890abcdef1234567890abcdef12345",
           "status": "running",
           "pending_deploy": null,
-          "env_pending": false
+          "env_pending": false,
+          "deleting": false
         }
       ],
       "services": [
@@ -151,7 +153,8 @@ List all apps owned by the authenticated user.
         }
       ],
       "owner_username": "alice",
-      "role": "owner"
+      "role": "owner",
+      "deleting": false
     }
   ]
 }
@@ -238,7 +241,8 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
       "current_sha": null,
       "status": "provisioning",
       "pending_deploy": null,
-      "env_pending": false
+      "env_pending": false,
+      "deleting": false
     }
   ],
   "services": [
@@ -256,7 +260,8 @@ Create a new app. Provisions a git repository and a `prod` channel automatically
     }
   ],
   "owner_username": "alice",
-  "role": "owner"
+  "role": "owner",
+  "deleting": false
 }
 ```
 
@@ -280,15 +285,20 @@ channels).
 
 ## DELETE /apps/{app_id}
 
-Delete an app and all its channels. Tears down containers and networks, and the platform stops
-serving the app's hostnames.
+Delete an app and all its channels. The call records the request and answers at once; the platform
+then tears down containers and networks and stops serving the app's hostnames.
 
 **Required scope:** `repo:*`
 
-**Response:** 204 No Content
+**Response (202):** `{"status": "deleting"}`. The app reads `deleting: true` in `GET /apps` until it
+leaves the list, and it serves until then. A second call answers the same. Read `GET /apps` before a
+retry, and create no app of the same name until the app leaves the list.
 
 **Errors:**
 - `not_found` (404) — app not found or not owned by caller
+- `conflict` (409) — the app is undergoing scheduled maintenance; no request is recorded
+- `restore_in_flight` (409) — a database restore of a channel of the app runs; no request is
+  recorded
 
 ---
 
@@ -308,7 +318,8 @@ List all channels for an app.
     "current_sha": "abc1234...",
     "status": "running",
     "pending_deploy": null,
-    "env_pending": false
+    "env_pending": false,
+    "deleting": false
   },
   {
     "id": "uuid",
@@ -319,7 +330,8 @@ List all channels for an app.
     "current_sha": null,
     "status": "provisioning",
     "pending_deploy": null,
-    "env_pending": false
+    "env_pending": false,
+    "deleting": false
   }
 ]
 ```
@@ -368,7 +380,18 @@ Create a new channel on an app.
 
 **Errors:**
 - `bad_request` (400) — invalid name, reserved channel name, or invalid `git_ref_binding` format
+- `bad_request` (400) — "channel name or hostname conflict": the app already has a channel with
+  this name. A name holds one channel per app, so pick another name, or deploy to the existing
+  channel
 - `branch_wildcard_deprecated` (400) — `branch:*`
+- `plan_limit_exceeded` (402) — the new channel needs one slot for each service of the project, and
+  the owner's plan limit does not leave that many free; the message states the count. xhostd checks
+  the limit before the name, so an account at its limit gets this 402 for a held name too
+- `conflict` (409) — "this project changed owner at the same time; try again": a transfer of the
+  project was accepted during the call
+- `conflict` (409) — "this account is undergoing scheduled maintenance — try again once it
+  completes": an admin job, such as a move, holds the owner's account
+- `deleting` (409) — "this project is being deleted"
 
 ---
 
@@ -427,15 +450,19 @@ value records nothing.
 
 ## DELETE /apps/{app_id}/channels/{channel_id}
 
-Delete a channel. Cannot delete the `prod` channel.
+Delete a channel. Cannot delete the `prod` channel. The call records the request and answers at
+once; the platform then tears the channel down.
 
 **Required scope:** `channel:*`
 
-**Response:** 204 No Content
+**Response (202):** `{"status": "deleting"}`. The channel reads `deleting: true` until it leaves its
+app's channel list, and it serves until then. A second call answers the same.
 
 **Errors:**
 - `not_found` (404) — app or channel not found
 - `bad_request` (400) — cannot delete the prod channel
+- `conflict` (409) — the app is undergoing scheduled maintenance; no request is recorded
+- `restore_in_flight` (409) — a database restore of the channel runs; no request is recorded
 
 ---
 
@@ -563,6 +590,9 @@ turned on in the channel restarts.
 
 **Response (200):** `{deploy_id, channel_id, status}`, as for a deploy.
 
+**Errors:**
+- `deleting` (409) — "this project is being deleted" or "this environment is being deleted"
+
 ---
 
 ## POST /apps/{app_id}/channels/{channel_id}/deploy
@@ -586,6 +616,14 @@ Enqueue a deploy of a branch or a commit to a channel.
 - `services` (string[], optional) — The names of the services to deploy. Omitted or null, every
   service that is turned on in the channel deploys. A value that is not a list of strings
   answers 422.
+- `request_id` (string UUID, optional) — A stable ID for a reviewed deployment request. It requires
+  `sha` as a 40-character hex SHA, and the request deploys every service, so `services` must be
+  omitted or null. A repeat with the same ID, channel, and SHA writes nothing and answers the
+  stored deploy as it is now, which can be `superseded`. Any other reuse of the ID answers 409.
+- `expected_current_sha` (string or null, optional) — The SHA that the review saw serving the
+  channel. xhostd reads it only together with `request_id`. Null means that the channel had never
+  deployed, and an omitted field means no check. When the channel serves another revision, the
+  request answers 409.
 
 If both are given, `sha` wins and `ref` is ignored, and the binding is unchanged. With neither,
 xhostd deploys the current HEAD of the channel's bound branch. On an app with a connected source
@@ -616,12 +654,25 @@ does not automatically deploy.
 - `channel_unbound` (400) — neither `sha` nor `ref`, on a channel with no branch yet. The message
   names both fixes and, for an app with a connected source repository, that repository's default
   branch
+- `bad_request` (400) — "a reviewed deployment request requires an immutable SHA": a `request_id`
+  without a 40-character hex `sha`
+- `bad_request` (400) — "a reviewed deployment request deploys every service": a `request_id` with
+  `services`
 - `not_found` (404) — app or channel not found, or the branch does not exist in the repo; for the
   bound branch, the message names the fix and the source repository's default branch
 - `conflict` (409) — the source repository sync failed (the message carries the error), the channel
   is under maintenance, or the app is undergoing scheduled maintenance
+- `conflict` (409) — "deployment request ID was already used": the `request_id` names a deploy of
+  another channel or another SHA
+- `conflict` (409) — "serving revision changed; review the deployment again": the channel no longer
+  serves `expected_current_sha`
+- `deleting` (409) — "this project is being deleted" or "this environment is being deleted"
 - `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's
   repo, or the app is under scheduled maintenance; retry in a minute
+- `service_unavailable` (503) — "the fetch from the source repository did not finish in 40
+  seconds; …": the fetch passed its 40 seconds, and the call queued nothing. The platform completes
+  the fetch, records its result as the source's sync status (`GET /apps/{app_id}/source`), and
+  deploys each channel that follows a branch that moved. Read that status, then retry
 
 ---
 
@@ -652,6 +703,7 @@ built image).
 - `bad_request` (400) — the app is `static`, or the channel has only ever deployed one commit
   (nothing to rewind to)
 - `conflict` (409) — the app is undergoing scheduled maintenance
+- `deleting` (409) — "this project is being deleted" or "this environment is being deleted"
 - `not_found` (404) — app or channel not found
 
 ---
@@ -1298,6 +1350,7 @@ deploy of the channel answers 409 `restore_in_flight`.
 - `conflict` (409) — the database is not ready, or the app is undergoing scheduled maintenance
 - `conflict` (409) — "the project changed owner; try the restore again": an ownership transfer of
   the project committed while the request ran; try the restore again
+- `deleting` (409) — "this project is being deleted" or "this environment is being deleted"
 - `service_unavailable` (503) — `postgres_unavailable`
 
 ---
@@ -1376,7 +1429,7 @@ Return the channel's object-store status and usage.
 
 Attach a custom domain to a channel (max 5 per channel; domains are globally unique across xhostd).
 Idempotent for the same channel — re-POSTing the same domain returns the existing row with its token
-preserved. Returns the DNS records the user must create at their registrar.
+preserved. Returns the DNS records the user must create at their DNS provider.
 
 **Required scope:** `deploy:*`
 
@@ -1393,6 +1446,7 @@ preserved. Returns the DNS records the user must create at their registrar.
   "domain": "myapp.com",
   "status": "pending",
   "reason": null,
+  "reason_text": null,
   "dns_records": {
     "txt_host": "_xhost.myapp.com",
     "txt_value": "xhost-verify-...",
@@ -1401,14 +1455,25 @@ preserved. Returns the DNS records the user must create at their registrar.
   },
   "created_at": "2025-01-16T10:30:00Z",
   "verified_at": null,
-  "notice": null
+  "notice": null,
+  "certificate_status": null,
+  "certificate_expires_at": null
 }
 ```
 
+- `reason_text` — a sentence for the user about `reason`, and `null` when `reason` is `null`.
+  Relay it.
+- `certificate_status` — for a verified domain, `pending` while the certificate is being issued,
+  `ready`, or `expiring` when a renewal has not succeeded; `null` when the domain is not verified
+  or no certificate has been requested yet. The platform issues the certificate at verification,
+  usually within a minute.
+- `certificate_expires_at` — the certificate's expiry when `certificate_status` is `ready` or
+  `expiring`, and `null` otherwise.
 - `dns_records` — Create the TXT record with `txt_value`, plus a routing record: `CNAME` →
-  `cname_target` for subdomains, or `A` → `a_values` at an apex. `a_values` may be empty if platform
-  IP resolution transiently failed. `dns_records.cname_target` is the platform's generic target. A
-  CNAME to the channel's own hostname also verifies.
+  `cname_target` for a subdomain; for a root domain, an alias record → `cname_target`, or one `A`
+  record for each of `a_values` when the DNS provider has no alias record. `a_values` may be empty
+  if platform IP resolution transiently failed. `dns_records.cname_target` is the platform's generic
+  target. A CNAME to the channel's own hostname also verifies.
 
 **Errors:**
 - `bad_request` (400) — `invalid domain: <reason>` (`is_ip_address`, `invalid_idna`, `too_long`,
@@ -1429,7 +1494,8 @@ at first.
 `verified_at`. `status` flips `pending → verified` on a passing check. `reason` uses a closed
 vocabulary: `txt_nxdomain`, `txt_token_mismatch`, `dns_not_pointing`, `domain_nxdomain` (the four
 definitive failures — the only ones that downgrade a verified domain), plus the transient
-`txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`.
+`txt_lookup_failed`, `dns_lookup_failed`, `platform_ip_unknown`, and `dns_proxied` (the record is
+behind Cloudflare's proxy).
 
 `notice` is a string when this call moved the domain into or out of `verified`, and `null`
 otherwise. It says that the app's `XHOSTD_DOMAINS` changes at the channel's next deploy, because a
@@ -1651,6 +1717,10 @@ seconds from one address answer 429 for 60 seconds.
   connected")
 - `service_unavailable` (503) — another write (a push, a changeset, or another sync) holds the app's
   repo, or the app is under scheduled maintenance; nothing changed, so retry in a minute
+- `service_unavailable` (503) — "the fetch from the source repository did not finish in 40
+  seconds; …": the fetch passed its 40 seconds. The platform completes it, records its result as
+  the source's sync status (`GET /apps/{app_id}/source`), and deploys each channel that follows a
+  branch that moved. Read that status, then retry
 
 ---
 
@@ -2247,6 +2317,7 @@ shared project runs under its owner's resource slice.
 {
   "username": "alice",
   "user_id": "uuid-string",
+  "email": "alice@example.com",
   "platform": {
     "apps": 3,
     "channels": 5,
@@ -2268,12 +2339,16 @@ shared project runs under its owner's resource slice.
       "repo": "alice/myapp",
       "branch": "master",
       "status": "running",
-      "sha": "abc123def456"
+      "sha": "abc123def456",
+      "latest_deploy_id": "uuid",
+      "latest_deploy_status": "success"
     }
   ],
   "collected_at": "2025-01-15 10:30:00 UTC"
 }
 ```
+
+`email` is the account's verified email address, or null when the account holds none.
 
 **Notes:**
 - Returns only the calling user's own apps, channels, deploys, and resource usage.
@@ -2305,6 +2380,82 @@ the month's bytes, reports them, counts them against nothing, and charges nothin
 **Errors:**
 - `503 postgres_unavailable` — the account's database server is unreachable, or a database could not
   be measured. xhostd never reports a partial total.
+
+---
+
+## GET /me/usage/resources
+
+Return the account's CPU and memory history against its plan's allocation. The `24h` range reads
+5-minute buckets, and every longer range reads hourly buckets. A bucket with no sample is absent,
+never filled in.
+
+**Required scope:** `stats:read`
+
+**Query parameters:**
+- `range` (string, optional) — `24h` (the default), `7d`, `30d`, `90d`, or `1y`.
+
+**Response (200):**
+```json
+{
+  "range": "24h",
+  "plan": "basic",
+  "cpu_soft_cores": 0.1,
+  "cpu_burst": 2,
+  "mem_limit_bytes": 134217728,
+  "swap_max_bytes": 536870912,
+  "max_channels": 3,
+  "current": {
+    "cpu_pct_of_limit": 35.5,
+    "mem_current_bytes": 52428800,
+    "psi_full_avg60": 0.0,
+    "swap_bytes": 0,
+    "io_psi_some_avg60": 0.05
+  },
+  "points": [
+    {
+      "t": "2026-11-22T10:00:00Z",
+      "cpu_pct_of_limit": 35.5,
+      "cpu_cores": 0.0355,
+      "mem_bytes": 52428800,
+      "psi_full_avg60": 0.0,
+      "oom_kill": 0,
+      "mem_high": 0,
+      "swap_bytes": 0,
+      "io_psi_some_avg10": 0.1,
+      "io_psi_some_avg60": 0.05,
+      "io_rbytes": 1048576,
+      "io_wbytes": 2097152,
+      "sample_seconds": 300.0
+    }
+  ],
+  "percentiles": {
+    "cpu_pct_of_limit": {"p50": 35.5, "p95": 35.5, "p99": 35.5},
+    "mem_bytes": {"p50": 52428800, "p95": 52428800, "p99": 52428800}
+  },
+  "summary": {
+    "oom_kills_total": 0,
+    "psi_full_avg60_peak": 0.0,
+    "swap_peak_bytes": 0,
+    "pressure_level": "ok",
+    "io_rbytes_total": 1048576,
+    "io_wbytes_total": 2097152,
+    "io_psi_some_avg60_peak": 0.05
+  }
+}
+```
+
+`cpu_pct_of_limit` is the bucket's average cores as a percentage of the plan's soft CPU allocation,
+`cpu_soft_cores`: 100 is the soft entitlement, and the value can reach `cpu_burst` × 100.
+`mem_limit_bytes` is the plan's memory ceiling. `current` is the newest sample: the live sample when
+xhostd holds one, else the newest bucket, else zeros. `points` holds one point per bucket, oldest
+first; divide `io_rbytes` and `io_wbytes` by `sample_seconds` for a rate. `percentiles` holds
+nearest-rank figures over the points, each null when the range holds no point.
+`summary.pressure_level` is `ok`, `elevated`, or `high`, from the range's peak memory pressure.
+
+**Errors:**
+- `bad_request` (400) — `range` is not one of the five values
+- `scope_denied` (403) — the token lacks `stats:read`
+- `not_found` (404) — the user does not exist
 
 ---
 
