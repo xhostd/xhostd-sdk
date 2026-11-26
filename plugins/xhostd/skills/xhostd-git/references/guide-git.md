@@ -611,3 +611,10 @@ One notify URL names one project. A repo that feeds two projects needs two
 - The username in the URL path only locates the repo. The token's role
   on the project decides your access. Thus you can push to every project
   that you own, and to every project where you are a member.
+- A deploy or a sync of a connected project fetches from its repository
+  first, and waits 40 seconds at most for that fetch. A fetch that takes
+  longer answers 503 "the fetch from the source repository did not finish
+  in 40 seconds". The call queued nothing. The platform completes the
+  fetch, shows its result as the sync status on the project's Git page
+  and in `get_project`, and deploys each environment that follows a
+  branch that moved. Read that status, then deploy again.

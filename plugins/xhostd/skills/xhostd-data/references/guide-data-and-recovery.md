@@ -115,6 +115,12 @@ Checkpoint downloads and exports can have different availability and size
 restrictions. A disabled feature, unavailable archive, or incomplete export must
 not be treated as a successful backup.
 
+Two checkpoint downloads stop waiting after 45 seconds. A code download whose
+archive does not start in that time answers 503 `code_archive_slow`, and a
+retry starts again; clone the repository with git for a large project. A file
+download whose list of files takes longer answers 409
+`blob_snapshot_listing_slow`; copy the files with an S3 client.
+
 Send your token when you fetch a download link that a tool returns, such as
 the `download_url` of `get_snapshot_download_link` or `get_export_status`.
 curl reads the `Authorization: Bearer` header from its standard input, so the
